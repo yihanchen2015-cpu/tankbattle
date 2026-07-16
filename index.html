@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>坦克大战 - 据点争夺</title>
+    <link rel="stylesheet" href="style.css">
+    <base target="_blank">
+</head>
+<body>
+
+    <div id="gameContainer">
+        <!-- ========== 开始页面 ========== -->
+        <div id="startScreen">
+            <div class="start-title">坦克大战</div>
+            <div class="mode-select-title">⚔ 选择游戏模式 ⚔</div>
+            <div class="mode-buttons">
+                <button class="mode-btn mode-classic" id="btnModeClassic" onclick="selectMode('classic')">
+                    <span class="mode-name">🏛 经典模式</span>
+                    <span class="mode-desc">10v10据点争夺战 | 占领据点、摧毁敌方基地 | 标准对战体验</span>
+                </button>
+                <button class="mode-btn mode-defense" id="btnModeDefense" onclick="selectMode('defense')">
+                    <span class="mode-name">🛡 守点模式</span>
+                    <span class="mode-desc">孤军死守 | 弹药×3无视负重 | 撑过3分钟即胜利 | 极限生存挑战</span>
+                </button>
+                <button class="mode-btn mode-sneak" id="btnModeSneak" onclick="selectMode('sneak')">
+                    <span class="mode-name">🌙 绝地偷袭</span>
+                    <span class="mode-desc">10v30黑夜奇袭 | 无据点纯刺杀 | 潜入敌后摧毁基地 | 高风险高回报</span>
+                </button>
+                <button class="mode-btn mode-ctf" id="btnModeCTF" onclick="selectMode('ctf')">
+                    <span class="mode-name">🏴 夺旗模式</span>
+                    <span class="mode-desc">夺取敌旗并送回基地 | 率先获得3分 | 团队机动作战</span>
+                </button>
+                <button class="mode-btn mode-infection" id="btnModeInfection" onclick="selectMode('infection')">
+                    <span class="mode-name">🧟 感染模式</span>
+                    <span class="mode-desc">幸存者对抗感染者 | 接触传播 | 阵营动态变化</span>
+                </button>
+                <button class="mode-btn mode-storm" id="btnModeStorm" onclick="selectMode('storm')">
+                    <span class="mode-name">🌪 风暴模式</span>
+                    <span class="mode-desc">安全区持续缩小 | 淘汰所有敌人 | 活到最后</span>
+                </button>
+                <button class="mode-btn mode-pvp" id="btnModePVP" disabled>
+                    <span class="mode-name">🌐 PvP联机（开发中）</span>
+                    <span class="mode-desc">当前版本不包含网络服务器，不作为可用模式展示</span>
+                </button>
+                <button class="mode-btn mode-party" id="btnModeParty" disabled>
+                    <span class="mode-name">🎉 好友聚会（开发中）</span>
+                    <span class="mode-desc">当前版本不包含WebRTC房间服务</span>
+                </button>
+                  </div>
+            <button class="start-btn-secondary" id="btnGameIntro" onclick="showIntroPanel()">📖 游戏介绍</button>
+            <button class="start-btn-secondary" id="btnTutorial" style="margin-top:8px;" onclick="startTutorial()">🎓 新手教程</button>
+            <button class="start-btn-secondary" id="btnAchievements" style="margin-top:8px;" onclick="showAchievementPanel()">🏆 成就系统</button>
+        </div>
+
+        <!-- ========== 新手教程弹窗 ========== -->
+        <div id="tutorialOverlay">
+            <div class="tutorial-content">
+                <h2>🎓 交互式新手教程</h2>
+                <div class="tutorial-progress" id="tutorialProgress"></div>
+
+                <div class="tutorial-step active" data-step="0">
+                    <h3>欢迎来到坦克大战</h3>
+                    <p>这是一款据点争夺射击游戏。本教程将带你<strong style="color:#00ff88">实际操作</strong>学习游戏基础。</p>
+                    <div class="tutorial-tip-box">
+                        💡 提示：本教程包含交互式练习，请按步骤完成。
+                    </div>
+                    <p>你将学习：</p>
+                    <p>• <strong style="color:#00d4ff">第一步</strong> - WASD移动练习（真实操作）</p>
+                    <p>• <strong style="color:#00d4ff">第二步</strong> - 鼠标瞄准与开火练习</p>
+                    <p>• <strong style="color:#00d4ff">第三步</strong> - 综合演练</p>
+                </div>
+
+                <div class="tutorial-step" data-step="1">
+                    <h3>🎮 第一步：移动练习</h3>
+                    <p>使用 <span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> 或方向键控制坦克移动。</p>
+                    <div class="interactive-practice" id="movePractice">
+                        <div class="practice-canvas-container">
+                            <canvas id="tutorialMoveCanvas" width="600" height="300"></canvas>
+                            <div class="practice-overlay" id="moveOverlay">
+                                <div class="practice-text">🎯 驾驶坦克移动到绿色目标点！</div>
+                                <div class="practice-sub">使用 WASD 或方向键移动</div>
+                            </div>
+                        </div>
+                        <div class="practice-status" id="moveStatus">⏳ 等待开始...</div>
+                    </div>
+                </div>
+
+                <div class="tutorial-step" data-step="2">
+                    <h3>🎯 第二步：瞄准与开火</h3>
+                    <p>移动鼠标控制炮塔瞄准，按 <span class="key-badge">F</span> 键开火。</p>
+                    <div class="interactive-practice" id="aimPractice">
+                        <div class="practice-canvas-container">
+                            <canvas id="tutorialAimCanvas" width="600" height="300"></canvas>
+                            <div class="practice-overlay" id="aimOverlay">
+                                <div class="practice-text">🎯 瞄准并击毁3个红色目标！</div>
+                                <div class="practice-sub">移动鼠标瞄准，按 F 键射击</div>
+                            </div>
+                        </div>
+                        <div class="practice-status" id="aimStatus">⏳ 等待开始...</div>
+                    </div>
+                </div>
+
+                <div class="tutorial-step" data-step="3">
+                    <h3>⚔️ 第三步：综合演练</h3>
+                    <p>综合运用移动和射击，完成最终挑战。</p>
+                    <div class="interactive-practice" id="comboPractice">
+                        <div class="practice-canvas-container">
+                            <canvas id="tutorialComboCanvas" width="600" height="300"></canvas>
+                            <div class="practice-overlay" id="comboOverlay">
+                                <div class="practice-text">🏆 移动+射击挑战：击毁5个移动目标！</div>
+                                <div class="practice-sub">WASD移动，鼠标瞄准，F键射击</div>
+                            </div>
+                        </div>
+                        <div class="practice-status" id="comboStatus">⏳ 等待开始...</div>
+                    </div>
+                </div>
+
+                <div class="tutorial-step" data-step="4">
+                    <h3>💥 武器与大招系统</h3>
+                    <p>每辆载具配备三种武器，按 <span class="key-badge">T</span> 循环切换：</p>
+                    <p>• <strong style="color:#ff8800">主炮</strong> - 对地主力；可以攻击直升机，但仅造成 40% 伤害</p>
+                    <p>• <strong style="color:#ffff00">机枪</strong> - 射速快且可穿透 3 个地面目标，不能攻击直升机</p>
+                    <p>• <strong style="color:#ff44ff">高射炮</strong> - 炮弹抛射升空、可越过障碍，升空后会追踪最近的敌方坦克或直升机</p>
+                    <p>每辆坦克都有独特的<strong>终极技能</strong>，冷却完成后按 <span class="key-badge">G</span> 释放。</p>
+                    <div class="tutorial-tip-box">
+                        💡 直升机越障时可以正常开火；遇到空中目标优先切换高射炮。
+                    </div>
+                </div>
+
+                <div class="tutorial-step" data-step="5">
+                    <h3>🏰 据点、基地与胜利条件</h3>
+                    <p><strong style="color:#ffd700">据点</strong> - 地图上的菱形标记，停留可占领，获得弹药补给和援军。</p>
+                    <p><strong style="color:#ff4444">基地</strong> - 双方各有基地，摧毁敌方基地即可获胜！</p>
+                    <p>胜利条件：摧毁敌方基地 / 时间结束时据点更多 / 全歼敌人</p>
+                    <div class="tutorial-tip-box">
+                        💡 占领据点能压缩敌方活动空间。优先摧毁敌方基地是最快的胜利方式！
+                    </div>
+                </div>
+
+                <div class="tutorial-step" data-step="6">
+                    <h3>🎉 准备就绪！</h3>
+                    <p>你已经完成了所有基础训练！</p>
+                    <p>现在选择你喜欢的坦克和模式，开始真正的战斗吧！</p>
+                    <div class="tutorial-tip-box">
+                        💡 实战是最好的老师，多玩几局就能熟练掌握！
+                    </div>
+                </div>
+
+                <div class="tutorial-nav">
+                    <button class="tutorial-btn tutorial-btn-prev" id="btnTutorialPrev" disabled onclick="tutorialPrev()">上一步</button>
+                    <span class="tutorial-step-num" id="tutorialStepNum">1 / 7</span>
+                    <button class="tutorial-btn tutorial-btn-next" id="btnTutorialNext" onclick="tutorialNext()">下一步</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 游戏介绍弹窗 ========== -->
+        <div id="introModal">
+            <div class="intro-content">
+                <h2>📖 游戏介绍</h2>
+                
+                <div class="intro-section">
+                    <h3>🎮 游戏模式</h3>
+                    <div class="mode-intro-box classic">
+                        <h4>🏛 经典模式</h4>
+                        <p>蓝方10辆坦克 vs 红方10辆坦克，争夺7个据点。占领据点可生成援军，最终目标摧毁敌方基地或时间结束时据点更多。</p>
+                    </div>
+                    <div class="mode-intro-box defense">
+                        <h4>🛡 守点模式</h4>
+                        <p>蓝方仅有一个基地，7个据点全被红方占领。蓝方坦克弹药×3且无视负重惩罚，必须在3分钟内守住基地。蓝方全灭或基地沦陷即失败。</p>
+                    </div>
+                    <div class="mode-intro-box sneak">
+                        <h4>🌙 绝地偷袭</h4>
+                        <p>蓝方10辆坦克深入敌后，面对红方30辆重兵把守。全程黑夜模式，无据点可占，唯一目标：摧毁红方基地。</p>
+                    </div>
+                    <div class="mode-intro-box">
+                        <h4>🏴 夺旗模式</h4>
+                        <p>夺取敌方旗帜并带回己方旗帜点，率先获得3分的一方获胜。</p>
+                    </div>
+                    <div class="mode-intro-box">
+                        <h4>🧟 感染模式</h4>
+                        <p>幸存者避免与感染者近距离接触；被感染后将加入感染阵营。</p>
+                    </div>
+                    <div class="mode-intro-box">
+                        <h4>🌪 风暴模式</h4>
+                        <p>安全区不断缩小，毒圈外每秒至少受到 32 点伤害，离安全区越远伤害越高。</p>
+                    </div>
+                </div>
+
+                <div class="intro-section">
+                    <h3>🗺️ 战场环境</h3>
+                    <div class="mode-intro-box"><h4>🏜 沙漠风暴</h4><p>橙黄色开阔战场，障碍少且视野更大。随机沙尘暴会压缩视野，并让牛牛直升机减速、受侧风吹移。</p></div>
+                    <div class="mode-intro-box"><h4>❄️ 雪地突袭</h4><p>白色雪原上会保留履带轨迹。地面载具停驶超过 5 秒后引擎逐渐冻结，会减速并持续掉血；重新移动可逐渐恢复。</p></div>
+                    <div class="mode-intro-box"><h4>🏙 城市巷战</h4><p>规则街区、十字路口、道路中线和多层建筑构成密集城市。直升机受楼群乱流影响，速度降低 22%。</p></div>
+                    <div class="mode-intro-box"><h4>🏝 海岛争夺</h4><p>整张地图以水域为底，由 7 座独立小岛和桥网组成，每座岛都有一个据点。普通坦克可冒险入水，但会大幅减速并因车体进水持续掉血；多多号步战车免疫进水伤害，水中速度为 30%。</p></div>
+                </div>
+
+                <div class="intro-section">
+                    <h3>💥 武器与空中单位</h3>
+                    <ul>
+                        <li><strong>主炮</strong>：对地高伤害；命中直升机时伤害 ×0.4。</li>
+                        <li><strong>机枪</strong>：低仰角、射程有限，无法命中直升机。</li>
+                        <li><strong>高射炮</strong>：伪 3D 抛射弹道，可越过障碍物；升空 0.1 秒后会在 950 范围内追踪最近敌人，坦克和直升机都能命中。</li>
+                        <li><strong>牛牛直升机</strong>：可越障、越水，在障碍物上方开火也不会让炮弹刚出膛就撞墙。</li>
+                        <li><strong>地图对空惩罚</strong>：经典图防空雷达增幅高射伤害；沙漠有沙尘侧风；城市有楼群乱流；雪地会旋翼结冰；海岛有强海风且高射伤害更高。</li>
+                        <li><strong>APS</strong>：每辆载具仅 4 次拦截，每次启动后需冷却 15 秒才能再次拦截。</li>
+                    </ul>
+                </div>
+
+                <div class="intro-section">
+                    <h3>🎯 操作说明</h3>
+                    <ul>
+                        <li><strong>WASD / 方向键</strong>：移动坦克</li>
+                        <li><strong>鼠标</strong>：控制炮塔瞄准方向</li>
+                        <li><strong>F 键 / 射击按钮</strong>：开火</li>
+                        <li><strong>T 键 / 切换按钮</strong>：切换主炮 / 机枪 / 高射炮</li>
+                        <li><strong>G 键 / 大招按钮</strong>：释放终极技能</li>
+                        <li><strong>移动端</strong>：左下角虚拟摇杆移动，右下角按钮射击</li>
+                    </ul>
+                </div>
+
+                <div class="intro-section">
+                    <h3>🚗 坦克图鉴</h3>
+                    
+                    <div class="tank-detail">
+                        <h4>🔵 左研29 — 原型突击型</h4>
+                        <div class="tank-desc">高机动轻型坦克，专为快速突击设计，适合穿插敌后、占领据点。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">800</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">5.5</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">0.7x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">80</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">200</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">疾风突袭</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🔵 左研30 — 极速侦察型</h4>
+                        <div class="tank-desc">隐身刺杀专家，可穿墙潜行，现身时眩晕周围敌人。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">650</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">6.5</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">0.5x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">60</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">170</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">幽灵漫步</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🔵 左研1 — 初代实验型</h4>
+                        <div class="tank-desc">自杀式抢点专家，加速冲锋后引擎过载瘫痪，适合孤注一掷。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">700</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">4.5</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">0.6x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">65</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">120</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">过载引擎</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟢 星辰27A — 标准护卫型</h4>
+                        <div class="tank-desc">均衡型中型坦克，团队核心，大招提供群体护盾。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1200</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">4.0</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">1.1x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">100</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">180</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">钢铁意志</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟢 星辰27B — 重装堡垒型</h4>
+                        <div class="tank-desc">人形障碍物，开启绝对领域后反弹伤害，无法移动。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">2500</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">2.0</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">2.5x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">120</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">200</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">绝对领域</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟢 星辰27S — 快速反应型</h4>
+                        <div class="tank-desc">救场补位专家，紧急跃迁可穿墙并揭露隐身敌人。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1000</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">5.0</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">0.9x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">90</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">160</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">紧急跃迁</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟠 多多号主战坦克 — 正面攻坚型</h4>
+                        <div class="tank-desc">重装甲火力型，毁灭齐射可摧毁任何防线。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">2000</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">2.5</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">2.0x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">60</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">120</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">毁灭齐射</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟠 多多号步战车 — 持续压制型</h4>
+                        <div class="tank-desc">守点绞肉机，弹幕风暴无限弹药超高射速；可直接涉水，水中速度为 30%。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1500</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">3.2</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">1.3x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">80</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">300</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">弹幕风暴</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟠 多多号自移车 — 远程狙击型</h4>
+                        <div class="tank-desc">全图威慑，天罚之钉无视装甲穿透攻击。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1000</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">3.0</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">0.8x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">40</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">80</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">天罚之钉</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟣 左研X — 全能指挥官型</h4>
+                        <div class="tank-desc">团队增益核心，战术指挥大幅提升范围内友军战斗力。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1100</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">4.2</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">1.0x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">90</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">170</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">战术指挥</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🔵 左研31"蜂群" — 无人机母机型</h4>
+                        <div class="tank-desc">蜂群战术，释放自爆无人机自动追踪敌人。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">900</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">4.5</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">0.8x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">70</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">160</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">蜂群出击</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🔵 左研32"幻影" — 诱饵干扰型</h4>
+                        <div class="tank-desc">全息欺骗，生成幻象吸引敌方火力。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">750</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">5.0</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">0.6x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">60</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">140</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">全息投影</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🔵 左研33"蝰蛇" — 毒素持续伤害型</h4>
+                        <div class="tank-desc">神经毒素，机枪附带毒素持续伤害。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">850</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">5.2</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">0.7x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">75</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">180</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">神经毒素</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟢 星辰27C"守望者" — 反隐领域型</h4>
+                        <div class="tank-desc">隐身克星，强制范围内隐身单位现身。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1300</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">3.5</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">1.3x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">110</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">190</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">全域照明</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟢 星辰27D"链锁" — 伤害链接型</h4>
+                        <div class="tank-desc">共生防御，与友方链接共享减伤。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1100</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">4.0</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">1.0x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">95</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">170</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">共生链接</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟢 星辰27E"审判" — 斩杀处决型</h4>
+                        <div class="tank-desc">低血收割，标记敌人并造成斩杀伤害。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1000</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">4.2</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">0.9x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">85</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">150</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">最终审判</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟠 多多号工程车 — 阵地建造型</h4>
+                        <div class="tank-desc">以静制动，部署自动炮塔形成交叉火力。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1800</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">2.0</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">2.2x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">100</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">140</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">自动炮塔</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟠 多多号火箭炮 — 区域轰炸型</h4>
+                        <div class="tank-desc">火力覆盖，区域火箭弹幕轰炸。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1200</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">2.8</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">1.0x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">65</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">120</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">火箭弹幕</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🟠 多多号磁暴车 — EMP干扰型</h4>
+                        <div class="tank-desc">电子战专家，电磁脉冲干扰敌方小地图。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">1400</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">3.0</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">1.2x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">80</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">120</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">电磁脉冲</div></div>
+                        </div>
+                    </div>
+
+                    <div class="tank-detail">
+                        <h4>🚁 牛牛直升机 — 空中支援型</h4>
+                        <div class="tank-desc">可越过地面障碍并执行目标区域空袭，机动性极高但装甲薄弱。</div>
+                        <div class="tank-stats-grid">
+                            <div class="tank-stat-item"><div class="stat-label">生命值</div><div class="stat-value">600</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">速度</div><div class="stat-value">7.0</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">装甲</div><div class="stat-value">0.4x</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">主炮弹药</div><div class="stat-value">40</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">机枪弹药</div><div class="stat-value">80</div></div>
+                            <div class="tank-stat-item"><div class="stat-label">大招</div><div class="stat-value">空中打击</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="intro-section">
+                    <h3>⚔ 经典组合推荐</h3>
+                    
+                    <div class="combo-box">
+                        <h4>🔥 铁三角（通吃组合）</h4>
+                        <div class="combo-desc">多多号主战 + 星辰27B + 星辰27S</div>
+                        <div class="combo-detail">
+                            <strong>运作逻辑：</strong>27B开启绝对领域堵路反弹 → 敌方犹豫/绕路 → 多多主战毁灭齐射扇形扫射 → 无处可躲<br>
+                            <strong>左研30绕后？</strong> → 27S跃迁揭露+护盾保护 → 隐身失效被集火<br>
+                            <strong>左研29 rush？</strong> → 27B反弹残血 → 齐射收割
+                        </div>
+                        <div class="combo-counter">
+                            ⚠ <strong>天敌：</strong>多多号自移车（天罚之钉无视装甲+反弹，3秒锁定可打断齐射充能）
+                        </div>
+                    </div>
+
+                    <div class="combo-box">
+                        <h4>🌪 双风突袭（速度压制）</h4>
+                        <div class="combo-desc">左研29 + 左研30 + 星辰27S</div>
+                        <div class="combo-detail">
+                            <strong>运作逻辑：</strong>左研29疾风冲正面吸引 → 左研30隐身绕后刺杀指挥官/输出 → 27S跃迁救场或补刀<br>
+                            <strong>极限速度：</strong>左研29可达17.82，左研30可达17.55，几乎与子弹同速<br>
+                            <strong>3秒rush：</strong>12秒横穿全图，敌方反应时间极短
+                        </div>
+                        <div class="combo-counter">
+                            ⚠ <strong>天敌：</strong>星辰27B（反弹让rush变自杀）、多多号步战车（弹幕扫射无法躲避）
+                        </div>
+                    </div>
+
+                    <div class="combo-box">
+                        <h4>🛡 不死军团（据点绞肉）</h4>
+                        <div class="combo-desc">左研X + 星辰27A×2 + 星辰27B + 多多号步战车</div>
+                        <div class="combo-detail">
+                            <strong>运作逻辑：</strong>指挥官buff全员（射速+30%、速度+20%、装甲+0.5）→ 27B堵门反弹 → 27A双护盾叠加4000HP → 步战车弹幕风暴无限输出<br>
+                            <strong>数值恐怖：</strong>步战车实际射速3.9倍 × 无限弹药 × 1.5倍伤害 = 5.85倍持续输出<br>
+                            <strong>27B实际装甲：</strong>2.5 × 5 × 1.5 = 18.75倍
+                        </div>
+                        <div class="combo-counter">
+                            ⚠ <strong>天敌：</strong>左研30隐身刺杀指挥官（buff消失全盘崩）、多多号自移车天罚之钉（无视装甲穿透）
+                        </div>
+                    </div>
+
+                    <div class="combo-box">
+                        <h4>🎯 天罚核心（远程狙杀）</h4>
+                        <div class="combo-desc">多多号自移车 + 左研30 + 星辰27S</div>
+                        <div class="combo-detail">
+                            <strong>运作逻辑：</strong>自移车3秒锁定敌方核心（27B/指挥官）→ 天罚之钉500伤害穿透秒杀 → 左研30隐身保护自移车，现身眩晕打断者 → 27S跃迁双保险<br>
+                            <strong>克制关系：</strong>专杀铁三角（天罚破27B反弹）、专杀指挥官（500伤害秒杀）、专杀步战车（打断弹幕风暴）<br>
+                            <strong>射程优势：</strong>5000射程覆盖半个地图，敌方够不着
+                        </div>
+                        <div class="combo-counter">
+                            ⚠ <strong>天敌：</strong>左研29疾风突袭（3秒内冲到脸上打断锁定）、被近身必死（自身极脆）
+                        </div>
+                    </div>
+
+                    <div class="combo-box">
+                        <h4>💀 三体自杀（人墙消耗）</h4>
+                        <div class="combo-desc">左研1 × 3 + 星辰27B</div>
+                        <div class="combo-detail">
+                            <strong>运作逻辑：</strong>三辆左研1轮流过载引擎冲锋 → 第一辆瘫痪在敌方阵前 → 第二辆再冲形成人墙 → 第三辆收尾 → 27B在后方反弹输出<br>
+                            <strong>心理威慑：</strong>敌方看到三辆左研1冲过来不敢不打（怕堵路），打了又心疼弹药<br>
+                            <strong>成本极低：</strong>左研1最廉价，死了不心疼
+                        </div>
+                        <div class="combo-counter">
+                            ⚠ <strong>天敌：</strong>多多号自移车（不浪费子弹，直接天罚点杀瘫痪坦克）、左研30（隐身不触发仇恨直接穿过去）
+                        </div>
+                    </div>
+
+                    <div class="combo-box">
+                        <h4>⚡ 闪电猎杀（高速斩首）</h4>
+                        <div class="combo-desc">左研29 + 多多号自移车</div>
+                        <div class="combo-detail">
+                            <strong>运作逻辑：</strong>左研29疾风突袭绕后 → 轨迹减速敌方 → 自移车天罚之钉锁定无法躲避的目标 → 500伤害秒杀<br>
+                            <strong>速度差：</strong>左研29极限17.82 vs 左研30极限17.55，快0.27，可追上任何逃跑目标<br>
+                            <strong>专杀对象：</strong>星辰27B（减速后无法逃跑，天罚无视装甲）
+                        </div>
+                        <div class="combo-counter">
+                            ⚠ <strong>天敌：</strong>星辰27S（跃迁揭露+护盾保护目标）、弹幕风暴（范围扫射无法躲避）
+                        </div>
+                    </div>
+                </div>
+
+                <div class="intro-section">
+                    <h3>🎭 克制关系速查</h3>
+                    <ul>
+                        <li><strong>左研30隐身流</strong> → 被星辰27S跃迁揭露、被地雷区逼现身</li>
+                        <li><strong>星辰27B反弹流</strong> → 被多多号自移车天罚之钉无视、被左研1人墙绕过</li>
+                        <li><strong>多多号步战车弹幕</strong> → 被自移车远程点杀、被左研29高速打断</li>
+                        <li><strong>多多号自移车狙击</strong> → 被左研29疾风突袭打断锁定、被左研30隐身贴近</li>
+                        <li><strong>左研X指挥官buff</strong> → 被左研30隐身刺杀（斩首战术）</li>
+                        <li><strong>左研1自杀冲锋</strong> → 被无视（不打它）、被天罚点杀（不浪费子弹）</li>
+                    </ul>
+                </div>
+
+                <button class="intro-close-btn" id="btnCloseIntro" onclick="document.getElementById('introModal').classList.remove('active')">返回</button>
+            </div>
+        </div>
+
+        <!-- ========== 菜单 ========== -->
+        <div id="menu">
+            <h1>⚔ 坦克大战 ⚔</h1>
+            <div class="subtitle" id="menuSubtitle">据点争夺战 | 9000×9000 超大地图</div>
+            <div class="mode-badge" id="modeBadge">经典模式</div>
+
+            <div class="section">
+                <h3>🎯 选择你的坦克</h3>
+                <div class="series-filter" id="seriesFilter">
+                <button class="series-btn active" data-series="all" onclick="filterTanks('all', this)">全部</button>
+                <button class="series-btn" data-series="zuoyan" onclick="filterTanks('zuoyan', this)">🔵 左研系</button>
+                <button class="series-btn" data-series="xingchen" onclick="filterTanks('xingchen', this)">🟢 星辰系</button>
+                <button class="series-btn" data-series="duoduo" onclick="filterTanks('duoduo', this)">🟠 多多系</button>
+            </div>
+            <div class="tank-list" id="tankList"></div>
+            </div>
+
+            <div class="section" id="configSection">
+                <h3>⚙ 装备配置</h3>
+                <div class="config-row">
+                    <label>🗺️ 选择地图</label>
+                    <select id="mapSelect" style="flex:1; padding:8px; background:rgba(0,0,0,0.5); color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:6px;">
+                        <option value="classic">🏛 经典战场 - 标准据点争夺战</option>
+                    </select>
+                </div>
+                <div class="config-row">
+                    <label>主炮弹药量 (发)</label>
+                    <input type="range" id="ammoSlider" min="20" max="100" value="60">
+                    <span class="value-display" id="ammoValue">60</span>
+                </div>
+                <div class="config-row">
+                    <label>机枪弹量 (发)</label>
+                    <input type="range" id="mgSlider" min="50" max="300" value="150">
+                    <span class="value-display" id="mgValue">150</span>
+                </div>
+                <div class="config-row">
+                    <label>高射炮弹量 (发)</label>
+                    <input type="range" id="aaSlider" min="0" max="50" value="15">
+                    <span class="value-display" id="aaValue">15</span>
+                </div>
+                <div class="config-row" id="dayNightRow">
+                    <label>游戏模式</label>
+                    <select id="dayNight">
+                        <option value="day">☀ 白天模式</option>
+                        <option value="night">🌙 夜间模式</option>
+                    </select>
+                </div>
+                <div class="config-row">
+                    <label>困难程度</label>
+                    <select id="difficulty">
+                        <option value="easy">简单</option>
+                        <option value="normal" selected>普通</option>
+                        <option value="hard">困难</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="btn-start" id="startBtn" disabled onclick="console.log('[BUTTON] 点击: 开始战斗'); startGame()">开始战斗</button>
+        </div>
+
+        <!-- 游戏画布 -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- ========== 游戏UI ========== -->
+        <div id="achievementPanel" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:500;overflow-y:auto;padding:20px;box-sizing:border-box;">
+            <div style="max-width:900px;margin:0 auto;">
+                <h2 style="color:#ffd700;text-align:center;font-size:32px;margin-bottom:20px;">🏆 成就系统</h2>
+                <div id="achievementStats" style="text-align:center;color:#888;margin-bottom:20px;"></div>
+                <div id="achievementList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:15px;"></div>
+                <button id="btnCloseAchievements" style="display:block;margin:30px auto;padding:12px 50px;font-size:18px;background:linear-gradient(45deg,#00a8ff,#00ff88);border:none;border-radius:25px;color:#000;font-weight:bold;cursor:pointer;" onclick="document.getElementById('achievementPanel').style.display='none'">返回</button>
+            </div>
+        </div>
+        <div id="gameUI">
+            <div id="hud">
+                <div>HP: <div class="hp-bar"><div class="hp-fill" id="playerHp" style="width:100%"></div></div></div>
+                <div>武器: <span id="currentWeapon" style="color:#ffd700">主炮</span> | 主炮: <span id="shells">0</span> | 机枪: <span id="mg">0</span> | 高射炮: <span id="aa">0</span></div>
+                <div>APS: <span id="apsDisplay" style="color:#00d4ff">4</span> | 重量: <span id="weightDisplay" style="color:#ffaa00">0</span>kg</div>
+                <div>蓝方据点: <span style="color:#4488ff" id="blueOutposts">0</span></div>
+                <div>红方据点: <span style="color:#ff4444" id="redOutposts">0</span></div>
+                <div id="autoAimStatus" style="color:#ffcc00;font-size:12px;display:none;">🎯 自动瞄准中</div>
+                <div id="environmentInfo" style="color:#bdeaff;font-size:12px;display:none;"></div>
+            </div>
+            <div id="weaponIndicator">按 T 切换武器</div>
+            <div id="timer">05:00</div>
+            <div id="defenseWaveInfo">🛡 守点模式 - 撑过 03:00</div>
+            <div id="sneakModeInfo">🌙 黑夜奇袭 - 摧毁敌方基地</div>
+            <div id="specialModeInfo" style="display:none;"></div>
+            <div id="speedPenalty">⚠ 负重过多，移动速度降低</div>
+            <div id="ultimateBar">
+                <div class="ultimate-label">⚡ 终极技能</div>
+                <div class="ultimate-progress"><div class="ultimate-fill" id="ultimateFill"></div></div>
+                <div class="ultimate-ready" id="ultimateReady">✓ 就绪 - 按 G 释放</div>
+            </div>
+            <canvas id="minimap"></canvas>
+            <div class="coord-display" id="coordDisplay">X: 0 | Y: 0</div>
+            <div class="outpost-info" id="outpostInfo"></div>
+            <div id="message"></div>
+            
+            <div id="joystick"><div id="joystick-knob"></div></div>
+            <div id="fireBtn">射击</div>
+            
+            <div id="pcControls">
+                <button class="pc-btn pc-btn-switch" id="pcSwitchBtn">切换<br>武器</button>
+                <button class="pc-btn pc-btn-ultimate" id="pcUltimateBtn">终极<br>技能</button>
+                <button class="pc-btn pc-btn-fire" id="pcFireBtn">射击<br>(F)</button>
+            </div>
+
+            <!-- 移动端功能按钮 -->
+            <div id="mobileActionButtons" style="display:none;">
+                <button class="mobile-btn mobile-btn-weapon" id="mobileSwitchBtn" onclick="switchWeapon()">切换<br>武器</button>
+                <button class="mobile-btn mobile-btn-ultimate" id="mobileUltimateBtn" onclick="activateUltimate()">终极<br>技能</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="Config.js"></script>
+    <script src="Achievement.js"></script>
+    <script src="Pathfinding.js"></script>
+    <script src="UI.js"></script>
+    <script src="Ultimate.js"></script>
+    <script src="GameCore.js"></script>
+    <script src="AI.js"></script>
+    <script src="Combat.js"></script>
+    <script src="Render.js"></script>
+</body>
+</html>

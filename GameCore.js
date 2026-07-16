@@ -1,0 +1,1401 @@
+// ==================== 游戏初始化 ====================
+function startGame() {
+    console.log('[START_GAME] Starting game, selectedTank:', selectedTank, 'gameMode:', gameMode);
+    if(!selectedTank) {
+        console.error('[START_GAME] No tank selected!');
+        return;
+    }
+    resetMatchStats();
+    recordTankUsed(selectedTank);
+    const tankData = TANKS[selectedTank];
+    const ammo = parseInt(document.getElementById('ammoSlider').value);
+    const mg = parseInt(document.getElementById('mgSlider').value);
+    const aa = parseInt(document.getElementById('aaSlider').value);
+    let dayNight = 'day';
+    if(gameMode === 'sneak') dayNight = 'night';
+    else if(['ctf', 'infection', 'storm'].includes(gameMode)) dayNight = 'day';
+    else dayNight = document.getElementById('dayNight').value;
+    const difficulty = document.getElementById('difficulty').value;
+    gameConfig = { dayNight, difficulty, ammo, mg, aa, mode: gameMode };
+    currentWeapon = 'shell';
+    document.getElementById('menu').classList.remove('active');
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('gameUI').classList.add('active');
+    document.getElementById('gameUI').style.display = 'block';
+    document.getElementById('ultimateBar').style.display = 'block';
+    document.getElementById('defenseWaveInfo').style.display = gameMode === 'defense' ? 'block' : 'none';
+    document.getElementById('sneakModeInfo').style.display = gameMode === 'sneak' ? 'block' : 'none';
+    const specialModeInfo = document.getElementById('specialModeInfo');
+    if(specialModeInfo) {
+        const labels = {
+            ctf: '🏴 夺旗模式 - 率先获得 3 分',
+            infection: '🧟 感染模式 - 生存或感染所有敌人',
+            storm: '🌪 风暴模式 - 留在安全区并活到最后'
+        };
+        specialModeInfo.textContent = labels[gameMode] || '';
+        specialModeInfo.style.display = labels[gameMode] ? 'block' : 'none';
+    }
+    resizeCanvas();
+    generateMap();
+    initPathGrid();
+    spawnTanks(tankData, ammo, mg, aa);
+    initOutposts();
+    initSpatialGrid();
+    camera.zoom = (MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic).cameraZoom || 1;
+    camera.x = player.x - canvas.width / camera.zoom / 2;
+    camera.y = player.y - canvas.height / camera.zoom / 2;
+
+    if(gameMode === 'ctf') initCTFMode();
+    else if(gameMode === 'infection') initInfectionMode();
+    else if(gameMode === 'storm') initStormMode();
+
+    gameState = 'playing';
+    if(gameMode === 'defense') gameTime = 180;
+    else if(['ctf', 'infection', 'storm'].includes(gameMode)) gameTime = 300;
+    else gameTime = CONFIG.gameTime;
+    lastTime = performance.now();
+    exhaustTrails = [];
+    trailEffects = [];
+    damageNumbers = [];
+    updateHUD();
+    updateOutpostInfo();
+}
+
+// 地图模板配置
+const MAP_TEMPLATES = {
+    classic: {
+        name: '经典战场', width: 9000, height: 9000,
+        obstacles: 150, outposts: [
+            {x: 1500, y: 1500}, {x: 3500, y: 2000}, {x: 5500, y: 3000},
+            {x: 2500, y: 5000}, {x: 4500, y: 4500}, {x: 7000, y: 3500}, {x: 6500, y: 6500}
+        ],
+        baseOffset: 500, description: '标准据点争夺战'
+    },
+    desert: {
+        name: '沙漠风暴', width: 8000, height: 8000,
+        obstacles: 38, cameraZoom: 0.82, groundColor: '#c9923f', obstacleType: 'rock', outposts: [
+            {x: 2000, y: 2000}, {x: 4000, y: 1500}, {x: 6000, y: 2000},
+            {x: 3000, y: 4000}, {x: 5000, y: 4000}
+        ],
+        baseOffset: 400, description: '橙黄沙漠，大视野与随机沙尘暴'
+    },
+    city: {
+        name: '城市巷战', width: 6000, height: 6000,
+        obstacles: 0, groundColor: '#30343a', obstacleType: 'building', outposts: [
+            {x: 1500, y: 1500}, {x: 3000, y: 1200}, {x: 4500, y: 1500},
+            {x: 1500, y: 3000}, {x: 4500, y: 3000}, {x: 1500, y: 4500},
+            {x: 3000, y: 4800}, {x: 4500, y: 4500}
+        ],
+        baseOffset: 300, description: '街区、十字路口与密集建筑组成的真正城市战'
+    },
+    snow: {
+        name: '雪地突袭', width: 10000, height: 10000,
+        obstacles: 48, groundColor: '#dce8ee', obstacleType: 'ice', outposts: [
+            {x: 2500, y: 2500}, {x: 5000, y: 2000}, {x: 7500, y: 2500},
+            {x: 2500, y: 5000}, {x: 7500, y: 5000}, {x: 5000, y: 7500}
+        ],
+        baseOffset: 600, description: '雪地留痕，久停会冻结引擎'
+    },
+    island: {
+        name: '海岛争夺', width: 7000, height: 7000,
+        obstacles: 72, groundColor: '#6f9b55', obstacleType: 'tree', outposts: [
+            {x: 900, y: 1000}, {x: 3500, y: 900}, {x: 6100, y: 1100},
+            {x: 900, y: 3500}, {x: 3500, y: 3500}, {x: 6100, y: 3500},
+            {x: 3500, y: 6100}
+        ],
+        baseOffset: 350, description: '水域分割岛屿，桥梁要道与树林'
+    }
+};
+
+let currentMap = 'classic';
+
+function generateMap() {
+    const template = MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic;
+    CONFIG.mapWidth = template.width;
+    CONFIG.mapHeight = template.height;
+    obstacles = [];
+    terrainZones = [];
+    snowTracks = [];
+    environmentState = {
+        sandstormActive: false, sandstormTimer: 0,
+        nextSandstorm: 12 + Math.random() * 18,
+        windAngle: Math.random() * Math.PI * 2, windStrength: 0
+    };
+    const numObstacles = template.obstacles;
+    const outpostPositions = template.outposts;
+    for(let i=0; i<numObstacles; i++) {
+        let w = template.obstacleType === 'tree' ? 55 + Math.random() * 55 : 80 + Math.random() * 200;
+        let h = template.obstacleType === 'tree' ? 55 + Math.random() * 55 : 80 + Math.random() * 200;
+        let x = 500 + Math.random() * (CONFIG.mapWidth - w - 1000);
+        let y = 500 + Math.random() * (CONFIG.mapHeight - h - 1000);
+        const distBlue = Math.hypot(x - 800, y - CONFIG.mapHeight/2);
+        const distRed = Math.hypot(x - (CONFIG.mapWidth - 800), y - CONFIG.mapHeight/2);
+        if(distBlue < 600 || distRed < 600) continue;
+        let overlapsOutpost = false;
+        for(let op of outpostPositions) {
+            if(x < op.x + CONFIG.outpostRadius && x + w > op.x - CONFIG.outpostRadius &&
+               y < op.y + CONFIG.outpostRadius && y + h > op.y - CONFIG.outpostRadius) {
+                overlapsOutpost = true; break;
+            }
+        }
+        if(overlapsOutpost) continue;
+        obstacles.push({ x, y, w, h, type: template.obstacleType || 'block' });
+    }
+    if(currentMap === 'city') generateCityObstacles(outpostPositions);
+    const baseOffset = template.baseOffset || 500;
+    bases.blue = {
+        x: baseOffset, y: CONFIG.mapHeight/2 - CONFIG.baseSize/2,
+        w: CONFIG.baseSize, h: CONFIG.baseSize,
+        hp: CONFIG.baseHp, maxHp: CONFIG.baseHp, team: 'blue',
+        defenseCooldown: 0
+    };
+    bases.red = {
+        x: CONFIG.mapWidth - baseOffset - CONFIG.baseSize, y: CONFIG.mapHeight/2 - CONFIG.baseSize/2,
+        w: CONFIG.baseSize, h: CONFIG.baseSize,
+        hp: CONFIG.baseHp, maxHp: CONFIG.baseHp, team: 'red',
+        defenseCooldown: 0
+    };
+    outposts = outpostPositions.map((pos, i) => ({
+        x: pos.x, y: pos.y, name: String.fromCharCode(65 + i),
+        owner: null, captureProgress: 0, capturingTeam: null, radius: CONFIG.outpostRadius
+    }));
+    if(gameMode === 'defense') outposts.forEach(op => op.owner = 'red');
+    if(['sneak', 'ctf', 'infection', 'storm'].includes(gameMode)) outposts = [];
+
+    if(currentMap === 'island') generateIslandTerrain();
+
+    generateMapElements();
+}
+
+function generateIslandTerrain() {
+    // 整张地图以海水为底，七座独立小岛各自承载一个据点。
+    terrainZones.push({ type: 'water', x: 0, y: 0, w: 7000, h: 7000 });
+    const islands = [
+        {x: 900, y: 1000, rx: 720, ry: 610}, {x: 3500, y: 900, rx: 760, ry: 580},
+        {x: 6100, y: 1100, rx: 720, ry: 610}, {x: 900, y: 3500, rx: 800, ry: 700},
+        {x: 3500, y: 3500, rx: 850, ry: 720}, {x: 6100, y: 3500, rx: 800, ry: 700},
+        {x: 3500, y: 6100, rx: 820, ry: 650}
+    ];
+    islands.forEach((island, index) => terrainZones.push({ type: 'land', shape: 'ellipse', island: index + 1, ...island }));
+    const links = [[0,1], [1,2], [0,3], [3,4], [4,5], [1,4], [4,6], [2,5]];
+    links.forEach(([a, b]) => addIslandBridge(islands[a], islands[b]));
+    // 避免树生成在水面或桥面上。
+    obstacles = obstacles.filter(obs => !rectTouchesBlockingWater(obs.x, obs.y, obs.w, obs.h));
+}
+
+function addIslandBridge(a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const distance = Math.hypot(dx, dy);
+    terrainZones.push({
+        type: 'bridge', centered: true,
+        x: (a.x + b.x) / 2, y: (a.y + b.y) / 2,
+        w: Math.max(420, distance - 1050), h: 210,
+        angle: Math.atan2(dy, dx)
+    });
+}
+
+function generateCityObstacles(outpostPositions) {
+    const blockSize = 600, roadWidth = 170;
+    for(let gx = 300; gx < CONFIG.mapWidth - 300; gx += blockSize) {
+        for(let gy = 300; gy < CONFIG.mapHeight - 300; gy += blockSize) {
+            const inset = roadWidth / 2;
+            const x = gx + inset, y = gy + inset;
+            const w = blockSize - roadWidth - 25, h = blockSize - roadWidth - 25;
+            const nearBase = Math.hypot(x - 500, y - CONFIG.mapHeight / 2) < 650 ||
+                Math.hypot(x - (CONFIG.mapWidth - 500), y - CONFIG.mapHeight / 2) < 650;
+            const nearOutpost = outpostPositions.some(op => x < op.x + CONFIG.outpostRadius && x + w > op.x - CONFIG.outpostRadius && y < op.y + CONFIG.outpostRadius && y + h > op.y - CONFIG.outpostRadius);
+            if(nearBase || nearOutpost) continue;
+            obstacles.push({ x, y, w, h, type: 'building', floors: 3 + Math.floor(Math.random() * 8) });
+        }
+    }
+}
+
+function rectTouchesBlockingWater(x, y, w, h) {
+    return isPositionInWater(x + w / 2, y + h / 2, Math.min(w, h) * 0.4);
+}
+
+function circleIntersectsRect(x, y, radius, rect) {
+    const closestX = Math.max(rect.x, Math.min(x, rect.x + rect.w));
+    const closestY = Math.max(rect.y, Math.min(y, rect.y + rect.h));
+    return Math.hypot(x - closestX, y - closestY) < radius;
+}
+
+function isPositionInWater(x, y, radius = 0) {
+    const inWater = terrainZones.some(z => z.type === 'water' && circleIntersectsRect(x, y, radius, z));
+    if(!inWater) return false;
+    const onLand = terrainZones.some(z => z.type === 'land' && pointInTerrainZone(x, y, z, radius));
+    const onBridge = terrainZones.some(z => z.type === 'bridge' && pointInTerrainZone(x, y, z, radius));
+    return !onLand && !onBridge;
+}
+
+function pointInTerrainZone(x, y, zone, padding = 0) {
+    if(zone.shape === 'ellipse') {
+        const nx = (x - zone.x) / Math.max(1, zone.rx + padding);
+        const ny = (y - zone.y) / Math.max(1, zone.ry + padding);
+        return nx * nx + ny * ny <= 1;
+    }
+    if(zone.centered) {
+        const cos = Math.cos(-(zone.angle || 0)), sin = Math.sin(-(zone.angle || 0));
+        const dx = x - zone.x, dy = y - zone.y;
+        const localX = dx * cos - dy * sin, localY = dx * sin + dy * cos;
+        return Math.abs(localX) <= zone.w / 2 + padding && Math.abs(localY) <= zone.h / 2 + padding;
+    }
+    return x >= zone.x - padding && x <= zone.x + zone.w + padding && y >= zone.y - padding && y <= zone.y + zone.h + padding;
+}
+
+function canTankCrossWater(tank) {
+    return !!tank;
+}
+
+function isTankInWater(tank) {
+    return !!tank && !tank.isFlying && isPositionInWater(tank.x, tank.y, CONFIG.tankSize * 0.55);
+}
+
+function generateMapElements() {
+    mapElements = [];
+
+    for(let i=0; i<20; i++) {
+        let x = 800 + Math.random() * (CONFIG.mapWidth - 1600);
+        let y = 800 + Math.random() * (CONFIG.mapHeight - 1600);
+        if(isPositionInWater(x, y, 50)) continue;
+        const distBlue = Math.hypot(x - bases.blue.x - bases.blue.w/2, y - bases.blue.y - bases.blue.h/2);
+        const distRed = Math.hypot(x - bases.red.x - bases.red.w/2, y - bases.red.y - bases.red.h/2);
+        if(distBlue < 500 || distRed < 500) continue;
+        let overlapsObs = false;
+        for(let obs of obstacles) {
+            if(x + 30 > obs.x && x - 30 < obs.x + obs.w && y + 30 > obs.y && y - 30 < obs.y + obs.h) {
+                overlapsObs = true; break;
+            }
+        }
+        if(overlapsObs) continue;
+        mapElements.push({
+            type: 'mine', x, y, radius: 40 + Math.random() * 30,
+            armed: true, triggerRadius: 25, damage: 300,
+            blinkTimer: Math.random() * 2
+        });
+    }
+
+    for(let i=0; i<15; i++) {
+        let x = 600 + Math.random() * (CONFIG.mapWidth - 1200);
+        let y = 600 + Math.random() * (CONFIG.mapHeight - 1200);
+        if(isPositionInWater(x, y, 80)) continue;
+        let overlapsObs = false;
+        for(let obs of obstacles) {
+            if(x + 80 > obs.x && x - 80 < obs.x + obs.w && y + 40 > obs.y && y - 40 < obs.y + obs.h) {
+                overlapsObs = true; break;
+            }
+        }
+        if(overlapsObs) continue;
+        const angle = Math.random() * Math.PI;
+        mapElements.push({
+            type: 'boost', x, y, width: 120, height: 40,
+            angle, speedMult: 1.5, duration: 3,
+            color: '#00aaff'
+        });
+    }
+
+    for(let i=0; i<25; i++) {
+        let x = 500 + Math.random() * (CONFIG.mapWidth - 1000);
+        let y = 500 + Math.random() * (CONFIG.mapHeight - 1000);
+        if(isPositionInWater(x, y, 60)) continue;
+        let overlap = false;
+        for(let obs of obstacles) {
+            if(x > obs.x - 50 && x < obs.x + obs.w + 50 && 
+               y > obs.y - 50 && y < obs.y + obs.h + 50) {
+                overlap = true; break;
+            }
+        }
+        if(overlap) continue;
+        mapElements.push({
+            type: 'bush', x, y, radius: 60 + Math.random() * 40,
+            stealthFactor: 0.4, color: '#2d5a1e'
+        });
+    }
+}
+
+function spawnTanks(tankData, ammo, mg, aa) {
+    let blueCount = 10;
+    let redCount = gameMode === 'sneak' ? 30 : 10;
+    let blueBaseX = 800, blueBaseY = CONFIG.mapHeight / 2;
+    if(gameMode === 'sneak') {
+        const angle = Math.random() * Math.PI * 2;
+        blueBaseX = CONFIG.mapWidth - 500 - CONFIG.baseSize - 1000 + Math.cos(angle) * 300;
+        blueBaseY = CONFIG.mapHeight / 2 + Math.sin(angle) * 300;
+    }
+    player = createTank(tankData, blueBaseX, blueBaseY, 'blue', true);
+    console.log('[SPAWN] Player created:', player ? 'success' : 'failed', 'x:', player ? player.x : 'N/A', 'y:', player ? player.y : 'N/A');
+    player.shells = ammo; player.mg = mg; player.aa = aa;
+    console.log('[SPAWN] Player ammo set - shells:', player.shells, 'mg:', player.mg, 'aa:', player.aa);
+    player.maxShells = ammo; player.maxMG = mg; player.maxAA = aa;
+    player.apsCharges = CONFIG.apsCharges;
+    allies = [];
+    const allyTypes = ['zuoyan29', 'zuoyan30', 'zuoyan31', 'zuoyan32', 'zuoyan33', 'zuoyan1', 'zuoyan_x', 'xingchen27a', 'xingchen27b', 'xingchen27c', 'xingchen27d', 'xingchen27e', 'xingchen27s', 'duoduo', 'duoduo_ifv', 'duoduo_spat', 'duoduo_eng', 'duoduo_rocket', 'duoduo_emp'];
+    const allyCount = blueCount - 1;
+    for(let i=0; i<allyCount; i++) {
+        const type = allyTypes[i % allyTypes.length];
+        const t = TANKS[type];
+        let aAmmo, aMG;
+        if(gameMode === 'defense') {
+            aAmmo = Math.floor(t.maxShells * 3 * 0.6);
+            aMG = Math.floor(t.maxMG * 3 * 0.6);
+        } else {
+            aAmmo = Math.floor(t.maxShells * 0.6);
+            aMG = Math.floor(t.maxMG * 0.6);
+        }
+        const tank = createTank(t, blueBaseX + (Math.random()-0.5)*300, blueBaseY + (Math.random()-0.5)*300, 'blue', false);
+        tank.shells = aAmmo; tank.mg = aMG; 
+        tank.aa = Math.floor((t.maxAA || 15) * 0.5);
+        tank.apsCharges = CONFIG.apsCharges;
+        tank.aiAggro = 0.4 + Math.random() * 0.4;
+        tank.aiDodgeTimer = 0;
+        tank.aiDodgeDir = 0;
+        tank.aiFocusFireTarget = null;
+        tank.aiAmmoSaveMode = false;
+        tank.aiLastState = '';
+        tank.aiTeamCoord = Math.random() * Math.PI * 2;
+        tank.aiReactionDelay = 0.15 + Math.random() * 0.3;
+        tank.aiSkillLevel = gameConfig.difficulty === 'easy' ? 0.4 : gameConfig.difficulty === 'hard' ? 1.1 : 0.75;
+        tank.aiBehavior = 0;
+        tank.aiBehaviorTimer = 0;
+        tank.aiFlankTarget = null;
+        allies.push(tank);
+    }
+    enemies = [];
+    const enemyTypes = ['xingchen27a', 'xingchen27b', 'xingchen27c', 'xingchen27d', 'xingchen27e', 'xingchen27s', 'duoduo', 'duoduo_ifv', 'duoduo_spat', 'duoduo_eng', 'duoduo_rocket', 'duoduo_emp', 'zuoyan29', 'zuoyan30', 'zuoyan31', 'zuoyan32', 'zuoyan33', 'zuoyan1', 'zuoyan_x'];
+    const diffMult = gameConfig.difficulty === 'easy' ? 0.7 : gameConfig.difficulty === 'hard' ? 1.4 : 1.0;
+    let redBaseX = CONFIG.mapWidth - 800;
+    let redBaseY = CONFIG.mapHeight / 2;
+    for(let i=0; i<redCount; i++) {
+        const type = enemyTypes[i % enemyTypes.length];
+        const t = TANKS[type];
+        const eAmmo = Math.floor(t.maxShells * 0.95);
+        const eMG = Math.floor(t.maxMG * 0.95);
+        let ex, ey;
+        if(gameMode === 'sneak') {
+            const layer = Math.floor(i / 10);
+            const idxInLayer = i % 10;
+            const angle = (idxInLayer / 10) * Math.PI * 2 + layer * 0.3;
+            const dist = 300 + layer * 400 + Math.random() * 200;
+            ex = redBaseX + Math.cos(angle) * dist;
+            ey = redBaseY + Math.sin(angle) * dist;
+            let attempts = 0;
+            while(attempts < 10) {
+                let overlap = false;
+                for(let existing of enemies) {
+                    if(Math.hypot(existing.x - ex, existing.y - ey) < CONFIG.aiTankMinDistance) { overlap = true; break; }
+                }
+                if(!overlap) break;
+                ex += (Math.random() - 0.5) * 200; ey += (Math.random() - 0.5) * 200;
+                attempts++;
+            }
+        } else {
+            ex = redBaseX - i*80;
+            ey = redBaseY - 300 + i*200;
+        }
+        const tank = createTank(t, ex, ey, 'red', false);
+        tank.hp = Math.floor(tank.hp * diffMult);
+        tank.maxHp = tank.hp;
+        tank.shells = eAmmo; tank.mg = eMG; 
+        tank.aa = Math.floor((t.maxAA || 15) * 0.85);
+        tank.apsCharges = CONFIG.apsCharges;
+        tank.aiAggro = 0.8 + Math.random() * 0.4;
+        tank.aiDodgeTimer = 0;
+        tank.aiDodgeDir = 0;
+        tank.aiFocusFireTarget = null;
+        tank.aiAmmoSaveMode = false;
+        tank.aiLastState = '';
+        tank.aiTeamCoord = Math.random() * Math.PI * 2;
+        tank.aiReactionDelay = 0.05 + Math.random() * 0.2;
+        const baseSkill = gameConfig.difficulty === 'easy' ? 0.6 : gameConfig.difficulty === 'hard' ? 1.5 : 1.0;
+        let redSkillMult = 1.4;
+        if (gameMode === 'sneak') redSkillMult = 1.6;
+        else if (gameMode === 'defense') redSkillMult = 1.5;
+        else if (gameMode === 'ctf') redSkillMult = 1.3;
+        else if (gameMode === 'infection') redSkillMult = 1.8;
+        else if (gameMode === 'storm') redSkillMult = 1.2;
+        tank.aiSkillLevel = baseSkill * redSkillMult;
+        tank.aiDamageMult = gameConfig.difficulty === 'easy' ? 1.03 : gameConfig.difficulty === 'hard' ? 1.16 : 1.10;
+        tank.hp = Math.floor(tank.hp * 1.25);
+        tank.maxHp = tank.hp;
+        tank.aiBehavior = AI_BEHAVIOR.NONE;
+        tank.aiBehaviorTimer = 0;
+        tank.aiFlankTarget = null;
+        enemies.push(tank);
+    }
+    aiTanks = [...allies, ...enemies];
+}
+
+function createTank(data, x, y, team, isPlayer) {
+    console.log('[CREATE_TANK] Creating tank:', data.name, 'at x:', x, 'y:', y, 'team:', team, 'isPlayer:', isPlayer);
+    if(x === undefined || y === undefined || isNaN(x) || isNaN(y)) {
+        console.error('[CREATE_TANK] Invalid position! x:', x, 'y:', y);
+    }
+    const id = Math.random().toString(36).substr(2, 9);
+    return {
+        x, y, angle: team === 'blue' ? 0 : Math.PI,
+        turretAngle: team === 'blue' ? 0 : Math.PI,
+        hp: data.hp, maxHp: data.maxHp,
+        speed: data.speed, turnSpeed: data.turnSpeed,
+        armor: data.armor, fireRate: data.fireRate,
+        color: data.color, accent: data.accent, shape: data.shape,
+        weight: data.weight || 1.0,
+        isFlying: !!data.isFlying,
+        canPassObstacles: !!data.canPassObstacles,
+        team, isPlayer,
+        shells: 0, mg: 0, aa: 0,
+        maxShells: data.maxShells, maxMG: data.maxMG, maxAA: data.maxAA || 15,
+        apsCharges: CONFIG.apsCharges, apsCooldown: 0,
+        aaCooldown: 0,
+        fireCooldown: 0, mgCooldown: 0,
+        turretSize: data.turretSize,
+        dead: false, invincible: 3,
+        target: null, pathTimer: 0, moveTarget: null, lastShotTime: 0,
+        aiState: 'combat', aiStateTimer: 0, aiCaptureTarget: null,
+        aiStayTimer: 0, aiLastPos: {x, y},
+        exhaustColor: data.exhaustColor, id: id,
+        path: null, 
+        pathRefreshTimer: 0,
+        stuckTimer: 0, lastPos: {x, y}, patrolCenter: null,
+        tankType: Object.keys(TANKS).find(key => TANKS[key].name === data.name) || 'xingchen27a',
+        ultimateData: data.ultimate,
+        ultimateCooldown: isPlayer ? 0 : (data.ultimate ? data.ultimate.cooldown : 0),
+        ultimateActive: false, ultimateTimer: 0,
+        ultimateCharging: false, ultimateChargeTimer: 0,
+        speedBoost: 0, turnBoost: 0,
+        shieldActive: false, shieldHp: 0, armorBoost: 0,
+        canMove: true, trailDebuff: 0, turretSpeedMult: 1.0,
+        shieldProtected: false, shieldOwner: null,
+        ghostActive: false, ghostTimer: 0, ghostRevealed: false,
+        overheatActive: false, overheatTimer: 0,
+        fortressActive: false, fortressTimer: 0, reflectActive: false,
+        teleportCooldown: 0,
+        stormActive: false, stormTimer: 0, stormOriginalMgCooldown: 0,
+        nailLocking: false, nailLockTimer: 0, nailTarget: null, nailLaserAngle: 0,
+        aiDodgeTimer: 0, aiDodgeDir: 0, aiFocusFireTarget: null,
+        aiAmmoSaveMode: false, aiLastState: '', aiTeamCoord: 0,
+        aiReactionDelay: 0.1, aiSkillLevel: 0.85,
+        aiBehavior: AI_BEHAVIOR.NONE,
+        aiBehaviorTimer: 0,
+        aiFlankTarget: null,
+        mapSpeedBoost: 0,
+        mapBoostTimer: 0,
+        prevPos: {x: x, y: y},
+        autoAimTimer: 0,
+        autoAimTarget: null,
+        autoAimActive: false,
+        autoAimLockOn: false,
+        lastManualAimTime: 0,
+        speedBuffFromCommander: 0,
+        fireRateBuff: 0,
+        commanderBuffOwner: null,
+        minimapJammed: false,
+        minimapJamTimer: 0,
+        isInfected: false,
+        infectionLevel: 0,
+        originalTeam: null,
+        isClone: false,
+        cloneOwner: null,
+        cloneTimer: 0,
+        toxinActive: false,
+        toxinTimer: 0,
+        revealActive: false,
+        revealTimer: 0,
+        linkActive: false,
+        linkTimer: 0,
+        linkedAlly: null,
+        linkedTo: null,
+        damageReduction: 0,
+        judgeActive: false,
+        judgeTimer: 0,
+        judgeTarget: null,
+        judged: false,
+        judgeOwner: null,
+        toxinDebuffTimer: 0, toxinTickTimer: 0, toxinDamage: 0, toxinSlow: 0,
+        burnTimer: 0, burnTickTimer: 0, burnDamage: 0,
+        snowIdleTimer: 0, freezeLevel: 0, freezeDamageTimer: 1, waterDamageTimer: 1,
+        environmentLastPos: {x, y}, lastSnowTrackPos: {x, y}
+    };
+}
+
+function initOutposts() {
+    outposts.forEach(op => { outpostSpawnTimers[op.name] = CONFIG.outpostSpawnInterval; });
+}
+
+function initSpatialGrid() {
+    spatialGrid.clear();
+    spatialGridKeys.length = 0;
+}
+
+function getSpatialKey(x, y) {
+    const gx = Math.floor(x / CONFIG.spatialGridSize);
+    const gy = Math.floor(y / CONFIG.spatialGridSize);
+    return `${gx},${gy}`;
+}
+
+function updateSpatialGrid() {
+    spatialGrid.clear();
+    spatialGridKeys.length = 0;
+    const allTanks = [player, ...allies, ...enemies].filter(t => t && !t.dead);
+    allTanks.forEach(tank => {
+        const key = getSpatialKey(tank.x, tank.y);
+        if(!spatialGrid.has(key)) {
+            spatialGrid.set(key, []);
+            spatialGridKeys.push(key);
+        }
+        spatialGrid.get(key).push(tank);
+    });
+}
+
+function getNearbyTanks(x, y, radius) {
+    const results = [];
+    const rCells = Math.ceil(radius / CONFIG.spatialGridSize);
+    const centerGx = Math.floor(x / CONFIG.spatialGridSize);
+    const centerGy = Math.floor(y / CONFIG.spatialGridSize);
+    
+    for(let dx = -rCells; dx <= rCells; dx++) {
+        for(let dy = -rCells; dy <= rCells; dy++) {
+            const key = `${centerGx + dx},${centerGy + dy}`;
+            const cell = spatialGrid.get(key);
+            if(cell) {
+                cell.forEach(tank => {
+                    if(Math.hypot(tank.x - x, tank.y - y) <= radius) {
+                        results.push(tank);
+                    }
+                });
+            }
+        }
+    }
+    return results;
+}
+
+
+// ==================== 游戏主循环 ====================
+function gameLoop(timestamp) {
+    try {
+        const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+        lastTime = timestamp;
+
+        // 帧率监控（每60帧显示一次）
+        if (!window._fpsCounter) window._fpsCounter = 0;
+        if (!window._fpsTime) window._fpsTime = timestamp;
+        window._fpsCounter++;
+        if (window._fpsCounter >= 60) {
+            const fps = Math.round(60000 / (timestamp - window._fpsTime));
+            if (fps < 30) console.warn('[FPS] 帧率过低:', fps);
+            window._fpsCounter = 0;
+            window._fpsTime = timestamp;
+        }
+        if(gameState === 'playing') { 
+            if(player && (isNaN(player.x) || isNaN(player.y))) {
+                console.error('[GAME_LOOP] Player NaN detected before update! x:', player.x, 'y:', player.y);
+            }
+            update(dt); 
+            if(player && (isNaN(player.x) || isNaN(player.y))) {
+                console.error('[GAME_LOOP] Player NaN detected after update! x:', player.x, 'y:', player.y);
+            }
+            render(); 
+        }
+        else if(gameState === 'menu' || gameState === 'start') {
+            ctx.fillStyle = '#0a0a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+    } catch(e) {
+        console.error('Game loop error:', e);
+    }
+    requestAnimationFrame(gameLoop);
+}
+
+
+// ==================== 更新逻辑 ====================
+function update(dt) {
+    if(!player) {
+        console.log('[UPDATE] Player not found, skipping update');
+        return;
+    }
+
+    // 清理死亡坦克，防止内存泄漏和卡顿
+    const beforeClean = allies.length + enemies.length;
+    allies = allies.filter(t => t && !t.dead);
+    enemies = enemies.filter(t => t && !t.dead);
+    const afterClean = allies.length + enemies.length;
+    if (beforeClean !== afterClean) {
+        console.log('[CLEANUP] 清理死亡坦克:', beforeClean - afterClean, '辆');
+    }
+
+    gameTime -= dt;
+    if(gameTime <= 0) {
+        if(gameMode === 'defense') endGame('defenseVictory');
+        else if(gameMode === 'ctf') endGame(ctfScores.blue >= ctfScores.red ? 'victory' : 'playerDead');
+        else if(gameMode === 'storm') {
+            const blueAlive = [player, ...allies].filter(t => t && !t.dead).length;
+            const redAlive = enemies.filter(t => t && !t.dead).length;
+            endGame(blueAlive >= redAlive && player && !player.dead ? 'victory' : 'playerDead');
+        }
+        else if(gameMode === 'infection') {
+            const survivors = [player, ...allies].filter(t => t && !t.dead && !t.isInfected).length;
+            endGame(survivors > 0 || (player && player.isInfected && !player.dead) ? 'victory' : 'playerDead');
+        }
+        else endGame('time');
+        return;
+    }
+    
+    updateSpatialGrid();
+    
+    updateOutposts(dt);
+    updateOutpostSpawns(dt);
+    if(!['ctf', 'infection', 'storm'].includes(gameMode)) updateBaseDefense(dt);
+    
+    updateMinimapJam(dt);
+
+    updateTank(player, dt);
+    recordSurvivalState(player, dt);
+    allies.forEach(t => { if(!t.dead) updateAITank(t, dt); });
+    enemies.forEach(t => { if(!t.dead) updateAITank(t, dt); });
+    updateEnvironment(dt);
+    updateBullets(dt);
+    updateParticles(dt);
+    updateExhaustTrails(dt);
+    updateTrailEffects(dt);
+    updateDamageNumbers(dt);
+    resolveTankCollisions();
+    checkCollisions();
+    updateMapElements(dt);
+    checkWinCondition();
+    updateUltimates(dt);
+    updateHUD();
+    updateTimer();
+    updateCoordDisplay();
+    updateUltimateUI();
+    updateGameModes(dt);
+}
+
+function updateMinimapJam(dt) {
+    const allTanks = [player, ...allies, ...enemies].filter(t => t && !t.dead);
+    allTanks.forEach(tank => {
+        if(tank.minimapJamTimer > 0) {
+            tank.minimapJamTimer -= dt;
+            if(tank.minimapJamTimer <= 0) {
+                tank.minimapJammed = false;
+                tank.minimapJamTimer = 0;
+            }
+        }
+    });
+}
+
+
+// ==================== 自动瞄准系统 ====================
+function updateAutoAim(tank, dt) {
+    if (tank.dead) return;
+    tank.autoAimTimer = (tank.autoAimTimer || 0) - dt;
+
+    if (tank.isPlayer) {
+        const now = Date.now();
+        if (now - tank.lastManualAimTime < 2000) {
+            tank.autoAimActive = false;
+            tank.autoAimLockOn = false;
+            return;
+        }
+    }
+
+    if (tank.autoAimTimer <= 0) {
+        tank.autoAimTimer = CONFIG.autoAimInterval;
+        findAutoAimTarget(tank);
+    }
+
+    const autoAimRange = getMapVisionRange();
+    if (tank.autoAimTarget && (tank.autoAimTarget.dead ||
+        Math.hypot(tank.autoAimTarget.x - tank.x, tank.autoAimTarget.y - tank.y) > autoAimRange)) {
+        tank.autoAimTarget = null;
+        tank.autoAimActive = false;
+        tank.autoAimLockOn = false;
+    }
+
+    if (tank.autoAimTarget && !tank.autoAimTarget.dead) {
+        performAutoAimRotation(tank, dt);
+    }
+}
+
+function findAutoAimTarget(tank) {
+    const enemyList = tank.team === 'blue' ? enemies.filter(e => !e.dead) : 
+                      [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])];
+
+    let bestTarget = null;
+    let bestScore = -Infinity;
+
+    const autoAimRange = getMapVisionRange();
+    enemyList.forEach(enemy => {
+        const dist = Math.hypot(enemy.x - tank.x, enemy.y - tank.y);
+        if (dist > autoAimRange) return;
+        const hasLOS = lineOfSight(tank.x, tank.y, enemy.x, enemy.y);
+        let score = 1000 - dist;
+        if (hasLOS) score += 500;
+        if (enemy.isPlayer) score += 300;
+        if (enemy.hp < enemy.maxHp * 0.3) score += 200;
+        if (enemy.armor > 1.5) score -= 100;
+        if (score > bestScore) {
+            bestScore = score;
+            bestTarget = enemy;
+        }
+    });
+
+    tank.autoAimTarget = bestTarget;
+    tank.autoAimActive = !!bestTarget;
+    tank.autoAimLockOn = !!bestTarget;
+}
+
+function performAutoAimRotation(tank, dt) {
+    if (!tank.autoAimTarget || tank.autoAimTarget.dead) return;
+    const target = tank.autoAimTarget;
+    const dist = Math.hypot(target.x - tank.x, target.y - tank.y);
+    const predictTime = dist / CONFIG.bulletSpeed * CONFIG.autoAimPredictFactor;
+    const targetVelX = target.x - (target.prevPos ? target.prevPos.x : target.x);
+    const targetVelY = target.y - (target.prevPos ? target.prevPos.y : target.y);
+    const predictedX = target.x + targetVelX * predictTime;
+    const predictedY = target.y + targetVelY * predictTime;
+    const targetAngle = Math.atan2(predictedY - tank.y, predictedX - tank.x);
+    let angleDiff = targetAngle - tank.turretAngle;
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+    const maxRotateSpeed = CONFIG.autoAimSmoothSpeed * 60 * dt;
+    const rotateAmount = Math.max(-maxRotateSpeed, Math.min(maxRotateSpeed, angleDiff));
+    tank.turretAngle += rotateAmount;
+    tank.autoAimLockOn = Math.abs(angleDiff) < 0.15;
+}
+
+function getNearestEnemy(tank) {
+    const enemyList = tank.team === 'blue' ? enemies.filter(e => !e.dead) : 
+                      [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])];
+    let nearest = null;
+    let minDist = Infinity;
+    const autoAimRange = getMapVisionRange();
+    enemyList.forEach(enemy => {
+        const dist = Math.hypot(enemy.x - tank.x, enemy.y - tank.y);
+        if (dist < minDist && dist < autoAimRange) {
+            minDist = dist;
+            nearest = enemy;
+        }
+    });
+    return nearest;
+}
+
+function getMapVisionRange() {
+    if(currentMap === 'desert') return environmentState.sandstormActive ? 520 : 1800;
+    return CONFIG.autoAimRange;
+}
+
+function updateBaseDefense(dt) {
+    [bases.blue, bases.red].forEach(base => {
+        if(base.defenseCooldown > 0) base.defenseCooldown -= dt;
+        const enemyList = base.team === 'blue' ? enemies.filter(e => !e.dead) : [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])];
+        let nearest = null, minDist = Infinity;
+        enemyList.forEach(e => {
+            const d = Math.hypot(e.x - (base.x + base.w/2), e.y - (base.y + base.h/2));
+            if(d < CONFIG.baseDefenseRange && d < minDist) { minDist = d; nearest = e; }
+        });
+        if(nearest && base.defenseCooldown <= 0) {
+            const angle = Math.atan2(nearest.y - (base.y + base.h/2), nearest.x - (base.x + base.w/2));
+            bullets.push({
+                x: base.x + base.w/2 + Math.cos(angle) * 60,
+                y: base.y + base.h/2 + Math.sin(angle) * 60,
+                vx: Math.cos(angle) * 15, vy: Math.sin(angle) * 15,
+                damage: CONFIG.baseDefenseDamage, team: base.team,
+                type: 'shell', owner: null, life: 2.0, hitTanks: new Set()
+            });
+            base.defenseCooldown = CONFIG.baseDefenseCooldown;
+        }
+    });
+}
+
+function updateTank(tank, dt) {
+    if(tank.dead) return;
+    if(tank.isPlayer && (isNaN(tank.x) || isNaN(tank.y))) {
+        console.error('[UPDATE_TANK] Player position is NaN at start of updateTank! x:', tank.x, 'y:', tank.y, 'angle:', tank.angle);
+    }
+    if(tank.invincible > 0) tank.invincible -= dt;
+    if(tank.fireCooldown > 0) tank.fireCooldown -= dt;
+    if(tank.mgCooldown > 0) tank.mgCooldown -= dt;
+    if(tank.aaCooldown > 0) tank.aaCooldown -= dt;
+    updateStatusEffects(tank, dt);
+    if(tank.trailDebuff > 0) {
+        tank.trailDebuff -= dt;
+        if(tank.trailDebuff <= 0) tank.turretSpeedMult = 1.0;
+    }
+    let moveX = 0, moveY = 0;
+    if(tank.isPlayer) {
+        if(keys['KeyW'] || keys['ArrowUp']) moveY = -1;
+        if(keys['KeyS'] || keys['ArrowDown']) moveY = 1;
+        if(keys['KeyA'] || keys['ArrowLeft']) moveX = -1;
+        if(keys['KeyD'] || keys['ArrowRight']) moveX = 1;
+        if(joystick.active) { moveX = joystick.dx; moveY = joystick.dy; }
+        const worldMouseX = mouse.x / (camera.zoom || 1) + camera.x;
+        const worldMouseY = mouse.y / (camera.zoom || 1) + camera.y;
+        tank.turretAngle = Math.atan2(worldMouseY - tank.y, worldMouseX - tank.x);
+        if(mouse.down) {
+            if(currentWeapon === 'shell') {
+                if(tank.fireCooldown <= 0 && tank.shells > 0) {
+                    fireBullet(tank, 'shell');
+                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    if(navigator.vibrate) navigator.vibrate(30);
+                }
+            } else if(currentWeapon === 'mg') {
+                if(tank.mgCooldown <= 0 && tank.mg > 0) {
+                    fireBullet(tank, 'mg');
+                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                }
+            } else if(currentWeapon === 'aa') {
+                if((tank.aaCooldown || 0) <= 0 && (tank.aa || 0) > 0) {
+                    fireBullet(tank, 'aa');
+                    tank.aaCooldown = CONFIG.aaCooldown / tank.fireRate;
+                    if(navigator.vibrate) navigator.vibrate(20);
+                }
+            }
+        }
+    }
+    updateAutoAim(tank, dt);
+
+    if(!tank.canMove) return;
+    const canPassObstacles = tank.canPassObstacles || (tank.ghostActive && tank.ultimateData && tank.ultimateData.canPassObstacles);
+    if(moveX !== 0 || moveY !== 0) {
+        const len = Math.sqrt(moveX*moveX + moveY*moveY);
+        if(len > 0) { moveX /= len; moveY /= len; }
+        const actualSpeed = getActualSpeed(tank);
+        const targetAngle = Math.atan2(moveY, moveX);
+        let diff = targetAngle - tank.angle;
+        while(diff > Math.PI) diff -= Math.PI*2;
+        while(diff < -Math.PI) diff += Math.PI*2;
+        const turnSpeed = tank.turnSpeed * (tank.turnBoost || 1) * tank.turretSpeedMult;
+        tank.angle += diff * turnSpeed * 60 * dt;
+        const moveSpeed = actualSpeed * 60 * dt;
+        const newX = tank.x + Math.cos(tank.angle) * moveSpeed;
+        const newY = tank.y + Math.sin(tank.angle) * moveSpeed;
+        if(tank.isPlayer && (isNaN(newX) || isNaN(newY))) {
+            console.error('[UPDATE_TANK] newX/newY is NaN! tank.x:', tank.x, 'tank.y:', tank.y, 'tank.angle:', tank.angle, 'moveSpeed:', moveSpeed, 'actualSpeed:', actualSpeed);
+        }
+        if(canPassObstacles || !checkObstacleCollision(newX, newY, CONFIG.tankSize, tank)) {
+            tank.x = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapWidth - CONFIG.tankSize, newX));
+            tank.y = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapHeight - CONFIG.tankSize, newY));
+            if(tank.isPlayer && (isNaN(tank.x) || isNaN(tank.y))) {
+                console.error('[UPDATE_TANK] Player position became NaN after movement! newX:', newX, 'newY:', newY);
+            }
+        }
+        if(Math.random() < 0.3) addExhaustTrail(tank);
+    }
+}
+
+function updateEnvironment(dt) {
+    const allTanks = [player, ...allies, ...enemies].filter(t => t && !t.dead);
+
+    if(currentMap === 'desert') {
+        if(environmentState.sandstormActive) {
+            environmentState.sandstormTimer -= dt;
+            if(environmentState.sandstormTimer <= 0) {
+                environmentState.sandstormActive = false;
+                environmentState.nextSandstorm = 25 + Math.random() * 35;
+                environmentState.windStrength = 0;
+                showNotification('沙尘暴已经散去，视野恢复', '#e2b66f');
+            }
+        } else {
+            environmentState.nextSandstorm -= dt;
+            if(environmentState.nextSandstorm <= 0) {
+                environmentState.sandstormActive = true;
+                environmentState.sandstormTimer = 10 + Math.random() * 8;
+                environmentState.windAngle = Math.random() * Math.PI * 2;
+                environmentState.windStrength = 1;
+                showNotification('⚠ 沙尘暴来袭：视野降低，直升机受侧风影响', '#c47a2c');
+            }
+        }
+        if(environmentState.sandstormActive) {
+            allTanks.filter(t => t.isFlying).forEach(tank => {
+                const drift = 42 * environmentState.windStrength * dt;
+                tank.x = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapWidth - CONFIG.tankSize, tank.x + Math.cos(environmentState.windAngle) * drift));
+                tank.y = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapHeight - CONFIG.tankSize, tank.y + Math.sin(environmentState.windAngle) * drift));
+            });
+        }
+    }
+
+    if(currentMap === 'island') {
+        allTanks.forEach(tank => {
+            if(tank.isFlying || tank.tankType === 'duoduo_ifv' || !isTankInWater(tank)) {
+                tank.waterDamageTimer = 1;
+                return;
+            }
+            tank.waterDamageTimer = (tank.waterDamageTimer || 1) - dt;
+            if(tank.waterDamageTimer <= 0) {
+                const waterDamage = 34;
+                applyDirectDamage(tank, waterDamage, null);
+                showDamageNumber(tank.x, tank.y - 32, waterDamage);
+                tank.waterDamageTimer = 1;
+            }
+        });
+    }
+
+    if(currentMap === 'snow') {
+        allTanks.filter(tank => tank.isFlying).forEach(tank => {
+            tank.freezeDamageTimer = (tank.freezeDamageTimer || 1) - dt;
+            if(tank.freezeDamageTimer <= 0) {
+                applyDirectDamage(tank, 8, null);
+                if(tank === player) showDamageNumber(tank.x, tank.y - 35, 8);
+                tank.freezeDamageTimer = 1;
+            }
+        });
+    }
+
+    for(let i = snowTracks.length - 1; i >= 0; i--) {
+        snowTracks[i].life -= dt;
+        if(snowTracks[i].life <= 0) snowTracks.splice(i, 1);
+    }
+    if(currentMap !== 'snow') return;
+    allTanks.forEach(tank => {
+        if(tank.isFlying) return;
+        const last = tank.environmentLastPos || {x: tank.x, y: tank.y};
+        const moved = Math.hypot(tank.x - last.x, tank.y - last.y);
+        if(moved > 1.5) {
+            tank.snowIdleTimer = 0;
+            tank.freezeLevel = Math.max(0, (tank.freezeLevel || 0) - dt * 0.28);
+            addSnowTrack(tank);
+        } else {
+            tank.snowIdleTimer = (tank.snowIdleTimer || 0) + dt;
+            if(tank.snowIdleTimer > 5) {
+                tank.freezeLevel = Math.min(1, (tank.freezeLevel || 0) + dt * 0.16);
+                tank.freezeDamageTimer = (tank.freezeDamageTimer || 1) - dt;
+                if(tank.freezeDamageTimer <= 0) {
+                    const coldDamage = Math.round(6 + tank.freezeLevel * 14);
+                    applyDirectDamage(tank, coldDamage, null);
+                    if(tank === player) showDamageNumber(tank.x, tank.y - 35, coldDamage);
+                    tank.freezeDamageTimer = 1;
+                }
+            }
+        }
+        tank.environmentLastPos.x = tank.x;
+        tank.environmentLastPos.y = tank.y;
+    });
+}
+
+function addSnowTrack(tank) {
+    const last = tank.lastSnowTrackPos || {x: tank.x, y: tank.y};
+    if(Math.hypot(tank.x - last.x, tank.y - last.y) < 18) return;
+    const sideX = Math.cos(tank.angle + Math.PI / 2) * CONFIG.tankSize * 0.62;
+    const sideY = Math.sin(tank.angle + Math.PI / 2) * CONFIG.tankSize * 0.62;
+    snowTracks.push({ x1: tank.x + sideX, y1: tank.y + sideY, x2: tank.x - sideX, y2: tank.y - sideY, angle: tank.angle, life: 14, maxLife: 14 });
+    if(snowTracks.length > 420) snowTracks.splice(0, snowTracks.length - 420);
+    tank.lastSnowTrackPos.x = tank.x;
+    tank.lastSnowTrackPos.y = tank.y;
+}
+
+function updateStatusEffects(tank, dt) {
+    if(!tank || tank.dead) return;
+    if(tank.apsCooldown > 0) tank.apsCooldown -= dt;
+    if(tank.isClone && tank.cloneTimer > 0) {
+        tank.cloneTimer -= dt;
+        if(tank.cloneTimer <= 0) tank.dead = true;
+    }
+    if(tank.toxinDebuffTimer > 0) {
+        tank.toxinDebuffTimer -= dt;
+        tank.toxinTickTimer -= dt;
+        if(tank.toxinTickTimer <= 0) {
+            tank.toxinTickTimer += 1;
+            applyDirectDamage(tank, tank.toxinDamage || 0, null);
+        }
+        if(tank.toxinDebuffTimer <= 0) tank.toxinSlow = 0;
+    }
+    if(tank.burnTimer > 0) {
+        tank.burnTimer -= dt;
+        tank.burnTickTimer -= dt;
+        if(tank.burnTickTimer <= 0) {
+            tank.burnTickTimer += 1;
+            applyDirectDamage(tank, tank.burnDamage || 0, null);
+        }
+    }
+}
+
+
+// ==================== 检查胜利条件 ====================
+function checkWinCondition() {
+    if(gameMode === 'defense') {
+        const blueAlive = !player.dead || allies.some(a => !a.dead);
+        if(!blueAlive) { endGame('defenseFailAllDead'); return; }
+        if(bases.blue.hp <= 0) { endGame('defenseFailBase'); return; }
+        return;
+    }
+    if(gameMode === 'sneak') {
+        if(player.dead) { endGame('playerDead'); return; }
+        if(bases.blue.hp <= 0) { endGame('baseDestroyed'); return; }
+        if(bases.red.hp <= 0) { endGame('victory'); return; }
+        return;
+    }
+    // [修复] 感染模式：没有基地，胜利条件是消灭所有感染者或所有幸存者被感染
+    if(gameMode === 'infection') {
+        const blueSurvivors = [...allies, player].filter(t => t && !t.dead && !t.isInfected);
+        const aliveInfected = [...enemies, ...allies].filter(t => t && !t.dead && t.isInfected);
+        // 所有幸存者被感染或死亡
+        if(blueSurvivors.length === 0) {
+            if(player && player.isInfected && !player.dead) {
+                endGame('victory'); // 玩家被感染且存活，感染者胜利
+            } else {
+                endGame('playerDead'); // 玩家死亡且未被感染
+            }
+            return;
+        }
+        // 所有感染者被消灭
+        if(aliveInfected.length === 0) {
+            endGame('victory'); // 幸存者胜利
+            return;
+        }
+        return;
+    }
+    // [修复] 风暴模式：没有基地，胜利条件是活到最后
+    if(gameMode === 'storm') {
+        const aliveBlue = [player, ...allies].filter(t => t && !t.dead);
+        const aliveRed = enemies.filter(t => t && !t.dead);
+        // 玩家死亡
+        if(player && player.dead) {
+            endGame('playerDead');
+            return;
+        }
+        // 只有玩家一方存活
+        if(aliveRed.length === 0 && aliveBlue.length > 0) {
+            endGame('victory');
+            return;
+        }
+        // 时间到，按存活人数判断
+        if(gameTime <= 0) {
+            if(aliveBlue.length >= aliveRed.length) {
+                endGame('victory');
+            } else {
+                endGame('playerDead');
+            }
+            return;
+        }
+        return;
+    }
+    // [修复] 夺旗模式：没有基地，胜利条件是先得3分
+    if(gameMode === 'ctf') {
+        if(player && player.dead) {
+            endGame('playerDead');
+            return;
+        }
+        if(ctfScores.blue >= 3) {
+            endGame('victory');
+            return;
+        }
+        if(ctfScores.red >= 3) {
+            endGame('playerDead');
+            return;
+        }
+        return;
+    }
+    // 经典模式
+    if(player.dead) { endGame('playerDead'); return; }
+    if(bases.blue.hp <= 0) { endGame('baseDestroyed'); return; }
+    if(bases.red.hp <= 0) { endGame('victory'); return; }
+}
+
+function endGame(reason) {
+    if(gameState === 'ended') return;
+    endMatchStats(reason === 'victory' || reason === 'defenseVictory' ? 'victory' : 'defeat');
+    gameState = 'ended';
+    const msg = document.getElementById('message');
+    if(!msg) return;
+    let text = '', color = '';
+    if(reason === 'victory') {
+        // [修复] 根据模式显示不同的胜利文本
+        if(gameMode === 'infection') {
+            text = '🎉 胜利！<br>所有感染者已被消灭！';
+        } else if(gameMode === 'storm') {
+            text = '🎉 胜利！<br>你活到了最后！';
+        } else if(gameMode === 'ctf') {
+            text = '🎉 胜利！<br>先得3分获胜！';
+        } else {
+            text = '🎉 胜利！<br>敌军基地已被摧毁！';
+        }
+        color = '#00ff88';
+    }
+    else if(reason === 'playerDead') {
+        if(gameMode === 'infection') {
+            text = '💀 你阵亡了<br>被感染者同化！';
+        } else if(gameMode === 'storm') {
+            text = '💀 你阵亡了<br>毒圈或敌人夺走了你的生命！';
+        } else if(gameMode === 'ctf') {
+            text = '💀 你阵亡了<br>夺旗失败！';
+        } else {
+            text = '💀 你阵亡了<br>战斗失败';
+        }
+        color = '#ff4444';
+    }
+    else if(reason === 'baseDestroyed') { text = '🏴 基地被毁<br>战斗失败'; color = '#ff4444'; }
+    else if(reason === 'time') {
+        const blueCount = outposts.filter(o => o.owner === 'blue').length;
+        const redCount = outposts.filter(o => o.owner === 'red').length;
+        if(blueCount > redCount) { text = `🎉 时间到！<br>蓝方据点更多 (${blueCount}:${redCount}) 胜利！`; color = '#00ff88'; }
+        else if(redCount > blueCount) { text = `🏴 时间到！<br>红方据点更多 (${redCount}:${blueCount}) 失败！`; color = '#ff4444'; }
+        else { text = `⏰ 时间到！<br>平局 (${blueCount}:${redCount})`; color = '#ffaa00'; }
+    } else if(reason === 'defenseVictory') { text = '🎉 坚守成功！<br>蓝方撑过了3分钟！'; color = '#00ff88'; }
+    else if(reason === 'defenseFailAllDead') { text = '💀 全军覆没！<br>蓝方坦克全部阵亡'; color = '#ff4444'; }
+    else if(reason === 'defenseFailBase') { text = '🏴 基地沦陷！<br>防守失败'; color = '#ff4444'; }
+    msg.innerHTML = text + '<br><button onclick="resetGame()">再来一局</button>';
+    msg.style.color = color;
+    msg.style.display = 'block';
+}
+
+function resetGame() {
+    console.log('[RESET] 游戏重置开始');
+    // 清理游戏状态
+    gameState = 'start';
+    selectedTank = null;
+    allies = []; enemies = []; bullets = []; particles = []; exhaustTrails = [];
+    trailEffects = []; damageNumbers = []; outposts = []; aiTanks = []; player = null;
+
+    // 重置画布
+    if(canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // 切换界面
+    document.getElementById('gameUI').classList.remove('active');
+    document.getElementById('gameUI').style.display = 'none';
+    document.getElementById('menu').classList.remove('active');
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('startScreen').style.display = 'flex';
+    document.getElementById('message').style.display = 'none';
+    document.getElementById('startBtn').disabled = true;
+
+    // 重新初始化
+    setupStartScreen();
+    setupMenu();
+}
+
+
+// ==================== 大招更新 ====================
+function updateUltimates(dt) {
+    if(player && !player.dead) {
+        if(player.ultimateCooldown > 0) player.ultimateCooldown -= dt;
+        if(player.tankType === 'zuoyan29' && player.ultimateActive) {
+            player.ultimateTimer -= dt;
+            if(Math.random() < 0.8) addTrailEffect(player);
+            checkTrailDebuff(player);
+            if(player.ultimateTimer <= 0) endUltimate(player);
+        }
+        if(player.tankType === 'zuoyan30' && player.ghostActive) {
+            player.ghostTimer -= dt; player.ultimateTimer -= dt;
+            if(player.ghostTimer <= 0 || player.ghostRevealed) {
+                // 幽灵结束：如果卡在障碍物里，向后移动到安全位置
+                if(checkObstacleCollision(player.x, player.y, CONFIG.tankSize, player)) {
+                    const angle = player.angle + Math.PI;
+                    for(let dist = 10; dist < 300; dist += 10) {
+                        const nx = player.x + Math.cos(angle) * dist;
+                        const ny = player.y + Math.sin(angle) * dist;
+                        if(!checkObstacleCollision(nx, ny, CONFIG.tankSize, player)) {
+                            player.x = nx; player.y = ny; break;
+                        }
+                    }
+                }
+                const enemyList = player.team === 'blue' ? enemies.filter(e => !e.dead) : [...allies.filter(a => !a.dead)];
+                let nearest = null, minDist = Infinity;
+                enemyList.forEach(e => { const d = Math.hypot(e.x - player.x, e.y - player.y); if(d < minDist && d < (player.ultimateData.stunRadius || 120)) { minDist = d; nearest = e; } });
+                if(nearest) {
+                    nearest.trailDebuff = player.ultimateData.stunDuration || 1.0;
+                    nearest.turretSpeedMult = 0; nearest.canMove = false;
+                    setTimeout(() => { if(nearest) { nearest.canMove = true; nearest.turretSpeedMult = 1.0; } }, (player.ultimateData.stunDuration || 1.0) * 1000);
+                    createParticles(nearest.x, nearest.y, 15, '#00aaff', 1.5);
+                }
+                endUltimate(player);
+            }
+        }
+        if(player.tankType === 'zuoyan1' && player.ultimateActive) {
+            player.ultimateTimer -= dt;
+            if(player.ultimateTimer <= 0) {
+                player.overheatActive = true; player.overheatTimer = player.ultimateData.overheatDuration || 3;
+                player.speedBoost = 0; player.canMove = false; player.ultimateActive = false;
+                createParticles(player.x, player.y, 10, '#ff4400', 1);
+            }
+        }
+        if(player.tankType === 'zuoyan1' && player.overheatActive) {
+            player.overheatTimer -= dt;
+            if(player.overheatTimer <= 0) { player.overheatActive = false; player.canMove = true; player.speedBoost = 0; }
+        }
+        if(player.tankType === 'xingchen27a' && player.ultimateActive) {
+            player.ultimateTimer -= dt;
+            if(player.shieldActive) redirectShieldDamage(player);
+            if(player.ultimateTimer <= 0 || player.shieldHp <= 0) endUltimate(player);
+        }
+        if(player.tankType === 'xingchen27b' && player.fortressActive) {
+            player.fortressTimer -= dt; player.ultimateTimer -= dt;
+            if(player.fortressTimer <= 0) endUltimate(player);
+        }
+        if(player.tankType === 'xingchen27s' && player.ultimateActive) {
+            player.ultimateTimer -= dt;
+            if(player.ultimateTimer <= 0 || player.shieldHp <= 0) endUltimate(player);
+        }
+        if(player.tankType === 'duoduo' && player.ultimateCharging) {
+            player.ultimateChargeTimer -= dt;
+            if(player.ultimateChargeTimer <= 0) {
+                fireUltimateSalvo(player);
+                player.ultimateCharging = false; player.canMove = true; player.ultimateActive = false;
+            }
+        }
+        if(player.tankType === 'duoduo_ifv' && player.stormActive) {
+            player.stormTimer -= dt; player.ultimateTimer -= dt;
+            if(player.stormTimer <= 0) endUltimate(player);
+        }
+        if(player.tankType === 'duoduo_spat' && player.nailLocking) {
+            player.nailLockTimer -= dt;
+            if(player.nailTarget && !player.nailTarget.dead) player.nailLaserAngle = Math.atan2(player.nailTarget.y - player.y, player.nailTarget.x - player.x);
+            if(player.nailLockTimer <= 0) {
+                fireNailShot(player); player.nailLocking = false; player.canMove = true;
+                player.ultimateActive = false; player.nailTarget = null;
+            }
+        }
+    }
+    aiTanks.forEach(tank => { 
+        if(!tank.dead && !tank.isPlayer) {
+            updateAIActiveUltimate(tank, dt);
+            updateAIUltimate(tank, dt); 
+        }
+    });
+
+    // 玩家终极技能状态更新
+    if(player && !player.dead) {
+        if(player.tankType === 'duoduo_emp' && player.ultimateActive) {
+            player.ultimateTimer -= dt;
+            if(player.ultimateTimer <= 0) endUltimate(player);
+        }
+        if(player.tankType === 'zuoyan31' && player.ultimateActive) {
+            player.ultimateTimer -= dt;
+            if(player.ultimateTimer <= 0) endUltimate(player);
+        }
+        if(player.tankType === 'zuoyan32' && player.ultimateActive) {
+            player.ultimateTimer -= dt;
+            if(player.ultimateTimer <= 0) {
+                const allTanks = [...allies, ...enemies];
+                allTanks.forEach(t => { if(t.isClone && t.cloneOwner === player) t.dead = true; });
+                endUltimate(player);
+            }
+        }
+        if(player.tankType === 'zuoyan33' && player.toxinActive) {
+            player.toxinTimer -= dt;
+            if(player.toxinTimer <= 0) { player.toxinActive = false; endUltimate(player); }
+        }
+        if(player.tankType === 'xingchen27c' && player.revealActive) {
+            player.revealTimer -= dt;
+            if(player.revealTimer <= 0) { player.revealActive = false; endUltimate(player); }
+        }
+        if(player.tankType === 'xingchen27d' && player.linkActive) {
+            player.linkTimer -= dt;
+            if(player.linkTimer <= 0) {
+                if(player.linkedAlly) { player.linkedAlly.linkedTo = null; player.linkedAlly.damageReduction = 0; }
+                player.linkActive = false; player.linkedAlly = null; endUltimate(player);
+            }
+        }
+        if(player.tankType === 'xingchen27e' && player.judgeActive) {
+            player.judgeTimer -= dt;
+            if(player.judgeTimer <= 0) {
+                if(player.judgeTarget) { player.judgeTarget.judged = false; player.judgeTarget.judgeOwner = null; }
+                player.judgeActive = false; player.judgeTarget = null; endUltimate(player);
+            }
+        }
+        if(player.tankType === 'duoduo_eng' && player.ultimateActive) {
+            player.ultimateTimer -= dt;
+            if(player.ultimateTimer <= 0) endUltimate(player);
+        }
+        if(player.tankType === 'duoduo_rocket' && player.ultimateActive) {
+            player.ultimateTimer -= dt;
+            if(player.ultimateTimer <= 0) endUltimate(player);
+        }
+        if(player.tankType === 'zuoyan_x' && player.ultimateActive) {
+            player.ultimateTimer -= dt;
+            if(player.ultimateTimer <= 0) endUltimate(player);
+        }
+    }
+}
+
+function updateAIActiveUltimate(tank, dt) {
+    if(tank.overheatActive) {
+        tank.overheatTimer -= dt;
+        if(tank.overheatTimer <= 0) { tank.overheatActive = false; tank.canMove = true; }
+    }
+    if(tank.ultimateCharging) {
+        tank.ultimateChargeTimer -= dt;
+        if(tank.ultimateChargeTimer <= 0) {
+            fireUltimateSalvo(tank);
+            tank.ultimateCharging = false;
+            endUltimate(tank);
+        }
+        return;
+    }
+    if(tank.nailLocking) {
+        tank.nailLockTimer -= dt;
+        if(tank.nailTarget && !tank.nailTarget.dead) tank.nailLaserAngle = Math.atan2(tank.nailTarget.y - tank.y, tank.nailTarget.x - tank.x);
+        if(tank.nailLockTimer <= 0) {
+            fireNailShot(tank);
+            endUltimate(tank);
+        }
+        return;
+    }
+    if(!tank.ultimateActive && !tank.ghostActive && !tank.fortressActive && !tank.stormActive) return;
+    if(tank.tankType === 'xingchen27a' && tank.shieldActive) redirectShieldDamage(tank);
+    if(!Number.isFinite(tank.ultimateTimer) || tank.ultimateTimer <= 0) tank.ultimateTimer = 0.1;
+    tank.ultimateTimer -= dt;
+    if(tank.ghostActive) tank.ghostTimer -= dt;
+    if(tank.fortressActive) tank.fortressTimer -= dt;
+    if(tank.stormActive) tank.stormTimer -= dt;
+    if(tank.tankType === 'zuoyan1' && tank.ultimateTimer <= 0) {
+        endUltimate(tank);
+        tank.overheatActive = true;
+        tank.overheatTimer = tank.ultimateData.overheatDuration || 3;
+        tank.canMove = false;
+        return;
+    }
+    if(tank.ultimateTimer <= 0 || (tank.ghostActive && tank.ghostTimer <= 0) ||
+       (tank.fortressActive && tank.fortressTimer <= 0) || (tank.stormActive && tank.stormTimer <= 0)) {
+        endUltimate(tank);
+    }
+}
+
+function addTrailEffect(tank) {
+    const ult = tank.ultimateData; if(!ult) return;
+    trailEffects.push({ x: tank.x, y: tank.y, life: ult.trailDuration, maxLife: ult.trailDuration, team: tank.team, owner: tank, radius: 60 });
+}
+
+function checkTrailDebuff(tank) {
+    const ult = tank.ultimateData; if(!ult) return;
+    const enemyList = tank.team === 'blue' ? enemies : [...allies, ...(player && !player.dead ? [player] : [])];
+    enemyList.forEach(enemy => {
+        if(enemy.dead) return;
+        const dist = Math.hypot(enemy.x - tank.x, enemy.y - tank.y);
+        if(dist < 80) { enemy.trailDebuff = ult.debuffDuration; enemy.turretSpeedMult = ult.debuffTurretSlow; }
+    });
+}
+
+function redirectShieldDamage(tank) {
+    const ult = tank.ultimateData; if(!ult) return;
+    const allyList = tank.team === 'blue' ? [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])] : enemies.filter(e => !e.dead);
+    allyList.forEach(ally => {
+        if(ally === tank) return;
+        const dist = Math.hypot(ally.x - tank.x, ally.y - tank.y);
+        if(dist < ult.shieldRadius) { ally.shieldProtected = true; ally.shieldOwner = tank; }
+        else { ally.shieldProtected = false; ally.shieldOwner = null; }
+    });
+}
+
+function fireUltimateSalvo(tank) {
+    const ult = tank.ultimateData; if(!ult) return;
+    const angle = tank.turretAngle;
+    const halfSpread = ult.spreadAngle / 2;
+    for(let i = 0; i < ult.shellCount; i++) {
+        const shellAngle = angle - halfSpread + (ult.spreadAngle / (ult.shellCount - 1)) * i;
+        const damage = ult.damagePerShell;
+        bullets.push({
+            x: tank.x + Math.cos(shellAngle) * (tank.turretSize + 20),
+            y: tank.y + Math.sin(shellAngle) * (tank.turretSize + 20),
+            vx: Math.cos(shellAngle) * CONFIG.bulletSpeed,
+            vy: Math.sin(shellAngle) * CONFIG.bulletSpeed,
+            damage: damage, team: tank.team, type: 'shell', owner: tank, life: 2.0, hitTanks: new Set()
+        });
+    }
+    createParticles(tank.x, tank.y, 20, '#ff8800', 2);
+}
+
+
+// ==================== 启动 ====================
+window.onload = init;
