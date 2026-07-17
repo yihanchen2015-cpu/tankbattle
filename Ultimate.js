@@ -231,8 +231,9 @@ function activateUltimate() {
         });
         createParticles(player.x, player.y, 25, '#8866ff', 2);
     } else if(player.tankType === 'niuniu_heli') {
-        const targetX = mouse.x + camera.x;
-        const targetY = mouse.y + camera.y;
+        const targetPoint = screenToWorld(mouse.x, mouse.y);
+        const targetX = targetPoint.x;
+        const targetY = targetPoint.y;
         for(let i = 0; i < ult.bombCount; i++) {
             const tx = targetX + (Math.random() - 0.5) * ult.bombRadius * 2;
             const ty = targetY + (Math.random() - 0.5) * ult.bombRadius * 2;
@@ -396,13 +397,15 @@ function updateTrailEffects(dt) {
 }
 
 function showDamageNumber(x, y, damage) {
-    damageNumbers.push({ x, y, text: `-${damage}`, life: 1.0, maxLife: 1.0, vy: -40 });
+    damageNumbers.push({ x, y, z: 42, text: `-${damage}`, life: 1.0, maxLife: 1.0, vy: -40, vz: 55 });
 }
 
 function updateDamageNumbers(dt) {
     for(let i = damageNumbers.length - 1; i >= 0; i--) {
         const dn = damageNumbers[i];
-        dn.y += dn.vy * dt; dn.life -= dt;
+        dn.y += dn.vy * dt;
+        dn.z = (dn.z || 0) + (dn.vz || 0) * dt;
+        dn.life -= dt;
         if(dn.life <= 0) damageNumbers.splice(i, 1);
     }
     if(damageNumbers.length > MAX_DAMAGE_NUMBERS) {
@@ -504,9 +507,16 @@ function render() {
         console.log('[RENDER] Player tankType:', player.tankType, 'dead:', player.dead, 'canMove:', player.canMove);
         return;
     }
+    if(gameConfig.viewMode === '3d' && typeof renderThreeScene === 'function') {
+        renderThreeScene();
+        drawMinimap();
+        return;
+    }
     const zoom = camera.zoom || 1;
-    const viewWidth = canvas.width / zoom;
-    const viewHeight = canvas.height / zoom;
+    const viewSize = getCameraViewSize();
+    const viewWidth = viewSize.width;
+    const viewHeight = viewSize.height;
+    const projectionMargin = 0;
     const targetCamX = player.x - viewWidth / 2;
     const targetCamY = player.y - viewHeight / 2;
     camera.x += (targetCamX - camera.x) * CONFIG.cameraSmooth;
@@ -521,7 +531,7 @@ function render() {
     const template = MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic;
     if(gameConfig.dayNight === 'night') ctx.fillStyle = '#080810';
     else ctx.fillStyle = template.groundColor || '#3d5c1e';
-    ctx.fillRect(camera.x, camera.y, viewWidth, viewHeight);
+    ctx.fillRect(camera.x - projectionMargin, camera.y, viewWidth + projectionMargin * 2, viewHeight);
     
     const gridSize = 200;
     const startGridX = Math.floor(camera.x / gridSize) * gridSize;
@@ -539,7 +549,7 @@ function render() {
     ctx.lineWidth = 4;
     ctx.strokeRect(0, 0, CONFIG.mapWidth, CONFIG.mapHeight);
     
-    const viewLeft = camera.x - 150, viewRight = camera.x + viewWidth + 150;
+    const viewLeft = camera.x - projectionMargin - 150, viewRight = camera.x + viewWidth + projectionMargin + 150;
     const viewTop = camera.y - 150, viewBottom = camera.y + viewHeight + 150;
 
     if(currentMap === 'city') drawCityRoads();
@@ -575,8 +585,8 @@ function render() {
     drawSnowTracks();
     drawExhaustTrails();
     
-    const visibleTanks = getNearbyTanks(camera.x + viewWidth/2, camera.y + viewHeight/2,
-        Math.max(viewWidth, viewHeight) / 2 + 200);
+    const visibleTanks = getNearbyTanks(player.x, player.y,
+        Math.max(viewWidth + projectionMargin * 2, viewHeight) / 2 + 260);
     visibleTanks.forEach(t => {
         if(t.dead) return;
         drawTank(t);
@@ -603,9 +613,9 @@ function render() {
         grad.addColorStop(0.7, 'rgba(0,0,0,0.5)');
         grad.addColorStop(1, 'rgba(0,0,0,0.92)');
         ctx.fillStyle = grad;
-        ctx.fillRect(camera.x, camera.y, viewWidth, viewHeight);
+        ctx.fillRect(camera.x - projectionMargin, camera.y, viewWidth + projectionMargin * 2, viewHeight);
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.fillRect(camera.x, camera.y, viewWidth, viewHeight);
+        ctx.fillRect(camera.x - projectionMargin, camera.y, viewWidth + projectionMargin * 2, viewHeight);
     }
 
     if(currentMap === 'desert' && environmentState.sandstormActive) {
@@ -615,7 +625,7 @@ function render() {
         sand.addColorStop(0.6, 'rgba(177,105,30,0.48)');
         sand.addColorStop(1, 'rgba(126,72,25,0.82)');
         ctx.fillStyle = sand;
-        ctx.fillRect(camera.x, camera.y, viewWidth, viewHeight);
+        ctx.fillRect(camera.x - projectionMargin, camera.y, viewWidth + projectionMargin * 2, viewHeight);
     }
     
     ctx.restore();

@@ -18,13 +18,16 @@ function fireBullet(tank, type) {
     bullets.push({
         x: tank.x + Math.cos(angle) * (tank.turretSize + 12),
         y: tank.y + Math.sin(angle) * (tank.turretSize + 12),
+        z: (tank.z || 0) + (type === 'aa' ? 18 : 24),
         vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        vz: type === 'aa' ? CONFIG.aaVerticalSpeed : 0,
         damage: (type === 'shell' ? CONFIG.bulletDamage : (type === 'aa' ? CONFIG.aaDamage : CONFIG.mgDamage)) * damageMult * (tank.aiDamageMult || 1),
         team: tank.team, type, owner: tank,
         life: maxLife, maxLife, age: 0,
-        altitude: type === 'aa' ? 1 : 0,
+        altitude: (tank.z || 0) + (type === 'aa' ? 18 : 24),
         trackingRange: type === 'aa' ? CONFIG.aaTrackingRange : 0,
         trackingTarget: null,
+        trackingLocked: false,
         ignoresObstacles: type === 'aa' || !!tank.isFlying,
         hitTanks: new Set(),
         armorIgnore: tank.tankType === 'duoduo_spat',
@@ -45,12 +48,15 @@ function fireBullet(tank, type) {
         type === 'shell' ? 5 : (type === 'aa' ? 4 : 2),
         type === 'shell' ? '#ffaa00' : (type === 'aa' ? '#ff44ff' : '#ffff88'),
         type === 'shell' ? 1.5 : (type === 'aa' ? 1.2 : 0.5));
+    if(typeof playWorldSound === 'function') playWorldSound(type, tank.x, tank.y, tank.isPlayer ? 1 : 0.72);
 }
 
 function updateBullets(dt) {
     for(let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.age = (b.age || 0) + dt;
+        if(!Number.isFinite(b.z)) b.z = (b.owner && b.owner.z || 0) + 24;
+        if(!Number.isFinite(b.vz)) b.vz = 0;
         if(b.isDrone) {
             const targets = b.team === 'blue' ? enemies : [player, ...allies];
             let nearest = null, nearestDist = b.trackRange || 800;
@@ -66,7 +72,7 @@ function updateBullets(dt) {
                 b.vy += (Math.sin(angle) * speed - b.vy) * Math.min(1, dt * 5);
             }
         }
-        if(b.type === 'aa' && b.age >= CONFIG.aaTrackingDelay) {
+        if(b.type === 'aa' && b.age >= CONFIG.aaTrackingDelay && !b.trackingLocked) {
             const targets = b.team === 'blue' ? enemies : [player, ...allies];
             let nearest = null;
             let nearestDist = b.trackingRange || CONFIG.aaTrackingRange;
@@ -76,23 +82,29 @@ function updateBullets(dt) {
                 if(distance < nearestDist) { nearest = tank; nearestDist = distance; }
             });
             b.trackingTarget = nearest;
-            if(nearest) {
-                const speed = Math.hypot(b.vx, b.vy) || CONFIG.aaSpeed;
-                const desiredAngle = Math.atan2(nearest.y - b.y, nearest.x - b.x);
-                const desiredVx = Math.cos(desiredAngle) * speed;
-                const desiredVy = Math.sin(desiredAngle) * speed;
-                const steering = Math.min(1, dt * CONFIG.aaTurnRate);
-                b.vx += (desiredVx - b.vx) * steering;
-                b.vy += (desiredVy - b.vy) * steering;
-                const steeredSpeed = Math.hypot(b.vx, b.vy) || 1;
-                b.vx = b.vx / steeredSpeed * speed;
-                b.vy = b.vy / steeredSpeed * speed;
-            }
+            b.trackingLocked = true; // 每发高射弹只锁定一次，不再途中反复换目标。
+        }
+        if(b.type === 'aa' && b.trackingTarget && !b.trackingTarget.dead &&
+           b.age <= CONFIG.aaTrackingDelay + CONFIG.aaTrackingDuration) {
+            const target = b.trackingTarget;
+            const speed = Math.hypot(b.vx, b.vy) || CONFIG.aaSpeed;
+            const desiredAngle = Math.atan2(target.y - b.y, target.x - b.x);
+            let currentAngle = Math.atan2(b.vy, b.vx);
+            let angleDiff = normalizeAngle(desiredAngle - currentAngle);
+            const maxTurn = CONFIG.aaTurnRate * dt;
+            angleDiff = Math.max(-maxTurn, Math.min(maxTurn, angleDiff));
+            currentAngle += angleDiff;
+            b.vx = Math.cos(currentAngle) * speed;
+            b.vy = Math.sin(currentAngle) * speed;
+            const targetZ = (target.z || 0) + (target.isFlying ? 8 : 22);
+            const desiredVz = Math.max(-120, Math.min(120, (targetZ - b.z) * 1.4));
+            b.vz += (desiredVz - b.vz) * Math.min(1, dt * 1.4);
         }
         b.x += b.vx * 60 * dt; b.y += b.vy * 60 * dt; b.life -= dt;
         if(b.type === 'aa') {
-            const progress = Math.max(0, Math.min(1, b.age / (b.maxLife || 2.5)));
-            b.altitude = 8 + Math.sin(progress * Math.PI) * CONFIG.aaArcHeight;
+            b.z += b.vz * dt;
+            b.vz -= CONFIG.aaGravity * dt;
+            b.altitude = b.z;
         }
         if(Math.random() < 0.4) createParticles(b.x, b.y, 1, b.type === 'shell' ? '#ff8800' : (b.type === 'aa' ? '#ff66ff' : '#ffff44'), 0.4);
         if(b.isRocket && (Math.hypot(b.x - b.targetX, b.y - b.targetY) < 35 || b.life <= 0)) {
@@ -168,6 +180,10 @@ function checkCollisions() {
             if(dist < CONFIG.tankSize) {
                 // 机枪仰角不足；高射炮主要对空，但导引弹也能命中地面坦克。
                 if(tank.isFlying && b.type === 'mg') continue;
+                if(b.type === 'aa') {
+                    const targetZ = (tank.z || 0) + (tank.isFlying ? 8 : 22);
+                    if(Math.abs((b.z || 0) - targetZ) > CONFIG.aaHitHeightTolerance) continue;
+                }
                 if(['shell', 'aa', 'rocket'].includes(b.type) && tank.apsCharges > 0 && tank.apsCooldown <= 0) {
                     tank.apsCharges--;
                     tank.apsCooldown = CONFIG.apsCooldown;
@@ -220,6 +236,7 @@ function checkCollisions() {
                 }
                 createParticles(b.x, b.y, 5, '#ff4400', 1);
                 showDamageNumber(tank.x, tank.y - 30, Math.floor(damage));
+                if(typeof playWorldSound === 'function') playWorldSound('hit', tank.x, tank.y, tank === player ? 1 : 0.7);
                 hitCount++;
                 if(b.hitTanks) b.hitTanks.add(tank.id);
             }
@@ -334,6 +351,7 @@ function updateOutposts(dt) {
             op.captureProgress = 0;
             if(oldOwner !== op.owner) {
                 createParticles(op.x, op.y, 30, op.owner === 'blue' ? '#4488ff' : '#ff4444', 2.5);
+                if(typeof playWorldSound === 'function') playWorldSound('capture', op.x, op.y, 1);
                 updateOutpostInfo();
             }
         }

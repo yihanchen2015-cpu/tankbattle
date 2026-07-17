@@ -16,7 +16,8 @@ function startGame() {
     else if(['ctf', 'infection', 'storm'].includes(gameMode)) dayNight = 'day';
     else dayNight = document.getElementById('dayNight').value;
     const difficulty = document.getElementById('difficulty').value;
-    gameConfig = { dayNight, difficulty, ammo, mg, aa, mode: gameMode };
+    const viewMode = document.getElementById('viewMode') ? document.getElementById('viewMode').value : '2d';
+    gameConfig = { dayNight, difficulty, ammo, mg, aa, mode: gameMode, viewMode };
     currentWeapon = 'shell';
     document.getElementById('menu').classList.remove('active');
     document.getElementById('menu').style.display = 'none';
@@ -42,8 +43,10 @@ function startGame() {
     initOutposts();
     initSpatialGrid();
     camera.zoom = (MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic).cameraZoom || 1;
-    camera.x = player.x - canvas.width / camera.zoom / 2;
-    camera.y = player.y - canvas.height / camera.zoom / 2;
+    setViewMode(viewMode, false);
+    const initialView = getCameraViewSize();
+    camera.x = player.x - initialView.width / 2;
+    camera.y = player.y - initialView.height / 2;
 
     if(gameMode === 'ctf') initCTFMode();
     else if(gameMode === 'infection') initInfectionMode();
@@ -59,6 +62,58 @@ function startGame() {
     damageNumbers = [];
     updateHUD();
     updateOutpostInfo();
+}
+
+function setViewMode(mode, notify = true) {
+    const use3D = mode === '3d';
+    if(use3D && (typeof THREE === 'undefined' || typeof initThreeRenderer !== 'function' || !initThreeRenderer())) {
+        gameConfig.viewMode = '2d';
+        const failedSelect = document.getElementById('viewMode');
+        if(failedSelect) failedSelect.value = '2d';
+        if(notify) showMessage('当前浏览器无法启动 WebGL 3D，已回到 2D', '#ff9f43');
+        return;
+    }
+    gameConfig.viewMode = use3D ? '3d' : '2d';
+    const gameCanvas = document.getElementById('gameCanvas');
+    const threeCanvas = document.getElementById('threeCanvas');
+    const threeHudLayer = document.getElementById('threeHudLayer');
+    const threeThreatBorder = document.getElementById('threeThreatBorder');
+    if(gameCanvas) gameCanvas.style.display = use3D ? 'none' : 'block';
+    if(threeCanvas) threeCanvas.style.display = use3D ? 'block' : 'none';
+    if(threeHudLayer) threeHudLayer.style.display = use3D ? 'block' : 'none';
+    if(threeThreatBorder && !use3D) threeThreatBorder.style.display = 'none';
+    if(use3D && typeof rebuildThreeWorld === 'function') rebuildThreeWorld(true);
+    const select = document.getElementById('viewMode');
+    if(select) select.value = gameConfig.viewMode;
+    const indicator = document.getElementById('viewModeIndicator');
+    if(indicator) {
+        indicator.textContent = use3D ? '◈ Three.js 真3D · V切换' : '🗺 2D俯视 · V切换';
+        indicator.style.color = use3D ? '#ffd37a' : '#8ee8ff';
+    }
+    if(notify && gameState === 'playing') showMessage(use3D ? '◈ 已进入 Three.js 真3D战场' : '🗺 已切换到2D俯视', use3D ? '#ffd37a' : '#8ee8ff');
+}
+
+function toggleViewMode() {
+    setViewMode(gameConfig.viewMode === '3d' ? '2d' : '3d');
+}
+
+function getCameraViewSize() {
+    const zoom = camera.zoom || 1;
+    return { width: canvas.width / zoom, height: canvas.height / zoom };
+}
+
+function screenToWorld(screenX, screenY) {
+    if(gameConfig.viewMode === '3d' && typeof threeScreenToWorld === 'function') {
+        const point = threeScreenToWorld(screenX, screenY);
+        if(point) return point;
+    }
+    const zoom = camera.zoom || 1;
+    return { x: camera.x + screenX / zoom, y: camera.y + screenY / zoom };
+}
+
+function worldToScreen(worldX, worldY) {
+    const zoom = camera.zoom || 1;
+    return { x: zoom * (worldX - camera.x), y: zoom * (worldY - camera.y) };
 }
 
 // 地图模板配置
@@ -432,7 +487,8 @@ function createTank(data, x, y, team, isPlayer) {
     }
     const id = Math.random().toString(36).substr(2, 9);
     return {
-        x, y, angle: team === 'blue' ? 0 : Math.PI,
+        x, y, z: data.isFlying ? CONFIG.helicopterAltitude : 0,
+        angle: team === 'blue' ? 0 : Math.PI,
         turretAngle: team === 'blue' ? 0 : Math.PI,
         hp: data.hp, maxHp: data.maxHp,
         speed: data.speed, turnSpeed: data.turnSpeed,
@@ -572,7 +628,8 @@ function getNearbyTanks(x, y, radius) {
 // ==================== 游戏主循环 ====================
 function gameLoop(timestamp) {
     try {
-        const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+        // 渲染帧率下降时使用多个最大 50ms 的逻辑子步，避免游戏速度跟着 FPS 一起变慢。
+        const frameDt = Math.min(Math.max(0, (timestamp - lastTime) / 1000), 0.12);
         lastTime = timestamp;
 
         // 帧率监控（每60帧显示一次）
@@ -589,7 +646,12 @@ function gameLoop(timestamp) {
             if(player && (isNaN(player.x) || isNaN(player.y))) {
                 console.error('[GAME_LOOP] Player NaN detected before update! x:', player.x, 'y:', player.y);
             }
-            update(dt); 
+            let remainingDt = frameDt;
+            while(remainingDt > 0) {
+                const stepDt = Math.min(remainingDt, 0.05);
+                update(stepDt);
+                remainingDt -= stepDt;
+            }
             if(player && (isNaN(player.x) || isNaN(player.y))) {
                 console.error('[GAME_LOOP] Player NaN detected after update! x:', player.x, 'y:', player.y);
             }
@@ -827,8 +889,9 @@ function updateTank(tank, dt) {
         if(keys['KeyA'] || keys['ArrowLeft']) moveX = -1;
         if(keys['KeyD'] || keys['ArrowRight']) moveX = 1;
         if(joystick.active) { moveX = joystick.dx; moveY = joystick.dy; }
-        const worldMouseX = mouse.x / (camera.zoom || 1) + camera.x;
-        const worldMouseY = mouse.y / (camera.zoom || 1) + camera.y;
+        const worldMouse = screenToWorld(mouse.x, mouse.y);
+        const worldMouseX = worldMouse.x;
+        const worldMouseY = worldMouse.y;
         tank.turretAngle = Math.atan2(worldMouseY - tank.y, worldMouseX - tank.x);
         if(mouse.down) {
             if(currentWeapon === 'shell') {
@@ -1159,6 +1222,14 @@ function resetGame() {
     document.getElementById('startScreen').style.display = 'flex';
     document.getElementById('message').style.display = 'none';
     document.getElementById('startBtn').disabled = true;
+    const threeHudLayer = document.getElementById('threeHudLayer');
+    const threeThreatBorder = document.getElementById('threeThreatBorder');
+    const threeCanvas = document.getElementById('threeCanvas');
+    if(threeHudLayer) threeHudLayer.style.display = 'none';
+    if(threeThreatBorder) threeThreatBorder.style.display = 'none';
+    if(threeCanvas) threeCanvas.style.display = 'none';
+    if(canvas) canvas.style.display = 'block';
+    if(typeof clearThreeHudElements === 'function') clearThreeHudElements();
 
     // 重新初始化
     setupStartScreen();

@@ -70,6 +70,7 @@ function resizeCanvas() {
     canvas.height = window.innerHeight;
     minimapCanvas.width = 200;
     minimapCanvas.height = 140;
+    if(typeof resizeThreeRenderer === 'function') resizeThreeRenderer();
 }
 
 
@@ -504,6 +505,7 @@ function setupControls() {
         if(e.code === 'KeyF') mouse.down = true;
         if(e.code === 'KeyT') switchWeapon();
         if(e.code === 'KeyG') activateUltimate();
+        if(e.code === 'KeyV' && !e.repeat) toggleViewMode();
         if(e.code === 'KeyY' && player) {
             toggleAutoAim(player);
         }
@@ -517,7 +519,7 @@ function setupControls() {
 
     
     const mousemoveHandler = (e) => {
-        const rect = canvas.getBoundingClientRect();
+        const rect = e.currentTarget.getBoundingClientRect();
         mouse.x = e.clientX - rect.left;
         mouse.y = e.clientY - rect.top;
         if (player) {
@@ -527,9 +529,13 @@ function setupControls() {
     };
     const mousedownHandler = () => mouse.down = true;
     const mouseupHandler = () => mouse.down = false;
-    canvas.addEventListener('mousemove', mousemoveHandler);
-    canvas.addEventListener('mousedown', mousedownHandler);
-    canvas.addEventListener('mouseup', mouseupHandler);
+    const threeCanvas = document.getElementById('threeCanvas');
+    [canvas, threeCanvas].filter(Boolean).forEach(surface => {
+        surface.addEventListener('mousemove', mousemoveHandler);
+        surface.addEventListener('mousedown', mousedownHandler);
+        surface.addEventListener('mouseup', mouseupHandler);
+        surface.addEventListener('mouseleave', mouseupHandler);
+    });
 
     
     const joy = document.getElementById('joystick');

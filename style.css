@@ -16,7 +16,36 @@
             height: 100%;
         }
         canvas { display: block; }
-        #gameCanvas { position: fixed; inset: 0; width: 100vw; height: 100vh; }
+        #gameCanvas, #threeCanvas { position: fixed; inset: 0; width: 100vw; height: 100vh; }
+        #threeCanvas { display: none; background: #101820; }
+        #threeHudLayer {
+            position: fixed; inset: 0; display: none; pointer-events: none;
+            overflow: hidden; z-index: 24;
+        }
+        .three-tank-label, .three-damage-label, .three-capture-label {
+            position: absolute; transform: translate(-50%, -100%); white-space: nowrap;
+            font-weight: 800; text-shadow: 0 2px 3px #000, 0 0 5px #000;
+            will-change: transform, opacity;
+        }
+        .three-tank-label { font-size: 13px; letter-spacing: .5px; }
+        .three-damage-label { color: #ffdf5d; font-size: 19px; }
+        .three-capture-label {
+            width: 112px; padding: 5px 7px; color: #fff; font-size: 11px;
+            text-align: center; background: rgba(0,0,0,.72); border-radius: 6px;
+        }
+        .three-capture-track { height: 6px; margin-top: 4px; overflow: hidden; background: #24282d; border-radius: 4px; }
+        .three-capture-fill { height: 100%; width: 0; border-radius: 4px; }
+        #threeThreatBorder {
+            position: fixed; inset: 6px; display: none; pointer-events: none; z-index: 23;
+            border: 5px solid rgba(255,35,35,.78); box-shadow: inset 0 0 55px rgba(255,0,0,.30);
+            animation: threeThreatPulse .72s ease-in-out infinite alternate;
+        }
+        #threeThreatBorder span {
+            position: absolute; top: 82px; left: 50%; transform: translateX(-50%);
+            padding: 7px 18px; color: #fff; background: rgba(150,0,0,.82);
+            border-radius: 16px; font-weight: 800; letter-spacing: 1px;
+        }
+        @keyframes threeThreatPulse { from { opacity: .48; } to { opacity: 1; } }
 
         /* ========== 新手教程 ========== */
         #tutorialOverlay {

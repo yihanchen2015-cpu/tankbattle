@@ -883,8 +883,9 @@ function drawBase(base) {
 }
 
 function drawMapElements() {
-    const viewLeft = camera.x - 100, viewRight = camera.x + canvas.width / (camera.zoom || 1) + 100;
-    const viewTop = camera.y - 100, viewBottom = camera.y + canvas.height / (camera.zoom || 1) + 100;
+    const viewSize = getCameraViewSize();
+    const viewLeft = camera.x - 100, viewRight = camera.x + viewSize.width + 100;
+    const viewTop = camera.y - 100, viewBottom = camera.y + viewSize.height + 100;
 
     mapElements.forEach(el => {
         // 安全处理：如果元素没有radius属性，跳过或使用默认值
@@ -1165,7 +1166,8 @@ function drawMinimap() {
     bullets.forEach(b => { if(b.type === 'shell') minimapCtx.fillRect(b.x * scaleX - 1, b.y * scaleY - 1, 2, 2); });
     minimapCtx.strokeStyle = 'rgba(255,255,255,0.6)';
     minimapCtx.lineWidth = 1.5;
-    minimapCtx.strokeRect(camera.x * scaleX, camera.y * scaleY, canvas.width / (camera.zoom || 1) * scaleX, canvas.height / (camera.zoom || 1) * scaleY);
+    const viewSize = getCameraViewSize();
+    minimapCtx.strokeRect(camera.x * scaleX, camera.y * scaleY, viewSize.width * scaleX, viewSize.height * scaleY);
 }
 
 
@@ -1269,7 +1271,9 @@ function updateTimer() {
 }
 
 function updateCoordDisplay() {
-    if(player) document.getElementById('coordDisplay').textContent = `X: ${Math.floor(player.x)} | Y: ${Math.floor(player.y)}`;
+    if(player) document.getElementById('coordDisplay').textContent = gameConfig.viewMode === '3d'
+        ? `X: ${Math.floor(player.x)} | Y: ${Math.floor(player.y)} | Z: ${Math.floor(player.z || 0)}`
+        : `X: ${Math.floor(player.x)} | Y: ${Math.floor(player.y)}`;
 }
 
 function updateUltimateUI() {
@@ -1431,9 +1435,9 @@ function renderCTFMode() {
     ['blue', 'red'].forEach(team => {
         const flag = ctfFlags[team];
         if(!flag) return;
-        const zoom = camera.zoom || 1;
-        const sx = (flag.x - camera.x) * zoom;
-        const sy = (flag.y - camera.y) * zoom;
+        const screen = worldToScreen(flag.x, flag.y);
+        const sx = screen.x;
+        const sy = screen.y;
         if(sx < -50 || sx > canvas.width + 50 || sy < -50 || sy > canvas.height + 50) return;
 
         ctx.strokeStyle = '#888';
@@ -1555,9 +1559,9 @@ function infectTank(tank) {
 function renderInfectionMode() {
     [player, ...aiTanks].filter(Boolean).forEach(tank => {
         if(!tank.isInfected || tank.dead) return;
-        const zoom = camera.zoom || 1;
-        const sx = (tank.x - camera.x) * zoom;
-        const sy = (tank.y - camera.y) * zoom;
+        const screen = worldToScreen(tank.x, tank.y);
+        const sx = screen.x;
+        const sy = screen.y;
         if(sx < -50 || sx > canvas.width + 50 || sy < -50 || sy > canvas.height + 50) return;
 
         ctx.strokeStyle = 'rgba(233,30,99,0.5)';
@@ -1626,15 +1630,17 @@ function updateStormMode(dt) {
 
 function renderStormMode() {
     const zoom = camera.zoom || 1;
-    const sx = (stormData.safeZone.x - camera.x) * zoom;
-    const sy = (stormData.safeZone.y - camera.y) * zoom;
-    const r = stormData.safeZone.radius * zoom;
+    const screen = worldToScreen(stormData.safeZone.x, stormData.safeZone.y);
+    const sx = screen.x;
+    const sy = screen.y;
+    const rx = stormData.safeZone.radius * zoom;
+    const ry = stormData.safeZone.radius * zoom;
 
     ctx.save();
     ctx.fillStyle = 'rgba(0,80,60,0.38)';
     ctx.beginPath();
     ctx.rect(0, 0, canvas.width, canvas.height);
-    ctx.arc(sx, sy, r, 0, Math.PI * 2, true);
+    ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2, true);
     ctx.fill('evenodd');
     ctx.restore();
 
@@ -1642,7 +1648,7 @@ function renderStormMode() {
     ctx.lineWidth = 3;
     ctx.setLineDash([10, 5]);
     ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy, rx, ry, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
 

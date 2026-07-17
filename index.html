@@ -121,7 +121,7 @@
                     <p>每辆载具配备三种武器，按 <span class="key-badge">T</span> 循环切换：</p>
                     <p>• <strong style="color:#ff8800">主炮</strong> - 对地主力；可以攻击直升机，但仅造成 40% 伤害</p>
                     <p>• <strong style="color:#ffff00">机枪</strong> - 射速快且可穿透 3 个地面目标，不能攻击直升机</p>
-                    <p>• <strong style="color:#ff44ff">高射炮</strong> - 炮弹抛射升空、可越过障碍，升空后会追踪最近的敌方坦克或直升机</p>
+                    <p>• <strong style="color:#ff44ff">高射炮</strong> - 可越障并在升空后锁定一次最近敌人；制导距离、时间和转向角速度有限</p>
                     <p>每辆坦克都有独特的<strong>终极技能</strong>，冷却完成后按 <span class="key-badge">G</span> 释放。</p>
                     <div class="tutorial-tip-box">
                         💡 直升机越障时可以正常开火；遇到空中目标优先切换高射炮。
@@ -201,7 +201,7 @@
                     <ul>
                         <li><strong>主炮</strong>：对地高伤害；命中直升机时伤害 ×0.4。</li>
                         <li><strong>机枪</strong>：低仰角、射程有限，无法命中直升机。</li>
-                        <li><strong>高射炮</strong>：伪 3D 抛射弹道，可越过障碍物；升空 0.1 秒后会在 950 范围内追踪最近敌人，坦克和直升机都能命中。</li>
+                        <li><strong>高射炮</strong>：带真实高度层次的抛射弹道，可越过障碍物；升空 0.2 秒后仅在 600 范围内锁定一次，最多制导 0.85 秒，无法急转弯或反复换目标。</li>
                         <li><strong>牛牛直升机</strong>：可越障、越水，在障碍物上方开火也不会让炮弹刚出膛就撞墙。</li>
                         <li><strong>地图对空惩罚</strong>：经典图防空雷达增幅高射伤害；沙漠有沙尘侧风；城市有楼群乱流；雪地会旋翼结冰；海岛有强海风且高射伤害更高。</li>
                         <li><strong>APS</strong>：每辆载具仅 4 次拦截，每次启动后需冷却 15 秒才能再次拦截。</li>
@@ -216,8 +216,14 @@
                         <li><strong>F 键 / 射击按钮</strong>：开火</li>
                         <li><strong>T 键 / 切换按钮</strong>：切换主炮 / 机枪 / 高射炮</li>
                         <li><strong>G 键 / 大招按钮</strong>：释放终极技能</li>
+                        <li><strong>V 键</strong>：实时切换 2D 俯视 / 3D 战术视角</li>
                         <li><strong>移动端</strong>：左下角虚拟摇杆移动，右下角按钮射击</li>
                     </ul>
+                </div>
+
+                <div class="intro-section">
+                    <h3>◈ Three.js 真 3D 战场</h3>
+                    <p>在战斗前可选择 <strong>3D 战术视角</strong>，或在战斗中按 <strong>V</strong> 随时切换。3D 模式由 <strong>Three.js + WebGL</strong> 独立渲染，采用锁定地图北方的战术相机：镜头只平移、不会随坦克转弯旋转，W/S/A/D 始终对应屏幕上下左右。模式同时提供敌我名称牌、伤害飘字、据点进度和直升机预警。直升机与高射弹在战斗数据中都具有真实 Z 高度，高射弹使用垂直速度和重力计算弹道。</p>
                 </div>
 
                 <div class="intro-section">
@@ -630,6 +636,13 @@
                     </select>
                 </div>
                 <div class="config-row">
+                    <label>🎥 画面视角</label>
+                    <select id="viewMode">
+                        <option value="2d">🗺 2D 俯视</option>
+                        <option value="3d">◈ 3D 战术视角</option>
+                    </select>
+                </div>
+                <div class="config-row">
                     <label>困难程度</label>
                     <select id="difficulty">
                         <option value="easy">简单</option>
@@ -644,6 +657,9 @@
 
         <!-- 游戏画布 -->
         <canvas id="gameCanvas"></canvas>
+        <canvas id="threeCanvas" aria-label="Three.js 3D 战场"></canvas>
+        <div id="threeHudLayer" aria-hidden="true"></div>
+        <div id="threeThreatBorder" aria-hidden="true"><span>⚠ 敌方直升机来袭</span></div>
 
         <!-- ========== 游戏UI ========== -->
         <div id="achievementPanel" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:500;overflow-y:auto;padding:20px;box-sizing:border-box;">
@@ -665,6 +681,7 @@
                 <div id="environmentInfo" style="color:#bdeaff;font-size:12px;display:none;"></div>
             </div>
             <div id="weaponIndicator">按 T 切换武器</div>
+            <div id="viewModeIndicator" style="position:absolute;top:62px;left:50%;transform:translateX(-50%);color:#8ee8ff;font-size:13px;">🗺 2D俯视 · V切换</div>
             <div id="timer">05:00</div>
             <div id="defenseWaveInfo">🛡 守点模式 - 撑过 03:00</div>
             <div id="sneakModeInfo">🌙 黑夜奇袭 - 摧毁敌方基地</div>
@@ -697,7 +714,9 @@
         </div>
     </div>
 
+    <script src="vendor/three.min.js"></script>
     <script src="Config.js"></script>
+    <script src="Audio.js"></script>
     <script src="Achievement.js"></script>
     <script src="Pathfinding.js"></script>
     <script src="UI.js"></script>
@@ -706,5 +725,6 @@
     <script src="AI.js"></script>
     <script src="Combat.js"></script>
     <script src="Render.js"></script>
+    <script src="ThreeRender.js"></script>
 </body>
 </html>
