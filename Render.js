@@ -49,20 +49,25 @@ function drawCityRoads() {
     ctx.save();
     ctx.strokeStyle = '#1f2328';
     ctx.lineWidth = 170;
-    for(let x = 300; x < CONFIG.mapWidth; x += 600) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CONFIG.mapHeight); ctx.stroke();
+    const viewSize = getCameraViewSize();
+    const minX = Math.max(300, Math.floor((camera.x - 500) / 600) * 600 + 300);
+    const maxX = Math.min(CONFIG.mapWidth, camera.x + viewSize.width + 500);
+    const minY = Math.max(300, Math.floor((camera.y - 500) / 600) * 600 + 300);
+    const maxY = Math.min(CONFIG.mapHeight, camera.y + viewSize.height + 500);
+    for(let x = minX; x < maxX; x += 600) {
+        ctx.beginPath(); ctx.moveTo(x, camera.y - 200); ctx.lineTo(x, camera.y + viewSize.height + 200); ctx.stroke();
     }
-    for(let y = 300; y < CONFIG.mapHeight; y += 600) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CONFIG.mapWidth, y); ctx.stroke();
+    for(let y = minY; y < maxY; y += 600) {
+        ctx.beginPath(); ctx.moveTo(camera.x - 200, y); ctx.lineTo(camera.x + viewSize.width + 200, y); ctx.stroke();
     }
     ctx.strokeStyle = 'rgba(245,205,65,0.65)';
     ctx.lineWidth = 4;
     ctx.setLineDash([38, 30]);
-    for(let x = 300; x < CONFIG.mapWidth; x += 600) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CONFIG.mapHeight); ctx.stroke();
+    for(let x = minX; x < maxX; x += 600) {
+        ctx.beginPath(); ctx.moveTo(x, camera.y - 200); ctx.lineTo(x, camera.y + viewSize.height + 200); ctx.stroke();
     }
-    for(let y = 300; y < CONFIG.mapHeight; y += 600) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CONFIG.mapWidth, y); ctx.stroke();
+    for(let y = minY; y < maxY; y += 600) {
+        ctx.beginPath(); ctx.moveTo(camera.x - 200, y); ctx.lineTo(camera.x + viewSize.width + 200, y); ctx.stroke();
     }
     ctx.setLineDash([]);
     ctx.restore();
@@ -271,6 +276,22 @@ function drawHelicopter(tank) {
     ctx.fill();
     ctx.restore();
 
+    if(tank.helicopterOnFire) {
+        const flicker = 8 + Math.sin(Date.now() * 0.025) * 3;
+        ctx.fillStyle = '#ff4b16';
+        ctx.beginPath();
+        ctx.moveTo(-18, -4);
+        ctx.lineTo(-30 - flicker, 0);
+        ctx.lineTo(-18, 5);
+        ctx.fill();
+        ctx.fillStyle = '#ffd15a';
+        ctx.beginPath();
+        ctx.moveTo(-19, -2);
+        ctx.lineTo(-26 - flicker * 0.45, 0);
+        ctx.lineTo(-19, 3);
+        ctx.fill();
+    }
+
     ctx.restore();
 
     // HP条
@@ -318,22 +339,26 @@ function drawTank(tank) {
     ctx.save();
     ctx.translate(tank.x, tank.y);
     ctx.rotate(tank.angle);
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath();
-    ctx.ellipse(6, 6, CONFIG.tankSize * 1.1, CONFIG.tankSize * 0.65, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#1a1a1a';
+    const detailed = !mobileDenseCombatMode || tank.isPlayer;
+    if(detailed) {
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.beginPath();
+        ctx.ellipse(7, 7, CONFIG.tankSize * 1.12, CONFIG.tankSize * 0.7, 0, 0, Math.PI*2);
+        ctx.fill();
+    }
+    ctx.fillStyle = '#111518';
     const trackW = CONFIG.tankSize * 1.8, trackH = CONFIG.tankSize * 0.25, trackOffset = CONFIG.tankSize * 0.8;
-    ctx.fillRect(-trackW/2, -trackOffset, trackW, trackH);
-    ctx.fillRect(-trackW/2, trackOffset - trackH, trackW, trackH);
-    ctx.fillStyle = '#333';
-    ctx.fillRect(-trackW/2 + 2, -trackOffset + 2, trackW - 4, 2);
-    ctx.fillRect(-trackW/2 + 2, trackOffset - trackH + 2, trackW - 4, 2);
-    ctx.fillStyle = '#0a0a0a';
-    // 履带纹理批量绘制
-    for(let i = -trackW/2 + 6; i < trackW/2; i += 12) {
-        ctx.fillRect(i, -trackOffset, 4, trackH);
-        ctx.fillRect(i, trackOffset - trackH, 4, trackH);
+    ctx.beginPath(); ctx.roundRect(-trackW/2, -trackOffset, trackW, trackH, 5); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(-trackW/2, trackOffset - trackH, trackW, trackH, 5); ctx.fill();
+    ctx.fillStyle = '#343b3f';
+    ctx.fillRect(-trackW/2 + 5, -trackOffset + 3, trackW - 10, trackH - 6);
+    ctx.fillRect(-trackW/2 + 5, trackOffset - trackH + 3, trackW - 10, trackH - 6);
+    if(detailed) {
+        ctx.fillStyle = '#0b0d0e';
+        for(let i = -trackW/2 + 8; i < trackW/2 - 3; i += 12) {
+            ctx.fillRect(i, -trackOffset + 2, 3, trackH - 4);
+            ctx.fillRect(i, trackOffset - trackH + 2, 3, trackH - 4);
+        }
     }
     ctx.fillStyle = tank.color;
     /*shadow*/ctx.shadowColor = 'transparent';
@@ -360,7 +385,14 @@ function drawTank(tank) {
         ctx.stroke();
     } else if(tank.shape === 'medium') {
         ctx.beginPath();
-        ctx.ellipse(0, 0, CONFIG.tankSize*0.9, CONFIG.tankSize*0.6, 0, 0, Math.PI*2);
+        ctx.moveTo(CONFIG.tankSize, 0);
+        ctx.lineTo(CONFIG.tankSize * 0.55, -CONFIG.tankSize * 0.62);
+        ctx.lineTo(-CONFIG.tankSize * 0.62, -CONFIG.tankSize * 0.55);
+        ctx.lineTo(-CONFIG.tankSize * 0.82, -CONFIG.tankSize * 0.28);
+        ctx.lineTo(-CONFIG.tankSize * 0.82, CONFIG.tankSize * 0.28);
+        ctx.lineTo(-CONFIG.tankSize * 0.62, CONFIG.tankSize * 0.55);
+        ctx.lineTo(CONFIG.tankSize * 0.55, CONFIG.tankSize * 0.62);
+        ctx.closePath();
         ctx.fill();
         ctx.strokeStyle = tank.accent;
         ctx.lineWidth = 2;
@@ -376,16 +408,25 @@ function drawTank(tank) {
         ctx.lineWidth = 1;
         ctx.stroke();
     } else {
-        ctx.fillRect(-CONFIG.tankSize*0.55, -CONFIG.tankSize*0.75, CONFIG.tankSize*1.6, CONFIG.tankSize*1.5);
+        ctx.beginPath();
+        ctx.moveTo(CONFIG.tankSize * 1.02, -CONFIG.tankSize * 0.62);
+        ctx.lineTo(CONFIG.tankSize * 0.78, -CONFIG.tankSize * 0.77);
+        ctx.lineTo(-CONFIG.tankSize * 0.68, -CONFIG.tankSize * 0.72);
+        ctx.lineTo(-CONFIG.tankSize * 0.82, 0);
+        ctx.lineTo(-CONFIG.tankSize * 0.68, CONFIG.tankSize * 0.72);
+        ctx.lineTo(CONFIG.tankSize * 0.78, CONFIG.tankSize * 0.77);
+        ctx.lineTo(CONFIG.tankSize * 1.02, CONFIG.tankSize * 0.62);
+        ctx.closePath();
+        ctx.fill();
         ctx.strokeStyle = tank.accent;
         ctx.lineWidth = 2;
         ctx.shadowBlur = 0;
-        ctx.strokeRect(-CONFIG.tankSize*0.55, -CONFIG.tankSize*0.75, CONFIG.tankSize*1.6, CONFIG.tankSize*1.5);
+        ctx.stroke();
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.fillRect(-CONFIG.tankSize*0.2, -CONFIG.tankSize*0.5, CONFIG.tankSize*0.9, CONFIG.tankSize*0.35);
         ctx.fillRect(-CONFIG.tankSize*0.2, CONFIG.tankSize*0.15, CONFIG.tankSize*0.9, CONFIG.tankSize*0.35);
         ctx.fillStyle = 'rgba(255,255,255,0.1)';
-        for(let rx = -CONFIG.tankSize*0.4; rx < CONFIG.tankSize*0.8; rx += CONFIG.tankSize*0.3) {
+        for(let rx = -CONFIG.tankSize*0.4; detailed && rx < CONFIG.tankSize*0.8; rx += CONFIG.tankSize*0.3) {
             ctx.beginPath();
             ctx.arc(rx, -CONFIG.tankSize*0.6, 2, 0, Math.PI*2);
             ctx.fill();
@@ -417,7 +458,14 @@ function drawTank(tank) {
     ctx.shadowColor = tank.accent;
     /*shadow*/ctx.shadowBlur = 0;
     ctx.beginPath();
-    ctx.arc(0, 0, CONFIG.tankSize*0.5, 0, Math.PI*2);
+    const turretR = CONFIG.tankSize * 0.52;
+    for(let i = 0; i < 8; i++) {
+        const a = Math.PI / 8 + i * Math.PI / 4;
+        const radius = i === 0 || i === 7 ? turretR * 1.08 : turretR;
+        const px = Math.cos(a) * radius, py = Math.sin(a) * radius;
+        if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.strokeStyle = tank.color;
@@ -431,6 +479,16 @@ function drawTank(tank) {
     ctx.beginPath();
     ctx.arc(CONFIG.tankSize*0.15, -CONFIG.tankSize*0.15, 4, 0, Math.PI*2);
     ctx.fill();
+    if(detailed) {
+        ctx.strokeStyle = 'rgba(255,255,255,.32)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-turretR * 0.5, -turretR * 0.45);
+        ctx.lineTo(turretR * 0.48, -turretR * 0.45);
+        ctx.stroke();
+        ctx.fillStyle = '#171c20';
+        ctx.beginPath(); ctx.arc(-turretR * 0.2, 0, turretR * 0.24, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
     
     if (tank.autoAimActive && tank.autoAimTarget && !tank.autoAimTarget.dead) {
@@ -1093,6 +1151,9 @@ function drawBullet(b) {
 }
 
 function drawMinimap() {
+    const now = performance.now();
+    if(touchControlMode && now - (drawMinimap.lastRender || 0) < 100) return;
+    drawMinimap.lastRender = now;
     // 检查小地图是否被干扰
     if(player && player.minimapJammed) {
         minimapCtx.fillStyle = 'rgba(5,5,10,0.95)';
@@ -1174,6 +1235,10 @@ function drawMinimap() {
 // ==================== HUD更新 ====================
 function updateHUD() {
     if(!player) return;
+    const heliAltitudeControls = document.getElementById('heliAltitudeControls');
+    const heliAltitudeReadout = document.getElementById('heliAltitudeReadout');
+    if(heliAltitudeControls) heliAltitudeControls.classList.toggle('heli-active', !!player.isFlying);
+    if(heliAltitudeReadout) heliAltitudeReadout.textContent = `高度 ${Math.round(player.z || 0)}`;
     document.getElementById('playerHp').style.width = (Math.max(0, player.hp) / player.maxHp * 100) + '%';
     const apsDisplay = document.getElementById('apsDisplay');
     if(apsDisplay) apsDisplay.textContent = player.apsCooldown > 0
@@ -1182,24 +1247,27 @@ function updateHUD() {
     const environmentInfo = document.getElementById('environmentInfo');
     if(environmentInfo) {
         environmentInfo.style.display = 'block';
+        const altitudeHint = player.isFlying
+            ? ` · 高度 ${Math.round(player.z || 0)}${player.helicopterOnFire ? ' · 🔥 机身失火' : ''}`
+            : '';
         if(currentMap === 'classic' && player.isFlying) {
             environmentInfo.style.color = '#ff9b9b';
-            environmentInfo.textContent = '📡 经典战场防空雷达：高射炮伤害 +35%';
+            environmentInfo.textContent = '📡 经典战场防空雷达：高射炮伤害 +35%' + altitudeHint;
         } else if(currentMap === 'desert') {
             environmentInfo.style.color = environmentState.sandstormActive ? '#ffb45c' : '#ffe0a3';
             environmentInfo.textContent = environmentState.sandstormActive
-                ? `🌪 沙尘暴 ${Math.ceil(environmentState.sandstormTimer)}s：视野降低，飞行不稳`
-                : '☀ 开阔沙漠：大视野';
+                ? `🌪 沙尘暴 ${Math.ceil(environmentState.sandstormTimer)}s：视野降低，飞行不稳${altitudeHint}`
+                : '☀ 开阔沙漠：大视野' + altitudeHint;
         } else if(currentMap === 'city') {
             environmentInfo.style.color = player.isFlying ? '#ffce83' : '#d6d9dc';
             environmentInfo.textContent = player.isFlying
-                ? '🏙 楼群乱流：直升机速度 -22%'
+                ? '🏙 楼群乱流：直升机速度 -22%' + altitudeHint
                 : '🏙 城市巷战：利用街口与建筑掩护';
         } else if(currentMap === 'snow') {
             const freezePct = Math.round((player.freezeLevel || 0) * 100);
             environmentInfo.style.color = freezePct > 30 ? '#7fdcff' : '#d8f5ff';
             environmentInfo.textContent = player.isFlying
-                ? '🧊 旋翼结冰：速度 -30%，持续受损'
+                ? '🧊 旋翼结冰：速度 -30%，持续受损' + altitudeHint
                 : freezePct > 0
                 ? `❄ 引擎冻结 ${freezePct}%：移动中逐渐恢复`
                 : '❄ 雪地：久停 5 秒开始冻结';
@@ -1208,7 +1276,7 @@ function updateHUD() {
             environmentInfo.style.color = inWater ? '#55ccff' : '#bdeaff';
             environmentInfo.textContent = player.tankType === 'duoduo_ifv'
                 ? (inWater ? '🌊 涉水中：速度 30%' : '🌊 步战车可直接涉水')
-                : (player.isFlying ? '🌬 海风乱流：直升机速度 -20%，高射炮伤害 +20%' : (inWater ? '💧 车体进水：持续掉血' : '🌉 可冒险涉水，桥梁更安全'));
+                : (player.isFlying ? '🌬 海风乱流：直升机速度 -20%，高射炮伤害 +20%' + altitudeHint : (inWater ? '💧 车体进水：持续掉血' : '🌉 可冒险涉水，桥梁更安全'));
         } else environmentInfo.style.display = 'none';
     }
 
@@ -1377,6 +1445,7 @@ function updateCTFMode(dt) {
         const dy = player.y - myFlag.y;
         if(Math.hypot(dx, dy) < 40) {
             ctfScores[player.team]++;
+            if(typeof awardFlagScore === 'function') awardFlagScore(player.team, player);
             enemyFlag.carrier = null;
             enemyFlag.atBase = true;
             enemyFlag.x = enemyTeam === 'blue' ? CONFIG.mapWidth * 0.15 : CONFIG.mapWidth * 0.85;
@@ -1407,6 +1476,7 @@ function updateCTFMode(dt) {
             const dy = tank.y - aiMyFlag.y;
             if(Math.hypot(dx, dy) < 40) {
                 ctfScores[tank.team]++;
+                if(typeof awardFlagScore === 'function') awardFlagScore(tank.team, tank);
                 aiEnemyFlag.carrier = null;
                 aiEnemyFlag.atBase = true;
                 aiEnemyFlag.x = aiEnemyTeam === 'blue' ? CONFIG.mapWidth * 0.15 : CONFIG.mapWidth * 0.85;
@@ -1608,7 +1678,7 @@ function updateStormMode(dt) {
             const outsideDepth = Math.min(2, (dist - stormData.safeZone.radius) / Math.max(120, stormData.safeZone.radius));
             const damagePerSecond = stormData.stormDamage * (1 + outsideDepth * 0.75);
             const damage = damagePerSecond * dt;
-            applyDirectDamage(tank, damage, null);
+            applyDirectDamage(tank, damage, null, '毒圈伤害');
             tank.stormDamageTick = (tank.stormDamageTick || 0) - dt;
             if(tank.stormDamageTick <= 0) {
                 showDamageNumber(tank.x, tank.y - 38, Math.round(damagePerSecond));

@@ -56,13 +56,47 @@ function init() {
     ctx = canvas.getContext('2d', { alpha: false });
     minimapCanvas = document.getElementById('minimap');
     minimapCtx = minimapCanvas.getContext('2d', { alpha: false });
+    installInputModeDetection();
+    updateInputDeviceMode();
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('resize', updateInputDeviceMode);
     setupStartScreen();
     setupMenu();
     setupControls();
     setupIntroModal();
     requestAnimationFrame(gameLoop);
+}
+
+function isTouchControlDevice() {
+    const touchPoints = navigator.maxTouchPoints || 0;
+    const coarse = window.matchMedia && (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(any-pointer: coarse)').matches);
+    const noHover = window.matchMedia && window.matchMedia('(hover: none)').matches;
+    const tabletIdentity = /Android|iPad|iPhone|Mobile/i.test(navigator.userAgent || '') ||
+        (navigator.platform === 'MacIntel' && touchPoints > 1);
+    const touchApi = 'ontouchstart' in window || (window.DocumentTouch && document instanceof window.DocumentTouch);
+    const uaMobile = !!(navigator.userAgentData && navigator.userAgentData.mobile);
+    return touchControlMode || touchPoints > 0 || touchApi || coarse || noHover || tabletIdentity || uaMobile;
+}
+
+function updateInputDeviceMode() {
+    const touchMode = isTouchControlDevice();
+    touchControlMode = touchMode;
+    document.documentElement.classList.toggle('touch-device', touchMode);
+    document.documentElement.classList.toggle('desktop-device', !touchMode);
+}
+
+function installInputModeDetection() {
+    if(window._tankInputModeDetectionInstalled) return;
+    window._tankInputModeDetectionInstalled = true;
+    const activateTouch = event => {
+        if(event && event.pointerType && event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+        if(touchControlMode) return;
+        touchControlMode = true;
+        updateInputDeviceMode();
+    };
+    window.addEventListener('pointerdown', activateTouch, { capture: true, passive: true });
+    window.addEventListener('touchstart', activateTouch, { capture: true, passive: true });
 }
 
 function resizeCanvas() {
@@ -582,6 +616,23 @@ function setupControls() {
     const fireTouchEnd = (e) => { e.preventDefault(); mouse.down = false; };
     fireBtn.addEventListener('touchstart', fireTouchStart, {passive: false});
     fireBtn.addEventListener('touchend', fireTouchEnd, {passive: false});
+
+    const heliAscendBtn = document.getElementById('heliAscendBtn');
+    const heliDescendBtn = document.getElementById('heliDescendBtn');
+    const bindLiftButton = (button, direction) => {
+        if(!button) return;
+        const startLift = event => { event.preventDefault(); helicopterLiftInput = direction; };
+        const stopLift = event => {
+            event.preventDefault();
+            if(helicopterLiftInput === direction) helicopterLiftInput = 0;
+        };
+        button.addEventListener('pointerdown', startLift);
+        button.addEventListener('pointerup', stopLift);
+        button.addEventListener('pointercancel', stopLift);
+        button.addEventListener('pointerleave', stopLift);
+    };
+    bindLiftButton(heliAscendBtn, 1);
+    bindLiftButton(heliDescendBtn, -1);
 
     
     const pcFireBtn = document.getElementById('pcFireBtn');

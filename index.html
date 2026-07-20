@@ -164,7 +164,7 @@
                     <h3>🎮 游戏模式</h3>
                     <div class="mode-intro-box classic">
                         <h4>🏛 经典模式</h4>
-                        <p>蓝方10辆坦克 vs 红方10辆坦克，争夺7个据点。占领据点可生成援军，最终目标摧毁敌方基地或时间结束时据点更多。</p>
+                        <p>蓝方10辆坦克 vs 红方10辆坦克，争夺7个据点。占领据点可生成援军，最终目标是摧毁敌方基地，或在时间内尽可能获取团队积分。</p>
                     </div>
                     <div class="mode-intro-box defense">
                         <h4>🛡 守点模式</h4>
@@ -176,7 +176,7 @@
                     </div>
                     <div class="mode-intro-box">
                         <h4>🏴 夺旗模式</h4>
-                        <p>夺取敌方旗帜并带回己方旗帜点，率先获得3分的一方获胜。</p>
+                        <p>夺取敌方旗帜并带回己方旗帜点。成功夺旗会贡献大量团队积分，对局结束后仍由总分决定胜负。</p>
                     </div>
                     <div class="mode-intro-box">
                         <h4>🧟 感染模式</h4>
@@ -186,6 +186,19 @@
                         <h4>🌪 风暴模式</h4>
                         <p>安全区不断缩小，毒圈外每秒至少受到 32 点伤害，离安全区越远伤害越高。</p>
                     </div>
+                </div>
+
+                <div class="intro-section">
+                    <h3>🏆 团队计分与战况</h3>
+                    <p>蓝红双方共享各自的团队分数，玩家与 AI 队友的行为都会计分。比赛触发结束后，统一按总分判定蓝方胜利、红方胜利或平局。</p>
+                    <ul>
+                        <li>击毁普通地面单位：<strong>+250 分</strong></li>
+                        <li>击毁牛牛直升机：<strong>+300 分</strong></li>
+                        <li>占领据点：<strong>+500 分</strong></li>
+                        <li>成功夺旗：<strong>+1,000 分</strong></li>
+                        <li>摧毁敌方基地：<strong>+10,000,000 分</strong></li>
+                    </ul>
+                    <p>HUD 实时显示“蓝 多少分 | 红 多少分”，下方公告栏会播报击杀、占点、夺旗和摧毁基地事件。</p>
                 </div>
 
                 <div class="intro-section">
@@ -202,7 +215,7 @@
                         <li><strong>主炮</strong>：对地高伤害；命中直升机时伤害 ×0.4。</li>
                         <li><strong>机枪</strong>：低仰角、射程有限，无法命中直升机。</li>
                         <li><strong>高射炮</strong>：带真实高度层次的抛射弹道，可越过障碍物；升空 0.2 秒后仅在 600 范围内锁定一次，最多制导 0.85 秒，无法急转弯或反复换目标。</li>
-                        <li><strong>牛牛直升机</strong>：可越障、越水，在障碍物上方开火也不会让炮弹刚出膛就撞墙。</li>
+                        <li><strong>牛牛直升机</strong>：可控制真实飞行高度并越水；高度超过障碍物后才能越过，连续撞击 4 次会起火并持续受损。</li>
                         <li><strong>地图对空惩罚</strong>：经典图防空雷达增幅高射伤害；沙漠有沙尘侧风；城市有楼群乱流；雪地会旋翼结冰；海岛有强海风且高射伤害更高。</li>
                         <li><strong>APS</strong>：每辆载具仅 4 次拦截，每次启动后需冷却 15 秒才能再次拦截。</li>
                     </ul>
@@ -217,7 +230,10 @@
                         <li><strong>T 键 / 切换按钮</strong>：切换主炮 / 机枪 / 高射炮</li>
                         <li><strong>G 键 / 大招按钮</strong>：释放终极技能</li>
                         <li><strong>V 键</strong>：实时切换 2D 俯视 / 3D 战术视角</li>
-                        <li><strong>移动端</strong>：左下角虚拟摇杆移动，右下角按钮射击</li>
+                        <li><strong>直升机高度</strong>：E / 空格上升，Q / Shift 下降</li>
+                        <li><strong>移动端 / 平板</strong>：按触控能力显示摇杆，不再按屏幕宽度判断；直升机另有上升/下降按钮</li>
+                        <li><strong>阵亡回放</strong>：使用独立 Three.js 3D 导演镜头，从致命炮弹发射开始以 0.3× 慢放跟随弹道；接近目标时镜头拉远，命中后环绕展示车体解体。</li>
+                        <li><strong>战场音效</strong>：引擎负载会改变轰鸣音高；主炮、机枪、高射炮有独立音色，开火、命中与击杀会按强度震动镜头。</li>
                     </ul>
                 </div>
 
@@ -675,11 +691,13 @@
                 <div>HP: <div class="hp-bar"><div class="hp-fill" id="playerHp" style="width:100%"></div></div></div>
                 <div>武器: <span id="currentWeapon" style="color:#ffd700">主炮</span> | 主炮: <span id="shells">0</span> | 机枪: <span id="mg">0</span> | 高射炮: <span id="aa">0</span></div>
                 <div>APS: <span id="apsDisplay" style="color:#00d4ff">4</span> | 重量: <span id="weightDisplay" style="color:#ffaa00">0</span>kg</div>
+                <div id="teamScoreDisplay"><span class="score-blue">蓝 0分</span><b>|</b><span class="score-red">红 0分</span></div>
                 <div>蓝方据点: <span style="color:#4488ff" id="blueOutposts">0</span></div>
                 <div>红方据点: <span style="color:#ff4444" id="redOutposts">0</span></div>
                 <div id="autoAimStatus" style="color:#ffcc00;font-size:12px;display:none;">🎯 自动瞄准中</div>
                 <div id="environmentInfo" style="color:#bdeaff;font-size:12px;display:none;"></div>
             </div>
+            <div id="battleFeed" aria-live="polite"></div>
             <div id="weaponIndicator">按 T 切换武器</div>
             <div id="viewModeIndicator" style="position:absolute;top:62px;left:50%;transform:translateX(-50%);color:#8ee8ff;font-size:13px;">🗺 2D俯视 · V切换</div>
             <div id="timer">05:00</div>
@@ -711,12 +729,42 @@
                 <button class="mobile-btn mobile-btn-weapon" id="mobileSwitchBtn" onclick="switchWeapon()">切换<br>武器</button>
                 <button class="mobile-btn mobile-btn-ultimate" id="mobileUltimateBtn" onclick="activateUltimate()">终极<br>技能</button>
             </div>
+            <div id="heliAltitudeControls">
+                <button id="heliAscendBtn">⬆ 上升</button>
+                <span id="heliAltitudeReadout">Z 120</span>
+                <button id="heliDescendBtn">⬇ 下降</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="combatReplayOverlay" aria-live="polite">
+        <div class="combat-replay-header">
+            <strong>🎬 精彩回放</strong>
+            <span id="combatReplayStage">3D 弹道追踪 · 0.3× 慢放</span>
+        </div>
+        <canvas id="combatReplayCanvas"></canvas>
+        <div id="combatReplayCause">正在分析致命伤害…</div>
+        <button type="button" id="combatReplaySkip" onclick="skipCombatReplay()">跳过回放</button>
+    </div>
+
+    <div id="matchResultOverlay" aria-live="polite">
+        <div id="matchResultTitle">蓝方胜利</div>
+        <div class="match-result-vs">
+            <div class="result-team blue"><span>蓝方</span><strong id="resultBlueScore">0</strong></div>
+            <div class="result-vs-mark">VS</div>
+            <div class="result-team red"><span>红方</span><strong id="resultRedScore">0</strong></div>
+        </div>
+        <div class="match-result-actions">
+            <button type="button" onclick="returnToHome()">返回主页</button>
+            <button type="button" class="primary" onclick="restartLastGame()">再来一局</button>
         </div>
     </div>
 
     <script src="vendor/three.min.js"></script>
     <script src="Config.js"></script>
     <script src="Audio.js"></script>
+    <script src="Score.js"></script>
+    <script src="Replay.js"></script>
     <script src="Achievement.js"></script>
     <script src="Pathfinding.js"></script>
     <script src="UI.js"></script>

@@ -451,6 +451,7 @@ function endMatchStats(result) {
 }
 
 function recordKill(tank, target, hitInfo = null) {
+    if(typeof awardKillScore === 'function') awardKillScore(tank, target);
     if(tank.isPlayer) {
         playerStats.currentMatchKills++;
         playerStats.kills++;
@@ -506,6 +507,7 @@ function recordOutpostCapture(team) {
 }
 
 function recordBaseDestroy(team) {
+    if(typeof awardBaseScore === 'function') awardBaseScore(team);
     if(team === 'blue') playerStats.basesDestroyed++;
     checkAchievements();
 }

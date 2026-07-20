@@ -343,8 +343,10 @@ const MAX_EXHAUST_TRAILS = 150;
 const MAX_DAMAGE_NUMBERS = 30;
 
 function createParticles(x, y, count, color, life) {
-    const roomLeft = MAX_PARTICLES - particles.length;
-    const actualCount = Math.min(count, Math.max(0, roomLeft));
+    const particleLimit = touchControlMode ? 80 : MAX_PARTICLES;
+    const densityScale = touchControlMode ? (mobileDenseCombatMode ? 0.32 : 0.6) : 1;
+    const roomLeft = particleLimit - particles.length;
+    const actualCount = Math.min(Math.ceil(count * densityScale), Math.max(0, roomLeft));
 
     for(let i=0; i<actualCount; i++) {
         const angle = Math.random() * Math.PI * 2;
@@ -367,6 +369,8 @@ function updateParticles(dt) {
 }
 
 function addExhaustTrail(tank) {
+    if(touchControlMode && !tank.isPlayer && (mobileDenseCombatMode || Math.random() < 0.7)) return;
+    if(exhaustTrails.length >= (touchControlMode ? 55 : MAX_EXHAUST_TRAILS)) return;
     const rearX = tank.x - Math.cos(tank.angle) * (CONFIG.tankSize * 0.8);
     const rearY = tank.y - Math.sin(tank.angle) * (CONFIG.tankSize * 0.8);
     exhaustTrails.push({
@@ -397,6 +401,7 @@ function updateTrailEffects(dt) {
 }
 
 function showDamageNumber(x, y, damage) {
+    if(touchControlMode && mobileDenseCombatMode && damageNumbers.length >= 10) return;
     damageNumbers.push({ x, y, z: 42, text: `-${damage}`, life: 1.0, maxLife: 1.0, vy: -40, vz: 55 });
 }
 
@@ -525,6 +530,10 @@ function render() {
     camera.y = Math.max(0, Math.min(CONFIG.mapHeight - viewHeight, camera.y));
     
     ctx.save();
+    if(typeof getScreenShakeOffset === 'function') {
+        const shake = getScreenShakeOffset(1);
+        ctx.translate(shake.x, shake.y);
+    }
     ctx.scale(zoom, zoom);
     ctx.translate(-camera.x, -camera.y);
     
@@ -587,15 +596,20 @@ function render() {
     
     const visibleTanks = getNearbyTanks(player.x, player.y,
         Math.max(viewWidth + projectionMargin * 2, viewHeight) / 2 + 260);
+    mobileDenseCombatMode = touchControlMode && visibleTanks.length >= 14;
     visibleTanks.forEach(t => {
         if(t.dead) return;
         drawTank(t);
         if(isTankInWater(t)) drawTankWaterOverlay(t);
     });
     
-    bullets.forEach(b => drawBullet(b));
+    bullets.forEach(b => {
+        if(b.x < viewLeft || b.x > viewRight || b.y < viewTop || b.y > viewBottom) return;
+        drawBullet(b);
+    });
     
     particles.forEach(p => {
+        if(p.x < viewLeft || p.x > viewRight || p.y < viewTop || p.y > viewBottom) return;
         ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
         ctx.fillStyle = p.color;
         ctx.beginPath();

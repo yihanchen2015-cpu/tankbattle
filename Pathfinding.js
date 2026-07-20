@@ -227,7 +227,7 @@ function followPath(tank, dt) {
             const testX = tank.x + Math.cos(dodgeAngle) * dodgeSpeed * 60 * dt;
             const testY = tank.y + Math.sin(dodgeAngle) * dodgeSpeed * 60 * dt;
 
-            if (tank.canPassObstacles || !checkObstacleCollision(testX, testY, CONFIG.tankSize, tank)) {
+            if ((tank.canPassObstacles && !tank.isFlying) || !checkObstacleCollision(testX, testY, CONFIG.tankSize, tank)) {
                 const towardTarget = Math.cos(dodgeAngle - targetAngle);
                 let score = towardTarget * 100;
                 const awayFromBlock = Math.cos(dodgeAngle - blockAngle);
@@ -264,7 +264,7 @@ function followPath(tank, dt) {
         const escapeSpeed = getActualSpeed(tank) * 0.6;
         const escapeX = tank.x + Math.cos(escapeAngle) * escapeSpeed * 60 * dt;
         const escapeY = tank.y + Math.sin(escapeAngle) * escapeSpeed * 60 * dt;
-        if (tank.canPassObstacles || !checkObstacleCollision(escapeX, escapeY, CONFIG.tankSize, tank)) {
+        if ((tank.canPassObstacles && !tank.isFlying) || !checkObstacleCollision(escapeX, escapeY, CONFIG.tankSize, tank)) {
             tank.x = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapWidth - CONFIG.tankSize, escapeX));
             tank.y = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapHeight - CONFIG.tankSize, escapeY));
             tank.angle = escapeAngle;
@@ -279,15 +279,16 @@ function followPath(tank, dt) {
     const actualSpeed = getActualSpeed(tank);
     const newX = tank.x + Math.cos(tank.angle) * actualSpeed * 60 * dt;
     const newY = tank.y + Math.sin(tank.angle) * actualSpeed * 60 * dt;
-    if(tank.canPassObstacles || !checkObstacleCollision(newX, newY, CONFIG.tankSize, tank)) {
+    if((tank.canPassObstacles && !tank.isFlying) || !checkObstacleCollision(newX, newY, CONFIG.tankSize, tank)) {
         tank.x = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapWidth - CONFIG.tankSize, newX));
         tank.y = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapHeight - CONFIG.tankSize, newY));
     } else {
+        if(tank.isFlying && typeof registerHelicopterCollision === 'function') registerHelicopterCollision(tank);
         for (let offset of [0.3, -0.3, 0.6, -0.6]) {
             const testAngle = tank.angle + offset;
             const testX = tank.x + Math.cos(testAngle) * actualSpeed * 60 * dt;
             const testY = tank.y + Math.sin(testAngle) * actualSpeed * 60 * dt;
-            if (tank.canPassObstacles || !checkObstacleCollision(testX, testY, CONFIG.tankSize, tank)) {
+            if ((tank.canPassObstacles && !tank.isFlying) || !checkObstacleCollision(testX, testY, CONFIG.tankSize, tank)) {
                 tank.x = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapWidth - CONFIG.tankSize, testX));
                 tank.y = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapHeight - CONFIG.tankSize, testY));
                 tank.angle = testAngle;

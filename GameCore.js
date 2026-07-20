@@ -6,6 +6,8 @@ function startGame() {
         return;
     }
     resetMatchStats();
+    if(typeof resetTeamScores === 'function') resetTeamScores();
+    if(typeof resetCombatReplay === 'function') resetCombatReplay();
     recordTankUsed(selectedTank);
     const tankData = TANKS[selectedTank];
     const ammo = parseInt(document.getElementById('ammoSlider').value);
@@ -18,6 +20,7 @@ function startGame() {
     const difficulty = document.getElementById('difficulty').value;
     const viewMode = document.getElementById('viewMode') ? document.getElementById('viewMode').value : '2d';
     gameConfig = { dayNight, difficulty, ammo, mg, aa, mode: gameMode, viewMode };
+    lastMatchSetup = { selectedTank, currentMap, gameMode, ammo, mg, aa, dayNight, difficulty, viewMode };
     currentWeapon = 'shell';
     document.getElementById('menu').classList.remove('active');
     document.getElementById('menu').style.display = 'none';
@@ -497,6 +500,11 @@ function createTank(data, x, y, team, isPlayer) {
         weight: data.weight || 1.0,
         isFlying: !!data.isFlying,
         canPassObstacles: !!data.canPassObstacles,
+        helicopterCollisionHits: 0,
+        helicopterCollisionReset: 0,
+        helicopterCollisionCooldown: 0,
+        helicopterOnFire: false,
+        helicopterFireTimer: 0,
         team, isPlayer,
         shells: 0, mg: 0, aa: 0,
         maxShells: data.maxShells, maxMG: data.maxMG, maxAA: data.maxAA || 15,
@@ -647,7 +655,7 @@ function gameLoop(timestamp) {
                 console.error('[GAME_LOOP] Player NaN detected before update! x:', player.x, 'y:', player.y);
             }
             let remainingDt = frameDt;
-            while(remainingDt > 0) {
+            while(remainingDt > 0 && gameState === 'playing') {
                 const stepDt = Math.min(remainingDt, 0.05);
                 update(stepDt);
                 remainingDt -= stepDt;
@@ -710,6 +718,8 @@ function update(dt) {
     updateMinimapJam(dt);
 
     updateTank(player, dt);
+    if(typeof updateEngineAudio === 'function') updateEngineAudio(player);
+    if(typeof updateScreenShake === 'function') updateScreenShake(dt);
     recordSurvivalState(player, dt);
     allies.forEach(t => { if(!t.dead) updateAITank(t, dt); });
     enemies.forEach(t => { if(!t.dead) updateAITank(t, dt); });
@@ -721,8 +731,10 @@ function update(dt) {
     updateDamageNumbers(dt);
     resolveTankCollisions();
     checkCollisions();
+    if(typeof updateCombatReplayBuffer === 'function') updateCombatReplayBuffer(dt);
     updateMapElements(dt);
     checkWinCondition();
+    if(gameState !== 'playing') return;
     updateUltimates(dt);
     updateHUD();
     updateTimer();
@@ -878,6 +890,8 @@ function updateTank(tank, dt) {
     if(tank.mgCooldown > 0) tank.mgCooldown -= dt;
     if(tank.aaCooldown > 0) tank.aaCooldown -= dt;
     updateStatusEffects(tank, dt);
+    if(tank.isFlying && typeof updateHelicopterFlight === 'function') updateHelicopterFlight(tank, dt);
+    if(tank.dead) return;
     if(tank.trailDebuff > 0) {
         tank.trailDebuff -= dt;
         if(tank.trailDebuff <= 0) tank.turretSpeedMult = 1.0;
@@ -889,6 +903,7 @@ function updateTank(tank, dt) {
         if(keys['KeyA'] || keys['ArrowLeft']) moveX = -1;
         if(keys['KeyD'] || keys['ArrowRight']) moveX = 1;
         if(joystick.active) { moveX = joystick.dx; moveY = joystick.dy; }
+        tank.engineLoad = Math.min(1, Math.hypot(moveX, moveY));
         const worldMouse = screenToWorld(mouse.x, mouse.y);
         const worldMouseX = worldMouse.x;
         const worldMouseY = worldMouse.y;
@@ -917,7 +932,7 @@ function updateTank(tank, dt) {
     updateAutoAim(tank, dt);
 
     if(!tank.canMove) return;
-    const canPassObstacles = tank.canPassObstacles || (tank.ghostActive && tank.ultimateData && tank.ultimateData.canPassObstacles);
+    const canPassObstacles = !tank.isFlying && (tank.canPassObstacles || (tank.ghostActive && tank.ultimateData && tank.ultimateData.canPassObstacles));
     if(moveX !== 0 || moveY !== 0) {
         const len = Math.sqrt(moveX*moveX + moveY*moveY);
         if(len > 0) { moveX /= len; moveY /= len; }
@@ -940,7 +955,7 @@ function updateTank(tank, dt) {
             if(tank.isPlayer && (isNaN(tank.x) || isNaN(tank.y))) {
                 console.error('[UPDATE_TANK] Player position became NaN after movement! newX:', newX, 'newY:', newY);
             }
-        }
+        } else if(tank.isFlying && typeof registerHelicopterCollision === 'function') registerHelicopterCollision(tank);
         if(Math.random() < 0.3) addExhaustTrail(tank);
     }
 }
@@ -985,7 +1000,7 @@ function updateEnvironment(dt) {
             tank.waterDamageTimer = (tank.waterDamageTimer || 1) - dt;
             if(tank.waterDamageTimer <= 0) {
                 const waterDamage = 34;
-                applyDirectDamage(tank, waterDamage, null);
+                applyDirectDamage(tank, waterDamage, null, '车体进水');
                 showDamageNumber(tank.x, tank.y - 32, waterDamage);
                 tank.waterDamageTimer = 1;
             }
@@ -996,7 +1011,7 @@ function updateEnvironment(dt) {
         allTanks.filter(tank => tank.isFlying).forEach(tank => {
             tank.freezeDamageTimer = (tank.freezeDamageTimer || 1) - dt;
             if(tank.freezeDamageTimer <= 0) {
-                applyDirectDamage(tank, 8, null);
+                applyDirectDamage(tank, 8, null, '旋翼结冰');
                 if(tank === player) showDamageNumber(tank.x, tank.y - 35, 8);
                 tank.freezeDamageTimer = 1;
             }
@@ -1023,7 +1038,7 @@ function updateEnvironment(dt) {
                 tank.freezeDamageTimer = (tank.freezeDamageTimer || 1) - dt;
                 if(tank.freezeDamageTimer <= 0) {
                     const coldDamage = Math.round(6 + tank.freezeLevel * 14);
-                    applyDirectDamage(tank, coldDamage, null);
+                    applyDirectDamage(tank, coldDamage, null, '引擎冻结');
                     if(tank === player) showDamageNumber(tank.x, tank.y - 35, coldDamage);
                     tank.freezeDamageTimer = 1;
                 }
@@ -1057,7 +1072,7 @@ function updateStatusEffects(tank, dt) {
         tank.toxinTickTimer -= dt;
         if(tank.toxinTickTimer <= 0) {
             tank.toxinTickTimer += 1;
-            applyDirectDamage(tank, tank.toxinDamage || 0, null);
+            applyDirectDamage(tank, tank.toxinDamage || 0, null, '毒素伤害');
         }
         if(tank.toxinDebuffTimer <= 0) tank.toxinSlow = 0;
     }
@@ -1066,7 +1081,7 @@ function updateStatusEffects(tank, dt) {
         tank.burnTickTimer -= dt;
         if(tank.burnTickTimer <= 0) {
             tank.burnTickTimer += 1;
-            applyDirectDamage(tank, tank.burnDamage || 0, null);
+            applyDirectDamage(tank, tank.burnDamage || 0, null, '燃烧伤害');
         }
     }
 }
@@ -1154,56 +1169,62 @@ function checkWinCondition() {
 }
 
 function endGame(reason) {
+    if(gameState === 'ended' || gameState === 'replay') return;
+    if(reason === 'playerDead' && typeof startCombatReplay === 'function' && startCombatReplay(reason)) return;
+    finishEndGame(reason);
+}
+
+function finishEndGame(reason) {
     if(gameState === 'ended') return;
-    endMatchStats(reason === 'victory' || reason === 'defenseVictory' ? 'victory' : 'defeat');
+    const winner = typeof getWinningScoreTeam === 'function' ? getWinningScoreTeam() : (reason === 'victory' ? 'blue' : 'red');
     gameState = 'ended';
-    const msg = document.getElementById('message');
-    if(!msg) return;
-    let text = '', color = '';
-    if(reason === 'victory') {
-        // [修复] 根据模式显示不同的胜利文本
-        if(gameMode === 'infection') {
-            text = '🎉 胜利！<br>所有感染者已被消灭！';
-        } else if(gameMode === 'storm') {
-            text = '🎉 胜利！<br>你活到了最后！';
-        } else if(gameMode === 'ctf') {
-            text = '🎉 胜利！<br>先得3分获胜！';
-        } else {
-            text = '🎉 胜利！<br>敌军基地已被摧毁！';
-        }
-        color = '#00ff88';
+    if(typeof stopEngineAudio === 'function') stopEngineAudio();
+    const overlay = document.getElementById('matchResultOverlay');
+    const title = document.getElementById('matchResultTitle');
+    const blueScore = document.getElementById('resultBlueScore');
+    const redScore = document.getElementById('resultRedScore');
+    if(blueScore) blueScore.textContent = teamScores.blue.toLocaleString('zh-CN');
+    if(redScore) redScore.textContent = teamScores.red.toLocaleString('zh-CN');
+    if(title) {
+        title.textContent = winner === 'draw' ? '平局' : winner === 'blue' ? '蓝方胜利' : '红方胜利';
+        title.style.color = winner === 'draw' ? '#ffd86b' : winner === 'blue' ? '#66b7ff' : '#ff7474';
     }
-    else if(reason === 'playerDead') {
-        if(gameMode === 'infection') {
-            text = '💀 你阵亡了<br>被感染者同化！';
-        } else if(gameMode === 'storm') {
-            text = '💀 你阵亡了<br>毒圈或敌人夺走了你的生命！';
-        } else if(gameMode === 'ctf') {
-            text = '💀 你阵亡了<br>夺旗失败！';
-        } else {
-            text = '💀 你阵亡了<br>战斗失败';
-        }
-        color = '#ff4444';
+    if(overlay) overlay.classList.add('active');
+    // 成就存档异常不应阻止胜负界面出现。
+    try {
+        endMatchStats(winner === 'blue' ? 'victory' : 'defeat');
+    } catch(error) {
+        console.warn('[RESULT] match statistics could not be saved:', error);
     }
-    else if(reason === 'baseDestroyed') { text = '🏴 基地被毁<br>战斗失败'; color = '#ff4444'; }
-    else if(reason === 'time') {
-        const blueCount = outposts.filter(o => o.owner === 'blue').length;
-        const redCount = outposts.filter(o => o.owner === 'red').length;
-        if(blueCount > redCount) { text = `🎉 时间到！<br>蓝方据点更多 (${blueCount}:${redCount}) 胜利！`; color = '#00ff88'; }
-        else if(redCount > blueCount) { text = `🏴 时间到！<br>红方据点更多 (${redCount}:${blueCount}) 失败！`; color = '#ff4444'; }
-        else { text = `⏰ 时间到！<br>平局 (${blueCount}:${redCount})`; color = '#ffaa00'; }
-    } else if(reason === 'defenseVictory') { text = '🎉 坚守成功！<br>蓝方撑过了3分钟！'; color = '#00ff88'; }
-    else if(reason === 'defenseFailAllDead') { text = '💀 全军覆没！<br>蓝方坦克全部阵亡'; color = '#ff4444'; }
-    else if(reason === 'defenseFailBase') { text = '🏴 基地沦陷！<br>防守失败'; color = '#ff4444'; }
-    msg.innerHTML = text + '<br><button onclick="resetGame()">再来一局</button>';
-    msg.style.color = color;
-    msg.style.display = 'block';
+}
+
+function returnToHome() { resetGame(); }
+
+function restartLastGame() {
+    if(!lastMatchSetup) { resetGame(); return; }
+    const setup = { ...lastMatchSetup };
+    resetGame();
+    currentMap = setup.currentMap;
+    selectGameMode(setup.gameMode);
+    selectedTank = setup.selectedTank;
+    const values = { ammoSlider: setup.ammo, mgSlider: setup.mg, aaSlider: setup.aa };
+    Object.entries(values).forEach(([id, value]) => { const element = document.getElementById(id); if(element) element.value = value; });
+    const dayNight = document.getElementById('dayNight'); if(dayNight) dayNight.value = setup.dayNight;
+    const difficulty = document.getElementById('difficulty'); if(difficulty) difficulty.value = setup.difficulty;
+    const viewMode = document.getElementById('viewMode'); if(viewMode) viewMode.value = setup.viewMode;
+    const mapSelect = document.getElementById('mapSelect'); if(mapSelect) mapSelect.value = setup.currentMap;
+    ['ammo', 'mg', 'aa'].forEach(key => { const output = document.getElementById(`${key}Value`); if(output) output.textContent = setup[key]; });
+    const startButton = document.getElementById('startBtn'); if(startButton) startButton.disabled = false;
+    startGame();
 }
 
 function resetGame() {
     console.log('[RESET] 游戏重置开始');
     // 清理游戏状态
     gameState = 'start';
+    helicopterLiftInput = 0;
+    if(typeof resetCombatReplay === 'function') resetCombatReplay();
+    if(typeof stopEngineAudio === 'function') stopEngineAudio();
     selectedTank = null;
     allies = []; enemies = []; bullets = []; particles = []; exhaustTrails = [];
     trailEffects = []; damageNumbers = []; outposts = []; aiTanks = []; player = null;
@@ -1221,6 +1242,8 @@ function resetGame() {
     document.getElementById('menu').style.display = 'none';
     document.getElementById('startScreen').style.display = 'flex';
     document.getElementById('message').style.display = 'none';
+    const resultOverlay = document.getElementById('matchResultOverlay');
+    if(resultOverlay) resultOverlay.classList.remove('active');
     document.getElementById('startBtn').disabled = true;
     const threeHudLayer = document.getElementById('threeHudLayer');
     const threeThreatBorder = document.getElementById('threeThreatBorder');

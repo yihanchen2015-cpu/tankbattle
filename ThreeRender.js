@@ -39,9 +39,9 @@ function initThreeRenderer() {
     if(!targetCanvas) return false;
     try {
         const renderer = new THREE.WebGLRenderer({ canvas: targetCanvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, touchControlMode ? 1 : 1.25));
         renderer.setSize(window.innerWidth, window.innerHeight, false);
-        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.enabled = !touchControlMode;
         renderer.shadowMap.type = THREE.PCFShadowMap;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.05;
@@ -81,7 +81,7 @@ function resizeThreeRenderer() {
     if(!threeView.initialized) return;
     const width = Math.max(1, window.innerWidth);
     const height = Math.max(1, window.innerHeight);
-    threeView.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+    threeView.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, touchControlMode ? 1 : 1.25));
     threeView.renderer.setSize(width, height, false);
     threeView.camera.aspect = width / height;
     threeView.camera.updateProjectionMatrix();
@@ -308,9 +308,8 @@ function buildThreeTerrain() {
 function buildThreeObstacles() {
     obstacles.forEach((obs, index) => {
         const center = threeWorldPosition(obs.x + obs.w / 2, obs.y + obs.h / 2, 0);
-        const height = obs.type === 'building'
-            ? (52 + (obs.floors || 4) * 18) * THREE_WORLD_SCALE
-            : Math.max(35, Math.min(obs.w, obs.h) * (obs.type === 'tree' ? 0.9 : 0.58)) * THREE_WORLD_SCALE;
+        const height = (typeof getObstacleWorldHeight === 'function' ? getObstacleWorldHeight(obs)
+            : (obs.type === 'building' ? 52 + (obs.floors || 4) * 18 : Math.max(35, Math.min(obs.w, obs.h) * 0.58))) * THREE_WORLD_SCALE;
         const color = obs.type === 'building' ? (index % 2 ? 0x58616a : 0x6b737b)
             : (obs.type === 'tree' ? 0x2f7434 : (obs.type === 'ice' ? 0x9fc7d8 : (obs.type === 'rock' ? 0x8a633a : 0x5a4328)));
         center.y = height / 2;
@@ -407,8 +406,17 @@ function createThreeTank(tank) {
         rotor.position.y = 2;
         const tailRotor = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.6, 0.25), bladeMaterial.clone());
         tailRotor.position.set(-7.2, 0.5, 0);
-        group.add(fuselage, cockpit, tail, rotor, tailRotor);
+        const fire = new THREE.Group();
+        const outerFlame = new THREE.Mesh(new THREE.ConeGeometry(0.9, 3.2, 9), makeStandardMaterial(0xff4b16, { emissive: 0xff2200, emissiveIntensity: 2.4 }));
+        const innerFlame = new THREE.Mesh(new THREE.ConeGeometry(0.45, 2.2, 8), makeStandardMaterial(0xffdd42, { emissive: 0xff8a00, emissiveIntensity: 2.8 }));
+        outerFlame.rotation.z = Math.PI / 2;
+        innerFlame.rotation.z = Math.PI / 2;
+        fire.position.set(-4.6, 1.0, 0);
+        fire.add(outerFlame, innerFlame);
+        fire.visible = false;
+        group.add(fuselage, cockpit, tail, rotor, tailRotor, fire);
         group.userData.rotor = rotor;
+        group.userData.fire = fire;
     } else {
         const bodyMaterial = makeStandardMaterial(bodyColor, { metalness: 0.3, roughness: 0.55 });
         const trackMaterial = makeStandardMaterial(0x171a1c, { metalness: 0.22, roughness: 0.8 });
@@ -420,14 +428,20 @@ function createThreeTank(tank) {
         rightTrack.position.set(0, 0.65, hullWidth / 2);
         const hull = new THREE.Mesh(new THREE.BoxGeometry(hullLength, 1.35, hullWidth), bodyMaterial);
         hull.position.y = 1.25;
+        const upperHull = new THREE.Mesh(new THREE.BoxGeometry(hullLength * 0.72, 0.72, hullWidth * 0.78), makeStandardMaterial(bodyColor.clone().offsetHSL(0, 0, 0.08), { metalness: 0.34, roughness: 0.48 }));
+        upperHull.position.set(0.25, 2.08, 0);
         const turretPivot = new THREE.Group();
         turretPivot.position.y = 2.25;
-        const turret = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 1.7, 1.0, 12), makeStandardMaterial(accentColor, { metalness: 0.34, roughness: 0.48 }));
+        const turret = new THREE.Mesh(new THREE.CylinderGeometry(1.38, 1.72, 1.05, 8), makeStandardMaterial(accentColor, { metalness: 0.38, roughness: 0.42 }));
         const barrelLength = Math.max(3.8, (tank.turretSize || 28) * THREE_WORLD_SCALE + 2.2);
         const barrel = new THREE.Mesh(new THREE.BoxGeometry(barrelLength, 0.38, 0.42), makeStandardMaterial(0x30383d, { metalness: 0.48 }));
         barrel.position.set(barrelLength / 2 + 0.65, 0.18, 0);
-        turretPivot.add(turret, barrel);
-        group.add(leftTrack, rightTrack, hull, turretPivot);
+        const muzzleBrake = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.62, 0.72), makeStandardMaterial(0x171c20, { metalness: 0.58, roughness: 0.38 }));
+        muzzleBrake.position.set(barrelLength + 0.75, 0.18, 0);
+        const hatch = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 0.25, 10), makeStandardMaterial(0x22292d, { metalness: 0.4 }));
+        hatch.position.set(-0.25, 0.67, 0);
+        turretPivot.add(turret, barrel, muzzleBrake, hatch);
+        group.add(leftTrack, rightTrack, hull, upperHull, turretPivot);
         group.userData.turretPivot = turretPivot;
         const wash = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 0.35, 32), makeStandardMaterial(0x218fc0, { transparent: true, opacity: 0.58, roughness: 0.2 }));
         wash.position.y = 1.25;
@@ -468,6 +482,13 @@ function syncThreeTanks(now) {
         mesh.rotation.y = -tank.angle;
         if(mesh.userData.turretPivot) mesh.userData.turretPivot.rotation.y = -(tank.turretAngle - tank.angle);
         if(mesh.userData.rotor) mesh.userData.rotor.rotation.y = now * 0.022;
+        if(mesh.userData.fire) {
+            mesh.userData.fire.visible = !!tank.helicopterOnFire;
+            if(tank.helicopterOnFire) {
+                const flicker = 0.82 + Math.sin(now * 0.032 + tank.x) * 0.22;
+                mesh.userData.fire.scale.set(flicker, 0.85 + Math.random() * 0.3, flicker);
+            }
+        }
         if(mesh.userData.waterWash) mesh.userData.waterWash.visible = inWater;
         const opacity = tank.ghostActive && !tank.ghostRevealed ? 0.28 : 1;
         if(mesh.userData.lastOpacity !== opacity) {
@@ -716,6 +737,11 @@ function updateThreeCamera(dt) {
         vehicleHeight + height,
         center.z - Math.sin(azimuth) * distance
     );
+    if(typeof getScreenShakeOffset === 'function') {
+        const shake = getScreenShakeOffset(THREE_WORLD_SCALE * 0.75);
+        desired.x += shake.x;
+        desired.y += shake.y * 0.45;
+    }
     const lookAhead = (player.isFlying ? 150 : 125) * THREE_WORLD_SCALE;
     const target = new THREE.Vector3(
         center.x + Math.cos(azimuth) * lookAhead,

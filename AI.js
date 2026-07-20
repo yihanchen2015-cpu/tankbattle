@@ -7,6 +7,8 @@ function updateAITank(tank, dt) {
     if (tank.mgCooldown > 0) tank.mgCooldown -= dt;
     if (tank.aaCooldown > 0) tank.aaCooldown -= dt;
     updateStatusEffects(tank, dt);
+    if(tank.isFlying && typeof updateHelicopterFlight === 'function') updateHelicopterFlight(tank, dt);
+    if(tank.dead) return;
     
     tank.pathTimer = (tank.pathTimer || 0) - dt;
     tank.aiStateTimer = (tank.aiStateTimer || 0) - dt;
@@ -360,10 +362,10 @@ function updateAITank(tank, dt) {
             const dodgeSpeed = getActualSpeed(tank) * 0.6;
             const dodgeX = tank.x + Math.cos(dodgeAngle) * dodgeSpeed * 60 * dt;
             const dodgeY = tank.y + Math.sin(dodgeAngle) * dodgeSpeed * 60 * dt;
-            if(tank.canPassObstacles || !checkObstacleCollision(dodgeX, dodgeY, CONFIG.tankSize, tank)) {
+            if((tank.canPassObstacles && !tank.isFlying) || !checkObstacleCollision(dodgeX, dodgeY, CONFIG.tankSize, tank)) {
                 tank.x = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapWidth - CONFIG.tankSize, dodgeX));
                 tank.y = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapHeight - CONFIG.tankSize, dodgeY));
-            }
+            } else if(tank.isFlying && typeof registerHelicopterCollision === 'function') registerHelicopterCollision(tank);
         }
 
         // 每3帧检查一次视线，减少开销
@@ -467,10 +469,11 @@ function updateAITank(tank, dt) {
             const actualSpeed = getActualSpeed(tank);
             const newX = tank.x + Math.cos(tank.angle) * actualSpeed * 60 * dt;
             const newY = tank.y + Math.sin(tank.angle) * actualSpeed * 60 * dt;
-            if(tank.canPassObstacles || !checkObstacleCollision(newX, newY, CONFIG.tankSize, tank)) {
+            if((tank.canPassObstacles && !tank.isFlying) || !checkObstacleCollision(newX, newY, CONFIG.tankSize, tank)) {
                 tank.x = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapWidth - CONFIG.tankSize, newX));
                 tank.y = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapHeight - CONFIG.tankSize, newY));
             } else {
+                if(tank.isFlying && typeof registerHelicopterCollision === 'function') registerHelicopterCollision(tank);
                 tank.angle += (Math.random() - 0.5) * 1.0;
             }
             if(Math.random() < 0.25) addExhaustTrail(tank);

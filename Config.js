@@ -21,6 +21,13 @@ const CONFIG = {
     aaCooldown: 0.6,
     aaArcHeight: 80,
     helicopterAltitude: 120,
+    helicopterMinAltitude: 35,
+    helicopterMaxAltitude: 280,
+    helicopterClimbSpeed: 95,
+    helicopterCollisionDamage: 45,
+    helicopterIgniteHits: 4,
+    helicopterFireDuration: 12,
+    helicopterFireDps: 24,
     aaVerticalSpeed: 240,
     aaGravity: 192,
     aaHitHeightTolerance: 62,
@@ -234,12 +241,16 @@ let gameState = 'start';
 let selectedTank = null;
 let gameMode = 'classic';
 let gameConfig = {};
+let lastMatchSetup = null;
 let camera = { x: 0, y: 0, zoom: 1 };
 let gameTime = CONFIG.gameTime;
 let lastTime = 0;
 let keys = {};
 let mouse = { x: 0, y: 0, down: false, worldX: 0, worldY: 0 };
 let joystick = { active: false, dx: 0, dy: 0 };
+let helicopterLiftInput = 0;
+let touchControlMode = false;
+let mobileDenseCombatMode = false;
 
 let player = null;
 

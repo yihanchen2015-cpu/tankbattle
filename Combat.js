@@ -4,6 +4,7 @@ function fireBullet(tank, type) {
     if (type === 'mg' && tank.mg <= 0 && !(tank.stormActive && tank.tankType === 'duoduo_ifv')) return;
     if (type === 'aa' && (tank.aa || 0) <= 0) return;
     if(tank.isPlayer) recordShot(type);
+    tank.lastFiredWeapon = type;
     
     if(tank.ghostActive && tank.ultimateData && tank.ultimateData.revealOnFire) tank.ghostRevealed = true;
     let speedMult = 1, spreadMult = 1, damageMult = 1, infiniteAmmo = false;
@@ -124,7 +125,7 @@ function updateBullets(dt) {
     }
 }
 
-function applyDirectDamage(tank, damage, source) {
+function applyDirectDamage(tank, damage, source, cause = null, projectile = null) {
     if(!tank || tank.dead || damage <= 0) return 0;
     const preHitHp = tank.hp;
     let remaining = damage * Math.max(0, 1 - (tank.damageReduction || 0));
@@ -134,14 +135,23 @@ function applyDirectDamage(tank, damage, source) {
         remaining -= absorbed;
         if(tank.shieldHp <= 0) tank.shieldActive = false;
     }
-    if(remaining > 0) tank.hp -= remaining;
+    if(remaining > 0) {
+        tank.hp -= remaining;
+        if(tank === player && typeof recordPlayerDamageSource === 'function') recordPlayerDamageSource(remaining, source, cause, projectile);
+    }
     if(tank.hp <= 0 && !tank.dead) {
         if(source) recordKill(source, tank, { preHitHp, damage, weapon: source.isPlayer ? currentWeapon : null });
         tank.dead = true;
         createParticles(tank.x, tank.y, 40, tank.color, 3);
         createParticles(tank.x, tank.y, 25, '#ffaa00', 2);
+        if(tank === player && typeof captureCombatReplayFrame === 'function') captureCombatReplayFrame(true);
+        if(typeof playWorldSound === 'function') playWorldSound(tank === player ? 'death' : 'kill', tank.x, tank.y, tank === player ? 1.25 : 1);
     }
     return remaining;
+}
+
+function getWeaponCause(type) {
+    return ({ shell: '主炮', mg: '机枪', aa: '高射炮', rocket: '火箭' })[type] || null;
 }
 
 function explodeRocket(b) {
@@ -153,7 +163,7 @@ function explodeRocket(b) {
         if(distance > radius) return;
         const falloff = Math.max(0.35, 1 - distance / radius);
         const armor = Math.max(0.25, tank.armor * (1 + (tank.armorBoost || 0)));
-        const dealt = applyDirectDamage(tank, b.damage * falloff / armor, b.owner);
+        const dealt = applyDirectDamage(tank, b.damage * falloff / armor, b.owner, getWeaponCause(b.type), b);
         if(dealt > 0) showDamageNumber(tank.x, tank.y - 30, Math.floor(dealt));
         tank.burnTimer = Math.max(tank.burnTimer || 0, b.burnDuration || 0);
         tank.burnTickTimer = 1;
@@ -209,15 +219,15 @@ function checkCollisions() {
                 else if(!b.armorIgnore) damage = damage / Math.max(0.25, actualArmor);
                 if(tank.reflectActive && tank.fortressActive && b.owner) {
                     const reflectDmg = damage * (tank.ultimateData.reflectDamage || 0.3);
-                    applyDirectDamage(b.owner, reflectDmg, tank); showDamageNumber(b.owner.x, b.owner.y - 30, Math.floor(reflectDmg));
+                    applyDirectDamage(b.owner, reflectDmg, tank, '反射伤害'); showDamageNumber(b.owner.x, b.owner.y - 30, Math.floor(reflectDmg));
                     createParticles(b.owner.x, b.owner.y, 5, '#ff0000', 1);
                 }
                 if(tank.shieldProtected && tank.shieldOwner && !tank.shieldOwner.dead) {
                     const redirect = tank.shieldOwner.ultimateData.damageRedirect || 0.4;
                     const redirectDamage = damage * redirect;
-                    applyDirectDamage(tank, damage - redirectDamage, b.owner);
-                    applyDirectDamage(tank.shieldOwner, redirectDamage, b.owner);
-                } else applyDirectDamage(tank, damage, b.owner);
+                    applyDirectDamage(tank, damage - redirectDamage, b.owner, getWeaponCause(b.type), b);
+                    applyDirectDamage(tank.shieldOwner, redirectDamage, b.owner, getWeaponCause(b.type), b);
+                } else applyDirectDamage(tank, damage, b.owner, getWeaponCause(b.type), b);
                 if(b.toxinData && Math.random() < (b.toxinData.chance || 1)) {
                     tank.toxinDebuffTimer = Math.max(tank.toxinDebuffTimer || 0, b.toxinData.duration || 0);
                     tank.toxinTickTimer = b.toxinData.interval || 1;
@@ -231,7 +241,7 @@ function checkCollisions() {
                         if(distance > b.explosionRadius) return;
                         const splash = b.damage * 0.5 * Math.max(0.25, 1 - distance / b.explosionRadius);
                         const splashArmor = Math.max(0.25, other.armor * (1 + (other.armorBoost || 0)));
-                        applyDirectDamage(other, splash / splashArmor, b.owner);
+                        applyDirectDamage(other, splash / splashArmor, b.owner, `${getWeaponCause(b.type) || '爆炸'}溅射`, b);
                     });
                 }
                 createParticles(b.x, b.y, 5, '#ff4400', 1);
@@ -278,7 +288,77 @@ function lineOfSight(x1, y1, x2, y2) {
     return true;
 }
 
+function getObstacleWorldHeight(obs) {
+    if(!obs) return 0;
+    if(obs.type === 'building') return 52 + (obs.floors || 4) * 18;
+    if(obs.type === 'tree') return Math.max(35, Math.min(obs.w, obs.h) * 0.9);
+    return Math.max(35, Math.min(obs.w, obs.h) * 0.58);
+}
+
+function flyingTankHitsObstacle(x, y, z, radius) {
+    const bodyBottom = z - 24;
+    for(const obs of obstacles) {
+        const closestX = Math.max(obs.x, Math.min(x, obs.x + obs.w));
+        const closestY = Math.max(obs.y, Math.min(y, obs.y + obs.h));
+        if(Math.hypot(x - closestX, y - closestY) < radius && bodyBottom < getObstacleWorldHeight(obs)) return true;
+    }
+    return false;
+}
+
+function registerHelicopterCollision(tank) {
+    if(!tank || !tank.isFlying || tank.helicopterCollisionCooldown > 0) return;
+    tank.helicopterCollisionCooldown = 0.42;
+    tank.helicopterCollisionReset = 6;
+    tank.helicopterCollisionHits = (tank.helicopterCollisionHits || 0) + 1;
+    const dealt = applyDirectDamage(tank, CONFIG.helicopterCollisionDamage, null, '障碍物撞击');
+    if(dealt > 0) showDamageNumber(tank.x, tank.y - 30, Math.round(dealt));
+    createParticles(tank.x, tank.y, 12, '#ff8a32', 1.2);
+    if(typeof playWorldSound === 'function') playWorldSound('hit', tank.x, tank.y, tank === player ? 1 : 0.65);
+    if(tank.helicopterCollisionHits >= CONFIG.helicopterIgniteHits && !tank.helicopterOnFire) {
+        tank.helicopterOnFire = true;
+        tank.helicopterFireTimer = CONFIG.helicopterFireDuration;
+        tank.helicopterFireDamageTick = 0;
+        if(tank === player) showMessage('🔥 连续撞击导致直升机起火！', '#ff5522');
+    }
+}
+
+function updateHelicopterFlight(tank, dt) {
+    if(!tank || !tank.isFlying) return;
+    tank.helicopterCollisionCooldown = Math.max(0, (tank.helicopterCollisionCooldown || 0) - dt);
+    tank.helicopterCollisionReset = Math.max(0, (tank.helicopterCollisionReset || 0) - dt);
+    if(tank.helicopterCollisionReset <= 0) tank.helicopterCollisionHits = 0;
+
+    if(tank.isPlayer) {
+        let lift = helicopterLiftInput;
+        if(keys.KeyE || keys.Space) lift = 1;
+        if(keys.KeyQ || keys.ShiftLeft || keys.ShiftRight) lift = -1;
+        if(lift !== 0) {
+            const nextZ = Math.max(CONFIG.helicopterMinAltitude, Math.min(CONFIG.helicopterMaxAltitude,
+                (tank.z || CONFIG.helicopterAltitude) + lift * CONFIG.helicopterClimbSpeed * dt));
+            if(lift < 0 && flyingTankHitsObstacle(tank.x, tank.y, nextZ, CONFIG.tankSize * 0.8)) registerHelicopterCollision(tank);
+            else tank.z = nextZ;
+        }
+    }
+
+    if(tank.helicopterOnFire) {
+        tank.helicopterFireTimer -= dt;
+        tank.helicopterFireDamageTick = (tank.helicopterFireDamageTick || 0) - dt;
+        if(tank.helicopterFireDamageTick <= 0) {
+            tank.helicopterFireDamageTick = 0.5;
+            const damage = CONFIG.helicopterFireDps * 0.5;
+            applyDirectDamage(tank, damage, null, '直升机失火');
+            showDamageNumber(tank.x, tank.y - 30, Math.round(damage));
+        }
+        if(Math.random() < 0.35) createParticles(tank.x, tank.y, 2, '#ff5a20', 0.9);
+        if(tank.helicopterFireTimer <= 0) {
+            tank.helicopterOnFire = false;
+            tank.helicopterCollisionHits = 0;
+        }
+    }
+}
+
 function checkObstacleCollision(x, y, radius, tank = null) {
+    if(tank && tank.isFlying) return flyingTankHitsObstacle(x, y, tank.z || CONFIG.helicopterAltitude, radius * 0.82);
     if(tank && !canTankCrossWater(tank) && isPositionInWater(x, y, radius * 0.75)) return true;
     for(let obs of obstacles) {
         const closestX = Math.max(obs.x, Math.min(x, obs.x + obs.w));
@@ -346,6 +426,7 @@ function updateOutposts(dt) {
             const oldOwner = op.owner;
             if(oldOwner !== op.capturingTeam) {
                 recordOutpostCapture(op.capturingTeam);
+                if(typeof awardOutpostScore === 'function') awardOutpostScore(op.capturingTeam, op.name);
             }
             op.owner = op.capturingTeam;
             op.captureProgress = 0;
