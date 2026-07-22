@@ -8,6 +8,7 @@ function startGame() {
     resetMatchStats();
     if(typeof resetTeamScores === 'function') resetTeamScores();
     if(typeof resetCombatReplay === 'function') resetCombatReplay();
+    if(typeof resetBattleSystems === 'function') resetBattleSystems();
     recordTankUsed(selectedTank);
     const tankData = TANKS[selectedTank];
     const ammo = parseInt(document.getElementById('ammoSlider').value);
@@ -21,7 +22,7 @@ function startGame() {
     const viewMode = document.getElementById('viewMode') ? document.getElementById('viewMode').value : '2d';
     gameConfig = { dayNight, difficulty, ammo, mg, aa, mode: gameMode, viewMode };
     lastMatchSetup = { selectedTank, currentMap, gameMode, ammo, mg, aa, dayNight, difficulty, viewMode };
-    currentWeapon = 'shell';
+    currentWeapon = selectedTank === 'niuniu_heli' ? 'bomb' : 'shell';
     document.getElementById('menu').classList.remove('active');
     document.getElementById('menu').style.display = 'none';
     document.getElementById('gameUI').classList.add('active');
@@ -43,6 +44,9 @@ function startGame() {
     generateMap();
     initPathGrid();
     spawnTanks(tankData, ammo, mg, aa);
+    if(typeof distributeFactoryInitialTanks === 'function') distributeFactoryInitialTanks();
+    if(typeof initializeSneakRescueMechanic === 'function') initializeSneakRescueMechanic();
+    if(typeof updateWeaponHudMode === 'function') updateWeaponHudMode(player);
     initOutposts();
     initSpatialGrid();
     camera.zoom = (MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic).cameraZoom || 1;
@@ -162,6 +166,23 @@ const MAP_TEMPLATES = {
             {x: 3500, y: 6100}
         ],
         baseOffset: 350, description: '水域分割岛屿，桥梁要道与树林'
+    },
+    volcano: {
+        name: '火山熔岩', width: 8000, height: 7000,
+        obstacles: 62, groundColor: '#292625', obstacleType: 'volcanicRock', outposts: [
+            {x: 1500, y: 1450}, {x: 6500, y: 1450}, {x: 1900, y: 3500},
+            {x: 4000, y: 3500}, {x: 6100, y: 3500}, {x: 1500, y: 5550}, {x: 6500, y: 5550}
+        ],
+        baseOffset: 420, description: '动态熔岩河、随机喷发与边缘冷却结晶'
+    },
+    factory: {
+        name: '废弃工厂', width: 3000, height: 3000,
+        obstacles: 0, groundColor: '#44474a', obstacleType: 'factoryWall', outposts: [
+            {x: 1500, y: 2200, floor: 0, name: 'B1'},
+            {x: 1500, y: 1500, floor: 1, name: '1F'},
+            {x: 1500, y: 800, floor: 2, name: '2F'}
+        ],
+        baseOffset: 220, description: '室内 B1/1F/2F 三层战场，传送带、维修机器人与起重机'
     }
 };
 
@@ -205,16 +226,27 @@ function generateMap() {
         x: baseOffset, y: CONFIG.mapHeight/2 - CONFIG.baseSize/2,
         w: CONFIG.baseSize, h: CONFIG.baseSize,
         hp: CONFIG.baseHp, maxHp: CONFIG.baseHp, team: 'blue',
-        defenseCooldown: 0
+        defenseCooldown: 0, rageActive: false, rageAnnounced: false
     };
     bases.red = {
         x: CONFIG.mapWidth - baseOffset - CONFIG.baseSize, y: CONFIG.mapHeight/2 - CONFIG.baseSize/2,
         w: CONFIG.baseSize, h: CONFIG.baseSize,
         hp: CONFIG.baseHp, maxHp: CONFIG.baseHp, team: 'red',
-        defenseCooldown: 0
+        defenseCooldown: 0, rageActive: false, rageAnnounced: false
     };
+    if(currentMap === 'factory') {
+        const floorZ = typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(1) : 160;
+        bases.blue.x = 650;
+        bases.blue.y = 150;
+        bases.red.x = CONFIG.mapWidth - 650 - CONFIG.baseSize;
+        bases.red.y = CONFIG.mapHeight - 150 - CONFIG.baseSize;
+        bases.blue.factoryFloor = 1; bases.blue.z = floorZ;
+        bases.red.factoryFloor = 1; bases.red.z = floorZ;
+    }
     outposts = outpostPositions.map((pos, i) => ({
-        x: pos.x, y: pos.y, name: String.fromCharCode(65 + i),
+        x: pos.x, y: pos.y, name: pos.name || String.fromCharCode(65 + i),
+        factoryFloor: Number.isInteger(pos.floor) ? pos.floor : null,
+        z: Number.isInteger(pos.floor) && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(pos.floor) : 0,
         owner: null, captureProgress: 0, capturingTeam: null, radius: CONFIG.outpostRadius
     }));
     if(gameMode === 'defense') outposts.forEach(op => op.owner = 'red');
@@ -222,7 +254,11 @@ function generateMap() {
 
     if(currentMap === 'island') generateIslandTerrain();
 
+    if(typeof initializeMapMechanics === 'function') initializeMapMechanics();
+
+    if(typeof initializeDestructibleTerrain === 'function') initializeDestructibleTerrain();
     generateMapElements();
+    if(typeof finalizeMapMechanicsElements === 'function') finalizeMapMechanicsElements();
 }
 
 function generateIslandTerrain() {
@@ -248,8 +284,22 @@ function addIslandBridge(a, b) {
         type: 'bridge', centered: true,
         x: (a.x + b.x) / 2, y: (a.y + b.y) / 2,
         w: Math.max(420, distance - 1050), h: 210,
-        angle: Math.atan2(dy, dx)
+        angle: Math.atan2(dy, dx),
+        archHeight: 72,
+        deckThickness: 18
     });
+}
+
+function getBridgeHeightAt(x, y) {
+    let height = 0;
+    terrainZones.filter(zone => zone.type === 'bridge' && pointInTerrainZone(x, y, zone)).forEach(zone => {
+        const cos = Math.cos(-(zone.angle || 0)), sin = Math.sin(-(zone.angle || 0));
+        const dx = x - zone.x, dy = y - zone.y;
+        const localX = dx * cos - dy * sin;
+        const normalized = Math.min(1, Math.abs(localX) / Math.max(1, zone.w / 2));
+        height = Math.max(height, (zone.archHeight || 0) * (1 - normalized * normalized));
+    });
+    return height;
 }
 
 function generateCityObstacles(outpostPositions) {
@@ -402,7 +452,7 @@ function spawnTanks(tankData, ammo, mg, aa) {
         }
         const tank = createTank(t, blueBaseX + (Math.random()-0.5)*300, blueBaseY + (Math.random()-0.5)*300, 'blue', false);
         tank.shells = aAmmo; tank.mg = aMG; 
-        tank.aa = Math.floor((t.maxAA || 15) * 0.5);
+        tank.aa = Math.floor((t.maxAA ?? 15) * 0.5);
         tank.apsCharges = CONFIG.apsCharges;
         tank.aiAggro = 0.4 + Math.random() * 0.4;
         tank.aiDodgeTimer = 0;
@@ -454,7 +504,7 @@ function spawnTanks(tankData, ammo, mg, aa) {
         tank.hp = Math.floor(tank.hp * diffMult);
         tank.maxHp = tank.hp;
         tank.shells = eAmmo; tank.mg = eMG; 
-        tank.aa = Math.floor((t.maxAA || 15) * 0.85);
+        tank.aa = Math.floor((t.maxAA ?? 15) * 0.85);
         tank.apsCharges = CONFIG.apsCharges;
         tank.aiAggro = 0.8 + Math.random() * 0.4;
         tank.aiDodgeTimer = 0;
@@ -490,9 +540,17 @@ function createTank(data, x, y, team, isPlayer) {
     }
     const id = Math.random().toString(36).substr(2, 9);
     return {
-        x, y, z: data.isFlying ? CONFIG.helicopterAltitude : 0,
+        x, y, z: data.isFlying ? CONFIG.helicopterAltitude : (currentMap === 'factory' && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(1) : 0),
+        factoryFloor: currentMap === 'factory' ? 1 : null,
+        factoryTransit: null,
+        factoryConnectorKey: null,
         angle: team === 'blue' ? 0 : Math.PI,
         turretAngle: team === 'blue' ? 0 : Math.PI,
+        gunElevation: data.isFlying ? 0 : CONFIG.shellDefaultElevation,
+        shellElevation: CONFIG.shellDefaultElevation,
+        aaElevation: CONFIG.aaDefaultElevation,
+        muzzleFlashTimer: 0,
+        muzzleFlashType: null,
         hp: data.hp, maxHp: data.maxHp,
         speed: data.speed, turnSpeed: data.turnSpeed,
         armor: data.armor, fireRate: data.fireRate,
@@ -507,10 +565,15 @@ function createTank(data, x, y, team, isPlayer) {
         helicopterFireTimer: 0,
         team, isPlayer,
         shells: 0, mg: 0, aa: 0,
-        maxShells: data.maxShells, maxMG: data.maxMG, maxAA: data.maxAA || 15,
+        maxShells: data.maxShells, maxMG: data.maxMG, maxAA: data.maxAA ?? 15,
         apsCharges: CONFIG.apsCharges, apsCooldown: 0,
         aaCooldown: 0,
         fireCooldown: 0, mgCooldown: 0,
+        repairCooldown: 0,
+        ammoRackExploded: false,
+        suddenDeathInfiniteAmmo: false,
+        ricochetSpeedBoost: 0,
+        ricochetSpeedBoostTimer: 0,
         turretSize: data.turretSize,
         dead: false, invincible: 3,
         target: null, pathTimer: 0, moveTarget: null, lastShotTime: 0,
@@ -527,6 +590,7 @@ function createTank(data, x, y, team, isPlayer) {
         ultimateCharging: false, ultimateChargeTimer: 0,
         speedBoost: 0, turnBoost: 0,
         shieldActive: false, shieldHp: 0, armorBoost: 0,
+        rescueShieldActive: false,
         canMove: true, trailDebuff: 0, turretSpeedMult: 1.0,
         shieldProtected: false, shieldOwner: null,
         ghostActive: false, ghostTimer: 0, ghostRevealed: false,
@@ -543,6 +607,9 @@ function createTank(data, x, y, team, isPlayer) {
         aiFlankTarget: null,
         mapSpeedBoost: 0,
         mapBoostTimer: 0,
+        mapArmorBonus: 0,
+        mapSlow: 0,
+        mapSlowTimer: 0,
         prevPos: {x: x, y: y},
         autoAimTimer: 0,
         autoAimTarget: null,
@@ -694,6 +761,10 @@ function update(dt) {
 
     gameTime -= dt;
     if(gameTime <= 0) {
+        if(typeof handleBattleTimeExpired === 'function' && handleBattleTimeExpired()) {
+            updateTimer();
+            return;
+        }
         if(gameMode === 'defense') endGame('defenseVictory');
         else if(gameMode === 'ctf') endGame(ctfScores.blue >= ctfScores.red ? 'victory' : 'playerDead');
         else if(gameMode === 'storm') {
@@ -724,6 +795,9 @@ function update(dt) {
     allies.forEach(t => { if(!t.dead) updateAITank(t, dt); });
     enemies.forEach(t => { if(!t.dead) updateAITank(t, dt); });
     updateEnvironment(dt);
+    if(typeof updateMapMechanics === 'function') updateMapMechanics(dt);
+    if(typeof updateBattleSystems === 'function') updateBattleSystems(dt);
+    if(typeof updateTerrainDestruction === 'function') updateTerrainDestruction(dt);
     updateBullets(dt);
     updateParticles(dt);
     updateExhaustTrails(dt);
@@ -776,7 +850,7 @@ function updateAutoAim(tank, dt) {
         findAutoAimTarget(tank);
     }
 
-    const autoAimRange = getMapVisionRange();
+    const autoAimRange = getMapVisionRange(tank);
     if (tank.autoAimTarget && (tank.autoAimTarget.dead ||
         Math.hypot(tank.autoAimTarget.x - tank.x, tank.autoAimTarget.y - tank.y) > autoAimRange)) {
         tank.autoAimTarget = null;
@@ -796,11 +870,12 @@ function findAutoAimTarget(tank) {
     let bestTarget = null;
     let bestScore = -Infinity;
 
-    const autoAimRange = getMapVisionRange();
+    const autoAimRange = getMapVisionRange(tank);
     enemyList.forEach(enemy => {
+        if(typeof areEntitiesOnSameFactoryFloor === 'function' && !areEntitiesOnSameFactoryFloor(tank, enemy)) return;
         const dist = Math.hypot(enemy.x - tank.x, enemy.y - tank.y);
         if (dist > autoAimRange) return;
-        const hasLOS = lineOfSight(tank.x, tank.y, enemy.x, enemy.y);
+        const hasLOS = lineOfSight(tank.x, tank.y, enemy.x, enemy.y, tank.factoryFloor);
         let score = 1000 - dist;
         if (hasLOS) score += 500;
         if (enemy.isPlayer) score += 300;
@@ -841,8 +916,9 @@ function getNearestEnemy(tank) {
                       [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])];
     let nearest = null;
     let minDist = Infinity;
-    const autoAimRange = getMapVisionRange();
+    const autoAimRange = getMapVisionRange(tank);
     enemyList.forEach(enemy => {
+        if(typeof areEntitiesOnSameFactoryFloor === 'function' && !areEntitiesOnSameFactoryFloor(tank, enemy)) return;
         const dist = Math.hypot(enemy.x - tank.x, enemy.y - tank.y);
         if (dist < minDist && dist < autoAimRange) {
             minDist = dist;
@@ -852,30 +928,48 @@ function getNearestEnemy(tank) {
     return nearest;
 }
 
-function getMapVisionRange() {
+function getMapVisionRange(tank = null) {
     if(currentMap === 'desert') return environmentState.sandstormActive ? 520 : 1800;
     return CONFIG.autoAimRange;
 }
 
 function updateBaseDefense(dt) {
     [bases.blue, bases.red].forEach(base => {
+        if(!base || base.hp <= 0) return;
         if(base.defenseCooldown > 0) base.defenseCooldown -= dt;
         const enemyList = base.team === 'blue' ? enemies.filter(e => !e.dead) : [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])];
-        let nearest = null, minDist = Infinity;
+        const rageThreshold = base.maxHp * CONFIG.baseRageThreshold;
+        if(!base.rageActive && base.hp <= rageThreshold) {
+            base.rageActive = true;
+            base.rageAnnounced = true;
+            base.defenseCooldown = Math.min(base.defenseCooldown, 0.25);
+            const centerX = base.x + base.w / 2, centerY = base.y + base.h / 2;
+            createParticles(centerX, centerY, 36, base.team === 'blue' ? '#44aaff' : '#ff3322', 2.4);
+            if(typeof addBattleAnnouncement === 'function') addBattleAnnouncement(base.team, `⚠ ${base.team === 'blue' ? '蓝方' : '红方'}基地进入残血狂暴！`);
+            if(typeof playWorldSound === 'function') playWorldSound('ammoRack', centerX, centerY, 0.72);
+        }
+        const candidates = [];
         enemyList.forEach(e => {
+            if(currentMap === 'factory' && typeof areEntitiesOnSameFactoryFloor === 'function' && !areEntitiesOnSameFactoryFloor(base, e)) return;
             const d = Math.hypot(e.x - (base.x + base.w/2), e.y - (base.y + base.h/2));
-            if(d < CONFIG.baseDefenseRange && d < minDist) { minDist = d; nearest = e; }
+            if(d < CONFIG.baseDefenseRange) candidates.push({ tank: e, distance: d });
         });
-        if(nearest && base.defenseCooldown <= 0) {
-            const angle = Math.atan2(nearest.y - (base.y + base.h/2), nearest.x - (base.x + base.w/2));
+        if(candidates.length && base.defenseCooldown <= 0) {
+            const target = base.rageActive
+                ? candidates.reduce((nearest, entry) => entry.distance < nearest.distance ? entry : nearest).tank
+                : candidates[Math.floor(Math.random() * candidates.length)].tank;
+            const angle = Math.atan2(target.y - (base.y + base.h/2), target.x - (base.x + base.w/2));
+            const damage = CONFIG.baseDefenseDamage * (base.rageActive ? CONFIG.baseRageDamageMultiplier : 1);
             bullets.push({
                 x: base.x + base.w/2 + Math.cos(angle) * 60,
                 y: base.y + base.h/2 + Math.sin(angle) * 60,
+                z: (base.z || 0) + 24,
                 vx: Math.cos(angle) * 15, vy: Math.sin(angle) * 15,
-                damage: CONFIG.baseDefenseDamage, team: base.team,
-                type: 'shell', owner: null, life: 2.0, hitTanks: new Set()
+                damage, team: base.team, baseDefense: true, baseRage: !!base.rageActive,
+                type: 'shell', owner: null, life: 2.0, hitTanks: new Set(), maxTargetHits: 1
             });
-            base.defenseCooldown = CONFIG.baseDefenseCooldown;
+            base.turretAngle = angle;
+            base.defenseCooldown = CONFIG.baseDefenseCooldown / (base.rageActive ? CONFIG.baseRageFireRateMultiplier : 1);
         }
     });
 }
@@ -910,21 +1004,32 @@ function updateTank(tank, dt) {
         tank.turretAngle = Math.atan2(worldMouseY - tank.y, worldMouseX - tank.x);
         if(mouse.down) {
             if(currentWeapon === 'shell') {
-                if(tank.fireCooldown <= 0 && tank.shells > 0) {
+                if(tank.fireCooldown <= 0 && (tank.shells > 0 || tank.suddenDeathInfiniteAmmo)) {
                     fireBullet(tank, 'shell');
                     tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
                     if(navigator.vibrate) navigator.vibrate(30);
                 }
             } else if(currentWeapon === 'mg') {
-                if(tank.mgCooldown <= 0 && tank.mg > 0) {
+                if(tank.mgCooldown <= 0 && (tank.mg > 0 || tank.suddenDeathInfiniteAmmo)) {
                     fireBullet(tank, 'mg');
                     tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
                 }
             } else if(currentWeapon === 'aa') {
-                if((tank.aaCooldown || 0) <= 0 && (tank.aa || 0) > 0) {
+                if((tank.aaCooldown || 0) <= 0 && ((tank.aa || 0) > 0 || tank.suddenDeathInfiniteAmmo)) {
                     fireBullet(tank, 'aa');
                     tank.aaCooldown = CONFIG.aaCooldown / tank.fireRate;
                     if(navigator.vibrate) navigator.vibrate(20);
+                }
+            } else if(currentWeapon === 'bomb') {
+                if(tank.fireCooldown <= 0 && (tank.shells > 0 || tank.suddenDeathInfiniteAmmo)) {
+                    fireBullet(tank, 'bomb');
+                    tank.fireCooldown = 0.95 / tank.fireRate;
+                    if(navigator.vibrate) navigator.vibrate(24);
+                }
+            } else if(currentWeapon === 'airmg') {
+                if(tank.mgCooldown <= 0 && (tank.mg > 0 || tank.suddenDeathInfiniteAmmo)) {
+                    fireBullet(tank, 'airmg');
+                    tank.mgCooldown = 0.095 / tank.fireRate;
                 }
             }
         }
@@ -993,6 +1098,7 @@ function updateEnvironment(dt) {
 
     if(currentMap === 'island') {
         allTanks.forEach(tank => {
+            if(!tank.isFlying) tank.z = getBridgeHeightAt(tank.x, tank.y);
             if(tank.isFlying || tank.tankType === 'duoduo_ifv' || !isTankInWater(tank)) {
                 tank.waterDamageTimer = 1;
                 return;
@@ -1062,7 +1168,12 @@ function addSnowTrack(tank) {
 
 function updateStatusEffects(tank, dt) {
     if(!tank || tank.dead) return;
+    if(tank.muzzleFlashTimer > 0) tank.muzzleFlashTimer = Math.max(0, tank.muzzleFlashTimer - dt);
     if(tank.apsCooldown > 0) tank.apsCooldown -= dt;
+    if(tank.ricochetSpeedBoostTimer > 0) {
+        tank.ricochetSpeedBoostTimer -= dt;
+        if(tank.ricochetSpeedBoostTimer <= 0) tank.ricochetSpeedBoost = 0;
+    }
     if(tank.isClone && tank.cloneTimer > 0) {
         tank.cloneTimer -= dt;
         if(tank.cloneTimer <= 0) tank.dead = true;
@@ -1225,6 +1336,7 @@ function resetGame() {
     helicopterLiftInput = 0;
     if(typeof resetCombatReplay === 'function') resetCombatReplay();
     if(typeof stopEngineAudio === 'function') stopEngineAudio();
+    if(typeof resetBattleSystems === 'function') resetBattleSystems();
     selectedTank = null;
     allies = []; enemies = []; bullets = []; particles = []; exhaustTrails = [];
     trailEffects = []; damageNumbers = []; outposts = []; aiTanks = []; player = null;

@@ -48,7 +48,7 @@ function updateScoreHUD() {
 }
 
 function awardKillScore(killer, target) {
-    if(!killer || !target || (killer.team !== 'blue' && killer.team !== 'red')) return;
+    if(!killer || !target || killer.team === target.team || (killer.team !== 'blue' && killer.team !== 'red')) return;
     const points = target.isFlying ? SCORE_RULES.helicopterKill : SCORE_RULES.normalKill;
     const killerName = getReplayTankName(killer);
     const targetName = getReplayTankName(target);

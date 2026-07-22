@@ -124,7 +124,7 @@
                     <p>• <strong style="color:#ff44ff">高射炮</strong> - 可越障并在升空后锁定一次最近敌人；制导距离、时间和转向角速度有限</p>
                     <p>每辆坦克都有独特的<strong>终极技能</strong>，冷却完成后按 <span class="key-badge">G</span> 释放。</p>
                     <div class="tutorial-tip-box">
-                        💡 直升机越障时可以正常开火；遇到空中目标优先切换高射炮。
+                        💡 直升机对地需飞到目标正上方投弹；遇到空中目标会对齐高度并使用空对空机枪。
                     </div>
                 </div>
 
@@ -199,25 +199,34 @@
                         <li>摧毁敌方基地：<strong>+10,000,000 分</strong></li>
                     </ul>
                     <p>HUD 实时显示“蓝 多少分 | 红 多少分”，下方公告栏会播报击杀、占点、夺旗和摧毁基地事件。</p>
+                    <p><strong>隐藏加时：</strong>如果正常时间结束时双方平分，会触发 1 分钟“绝地肉搏”。存活单位满血并聚集到地图中央，大招回满、弹药无限，已阵亡单位不会复活。</p>
                 </div>
 
                 <div class="intro-section">
                     <h3>🗺️ 战场环境</h3>
                     <div class="mode-intro-box"><h4>🏜 沙漠风暴</h4><p>橙黄色开阔战场，障碍少且视野更大。随机沙尘暴会压缩视野，并让牛牛直升机减速、受侧风吹移。</p></div>
                     <div class="mode-intro-box"><h4>❄️ 雪地突袭</h4><p>白色雪原上会保留履带轨迹。地面载具停驶超过 5 秒后引擎逐渐冻结，会减速并持续掉血；重新移动可逐渐恢复。</p></div>
-                    <div class="mode-intro-box"><h4>🏙 城市巷战</h4><p>规则街区、十字路口、道路中线和多层建筑构成密集城市。直升机受楼群乱流影响，速度降低 22%。</p></div>
-                    <div class="mode-intro-box"><h4>🏝 海岛争夺</h4><p>整张地图以水域为底，由 7 座独立小岛和桥网组成，每座岛都有一个据点。普通坦克可冒险入水，但会大幅减速并因车体进水持续掉血；多多号步战车免疫进水伤害，水中速度为 30%。</p></div>
+                    <div class="mode-intro-box"><h4>🏙 城市巷战</h4><p>规则街区、十字路口、道路中线和多层建筑构成密集城市。重火力可炸塌建筑的一部分，形成低矮但仍能挡车、挡弹的废墟掩体。直升机受楼群乱流影响，速度降低 22%。</p></div>
+                    <div class="mode-intro-box"><h4>🏝 海岛争夺</h4><p>整张地图以水域为底，由 7 座独立小岛和有真实高度的拱桥网组成，每座岛都有一个据点。普通坦克可冒险入水，但会大幅减速并因车体进水持续掉血；多多号步战车免疫进水伤害，水中速度为 30%。</p></div>
+                    <div class="mode-intro-box"><h4>🌋 火山熔岩</h4><p>200–400 宽的熔岩河会缓慢流动。地面载具在河中每秒受到 100 伤害，直升机会被热气流自动抬升；每 30–60 秒喷发的熔岩球造成 150 伤害和 3 秒减速。地图边缘的冷却结晶为坦克提供 +0.5 装甲。</p></div>
+                    <div class="mode-intro-box"><h4>🏗 废弃工厂</h4><p>约 3000×3000 的室内厂房分为面积相同的 B1、1F 和 2F，建筑外墙就是战场边界，每层各有一个据点。B1 密布油桶与会推动坦克和物体的地面传送带；1F 是设施主区，300 HP、0 护甲的机器人会自动维修受损建筑；2F 是起重机吊装区。电梯换层快速但落点容易被伏击，狭窄斜坡更稳定却容易拥堵；工厂采用平直切层视角，只显示玩家当前楼层。</p></div>
                 </div>
 
                 <div class="intro-section">
                     <h3>💥 武器与空中单位</h3>
                     <ul>
-                        <li><strong>主炮</strong>：对地高伤害；命中直升机时伤害 ×0.4。</li>
+                        <li><strong>主炮</strong>：可调仰角的抛射弹道，对地高伤害；命中直升机时伤害 ×0.4。只有弹丸 XYZ 坐标均与目标重叠才算命中。</li>
                         <li><strong>机枪</strong>：低仰角、射程有限，无法命中直升机。</li>
-                        <li><strong>高射炮</strong>：带真实高度层次的抛射弹道，可越过障碍物；升空 0.2 秒后仅在 600 范围内锁定一次，最多制导 0.85 秒，无法急转弯或反复换目标。</li>
-                        <li><strong>牛牛直升机</strong>：可控制真实飞行高度并越水；高度超过障碍物后才能越过，连续撞击 4 次会起火并持续受损。</li>
-                        <li><strong>地图对空惩罚</strong>：经典图防空雷达增幅高射伤害；沙漠有沙尘侧风；城市有楼群乱流；雪地会旋翼结冰；海岛有强海风且高射伤害更高。</li>
+                        <li><strong>高射炮</strong>：仰角可调，带真实高度层次的抛射弹道并可越障；升空 0.2 秒后仅在 600 范围内锁定一次，最多制导 0.85 秒，无法急转弯或反复换目标。</li>
+                        <li><strong>牛牛直升机</strong>：可在 100–1000 高度间飞行并越水；使用垂直向下投放、覆盖 150×150 区域的炸药包和只能攻击飞行单位的空对空机枪。高度超过障碍物后才能越过，连续撞击 4 次会起火。</li>
+                        <li><strong>地图对空惩罚</strong>：经典图防空雷达增幅高射伤害；沙漠有沙尘侧风；城市有楼群乱流；雪地会旋翼结冰；海岛有强海风且高射伤害更高；火山热气流会强制抬升；工厂钢架乱流会降低飞行速度。</li>
                         <li><strong>APS</strong>：每辆载具仅 4 次拦截，每次启动后需冷却 15 秒才能再次拦截。</li>
+                        <li><strong>基地防御</strong>：基地拥有 50,000 HP，自动炮塔通常每 2 秒发射一枚基础伤害 120 的炮弹。</li>
+                        <li><strong>空投补给</strong>：战场会定期空投带降落伞的补给箱，任何阵营均可拾取，可修复生命并补充弹药和 1 次 APS。</li>
+                        <li><strong>工程维修</strong>：多多号工程车按 R 可维修 175 范围内最残血的存活队友，不能维修自己。</li>
+                        <li><strong>弹药架殉爆</strong>：车辆被击毁时，剩余弹药越多越可能殉爆；爆风会造成范围伤害，<strong>敌我不分</strong>并可能引发连锁殉爆。</li>
+                        <li><strong>地形破坏</strong>：主炮、火箭、炸药包与大型爆炸可以破坏树木、岩石等小型障碍；城市建筑会从受击侧局部坍塌并生成形状不同的新废墟掩体。飞散碎块带有重力、旋转、反弹与阻尼。</li>
+                        <li><strong>战场传闻</strong>：有人见过贴着墙面改变方向的炮弹，也有人在几乎全军覆没时收到过来源不明的无线电信号……</li>
                     </ul>
                 </div>
 
@@ -228,7 +237,9 @@
                         <li><strong>鼠标</strong>：控制炮塔瞄准方向</li>
                         <li><strong>F 键 / 射击按钮</strong>：开火</li>
                         <li><strong>T 键 / 切换按钮</strong>：切换主炮 / 机枪 / 高射炮</li>
+                        <li><strong>1 / 2 / 3</strong>：直接选择武器；<strong>[ / ]</strong>：降低 / 提高主炮或高射炮仰角（机枪仰角固定）</li>
                         <li><strong>G 键 / 大招按钮</strong>：释放终极技能</li>
+                        <li><strong>R 键 / 维修按钮</strong>：工程车维修范围内队友</li>
                         <li><strong>V 键</strong>：实时切换 2D 俯视 / 3D 战术视角</li>
                         <li><strong>直升机高度</strong>：E / 空格上升，Q / Shift 下降</li>
                         <li><strong>移动端 / 平板</strong>：按触控能力显示摇杆，不再按屏幕宽度判断；直升机另有上升/下降按钮</li>
@@ -617,6 +628,7 @@
                 <button class="series-btn" data-series="zuoyan" onclick="filterTanks('zuoyan', this)">🔵 左研系</button>
                 <button class="series-btn" data-series="xingchen" onclick="filterTanks('xingchen', this)">🟢 星辰系</button>
                 <button class="series-btn" data-series="duoduo" onclick="filterTanks('duoduo', this)">🟠 多多系</button>
+                <button class="series-btn" data-series="niuniu" onclick="filterTanks('niuniu', this)">🩵 牛牛系</button>
             </div>
             <div class="tank-list" id="tankList"></div>
             </div>
@@ -629,18 +641,18 @@
                         <option value="classic">🏛 经典战场 - 标准据点争夺战</option>
                     </select>
                 </div>
-                <div class="config-row">
-                    <label>主炮弹药量 (发)</label>
+                <div class="config-row" id="shellConfigRow">
+                    <label id="shellConfigLabel">主炮弹药量 (发)</label>
                     <input type="range" id="ammoSlider" min="20" max="100" value="60">
                     <span class="value-display" id="ammoValue">60</span>
                 </div>
-                <div class="config-row">
-                    <label>机枪弹量 (发)</label>
+                <div class="config-row" id="mgConfigRow">
+                    <label id="mgConfigLabel">机枪弹量 (发)</label>
                     <input type="range" id="mgSlider" min="50" max="300" value="150">
                     <span class="value-display" id="mgValue">150</span>
                 </div>
-                <div class="config-row">
-                    <label>高射炮弹量 (发)</label>
+                <div class="config-row" id="aaConfigRow">
+                    <label id="aaConfigLabel">高射炮弹量 (发)</label>
                     <input type="range" id="aaSlider" min="0" max="50" value="15">
                     <span class="value-display" id="aaValue">15</span>
                 </div>
@@ -689,8 +701,8 @@
         <div id="gameUI">
             <div id="hud">
                 <div>HP: <div class="hp-bar"><div class="hp-fill" id="playerHp" style="width:100%"></div></div></div>
-                <div>武器: <span id="currentWeapon" style="color:#ffd700">主炮</span> | 主炮: <span id="shells">0</span> | 机枪: <span id="mg">0</span> | 高射炮: <span id="aa">0</span></div>
-                <div>APS: <span id="apsDisplay" style="color:#00d4ff">4</span> | 重量: <span id="weightDisplay" style="color:#ffaa00">0</span>kg</div>
+                <div>武器: <span id="currentWeapon" style="color:#ffd700">主炮</span> | <span id="shellAmmoLabel">主炮</span>: <span id="shells">0</span> | <span id="mgAmmoLabel">机枪</span>: <span id="mg">0</span> | <span id="aaAmmoGroup">高射炮: <span id="aa">0</span></span></div>
+                <div>APS: <span id="apsDisplay" style="color:#00d4ff">4</span> | 重量: <span id="weightDisplay" style="color:#ffaa00">0t</span></div>
                 <div id="teamScoreDisplay"><span class="score-blue">蓝 0分</span><b>|</b><span class="score-red">红 0分</span></div>
                 <div>蓝方据点: <span style="color:#4488ff" id="blueOutposts">0</span></div>
                 <div>红方据点: <span style="color:#ff4444" id="redOutposts">0</span></div>
@@ -698,12 +710,13 @@
                 <div id="environmentInfo" style="color:#bdeaff;font-size:12px;display:none;"></div>
             </div>
             <div id="battleFeed" aria-live="polite"></div>
-            <div id="weaponIndicator">按 T 切换武器</div>
+            <div id="weaponIndicator">1/2/3 选武器 · T切换 · [ / ] 调仰角</div>
             <div id="viewModeIndicator" style="position:absolute;top:62px;left:50%;transform:translateX(-50%);color:#8ee8ff;font-size:13px;">🗺 2D俯视 · V切换</div>
             <div id="timer">05:00</div>
             <div id="defenseWaveInfo">🛡 守点模式 - 撑过 03:00</div>
             <div id="sneakModeInfo">🌙 黑夜奇袭 - 摧毁敌方基地</div>
             <div id="specialModeInfo" style="display:none;"></div>
+            <div id="suddenDeathBanner">⚔ 绝地肉搏 · 无限弹药</div>
             <div id="speedPenalty">⚠ 负重过多，移动速度降低</div>
             <div id="ultimateBar">
                 <div class="ultimate-label">⚡ 终极技能</div>
@@ -719,20 +732,26 @@
             <div id="fireBtn">射击</div>
             
             <div id="pcControls">
-                <button class="pc-btn pc-btn-switch" id="pcSwitchBtn">切换<br>武器</button>
-                <button class="pc-btn pc-btn-ultimate" id="pcUltimateBtn">终极<br>技能</button>
+                <button class="pc-btn pc-btn-switch" id="pcSwitchBtn"><span class="action-icon">⇄</span><span>切换武器</span></button>
+                <button class="pc-btn pc-btn-ultimate" id="pcUltimateBtn"><span class="action-icon">◆</span><span>终极技能</span></button>
                 <button class="pc-btn pc-btn-fire" id="pcFireBtn">射击<br>(F)</button>
             </div>
 
             <!-- 移动端功能按钮 -->
             <div id="mobileActionButtons" style="display:none;">
-                <button class="mobile-btn mobile-btn-weapon" id="mobileSwitchBtn" onclick="switchWeapon()">切换<br>武器</button>
-                <button class="mobile-btn mobile-btn-ultimate" id="mobileUltimateBtn" onclick="activateUltimate()">终极<br>技能</button>
+                <button class="mobile-btn mobile-btn-weapon" id="mobileSwitchBtn" onclick="switchWeapon()"><span class="action-icon">⇄</span><span>切换武器</span></button>
+                <button class="mobile-btn mobile-btn-ultimate" id="mobileUltimateBtn" onclick="activateUltimate()"><span class="action-icon">◆</span><span>终极技能</span></button>
+                <button class="mobile-btn mobile-btn-repair" id="mobileRepairBtn" onclick="attemptEngineerRepair(player, true)"><span class="action-icon">🔧</span><span>维修队友</span></button>
             </div>
             <div id="heliAltitudeControls">
                 <button id="heliAscendBtn">⬆ 上升</button>
-                <span id="heliAltitudeReadout">Z 120</span>
+                <span id="heliAltitudeReadout">高度 240</span>
                 <button id="heliDescendBtn">⬇ 下降</button>
+            </div>
+            <div id="gunElevationControls">
+                <button id="gunLowerBtn">− 仰角</button>
+                <span id="gunElevationReadout">仰角 6°</span>
+                <button id="gunRaiseBtn">＋ 仰角</button>
             </div>
         </div>
     </div>
@@ -765,11 +784,14 @@
     <script src="Audio.js"></script>
     <script src="Score.js"></script>
     <script src="Replay.js"></script>
+    <script src="BattleSystems.js"></script>
+    <script src="TerrainDestruction.js"></script>
     <script src="Achievement.js"></script>
     <script src="Pathfinding.js"></script>
     <script src="UI.js"></script>
     <script src="Ultimate.js"></script>
     <script src="GameCore.js"></script>
+    <script src="MapMechanics.js"></script>
     <script src="AI.js"></script>
     <script src="Combat.js"></script>
     <script src="Render.js"></script>

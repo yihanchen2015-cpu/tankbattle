@@ -12,10 +12,16 @@ const threeView = {
     tankMeshes: new Map(),
     bulletMeshes: new Map(),
     turretMeshes: new Map(),
+    supplyMeshes: new Map(),
+    fireballMeshes: new Map(),
+    obstacleMeshes: new Map(),
+    debrisMeshes: new Map(),
+    mechanicMeshes: new Map(),
     outpostMeshes: [],
     baseMeshes: [],
     flagMeshes: {},
     stormRing: null,
+    hiddenOutpostMesh: null,
     snowLine: null,
     raycaster: null,
     groundPlane: null,
@@ -26,7 +32,9 @@ const threeView = {
     lastFrame: performance.now(),
     lastSnowSync: 0,
     mapSignature: '',
+    lastTerrainRevision: -1,
     waterMaterials: [],
+    lavaMeshes: [],
     tankLabels: new Map(),
     damageLabels: new Map(),
     captureLabels: new Map()
@@ -173,7 +181,8 @@ function clearThreeMap(map) {
 }
 
 function getThreeMapSignature() {
-    return [currentMap, CONFIG.mapWidth, CONFIG.mapHeight, obstacles.length, terrainZones.length, outposts.length, gameConfig.dayNight].join(':');
+    const generation = typeof terrainGeneration !== 'undefined' ? terrainGeneration : obstacles.length;
+    return [currentMap, CONFIG.mapWidth, CONFIG.mapHeight, generation, terrainZones.length, outposts.length, gameConfig.dayNight].join(':');
 }
 
 function rebuildThreeWorld(force = false) {
@@ -191,12 +200,20 @@ function rebuildThreeWorld(force = false) {
     threeView.tankMeshes.clear();
     threeView.bulletMeshes.clear();
     threeView.turretMeshes.clear();
+    threeView.supplyMeshes.clear();
+    threeView.fireballMeshes.clear();
+    threeView.obstacleMeshes.clear();
+    threeView.debrisMeshes.clear();
+    threeView.mechanicMeshes.clear();
     threeView.outpostMeshes = [];
     threeView.baseMeshes = [];
     threeView.flagMeshes = {};
     threeView.stormRing = null;
+    threeView.hiddenOutpostMesh = null;
     threeView.snowLine = null;
     threeView.waterMaterials = [];
+    threeView.lavaMeshes = [];
+    threeView.lastTerrainRevision = -1;
     threeView.cameraReady = false;
     threeView.cameraAzimuth = null;
     clearThreeHudElements();
@@ -207,6 +224,7 @@ function rebuildThreeWorld(force = false) {
     buildThreeObstacles();
     buildThreeBasesAndOutposts();
     buildThreeMapElements();
+    if(typeof buildThreeMapMechanics === 'function') buildThreeMapMechanics();
     buildThreeBoundary();
     threeView.mapSignature = signature;
     threeView.worldReady = true;
@@ -220,6 +238,8 @@ function configureThreeEnvironment() {
     else if(!night && currentMap === 'snow') sky = 0xcfe6ef;
     else if(!night && currentMap === 'city') sky = 0x82909b;
     else if(!night && currentMap === 'island') sky = 0x75b8df;
+    else if(currentMap === 'volcano') sky = night ? 0x180405 : 0x5d211b;
+    else if(currentMap === 'factory') sky = night ? 0x111416 : 0x252a2d;
     threeView.scene.background = new THREE.Color(sky);
     threeView.scene.fog = new THREE.Fog(sky, night ? 45 : 70, night ? 145 : 210);
 }
@@ -252,6 +272,8 @@ function buildThreeGround() {
     if(currentMap === 'snow') groundColor = '#dbe8ec';
     if(currentMap === 'city') groundColor = '#555d61';
     if(currentMap === 'island') groundColor = '#0b6f98';
+    if(currentMap === 'volcano') groundColor = '#292625';
+    if(currentMap === 'factory') groundColor = '#44474a';
     if(night) groundColor = '#111827';
     const ground = addStaticMesh(
         new THREE.PlaneGeometry(CONFIG.mapWidth * THREE_WORLD_SCALE, CONFIG.mapHeight * THREE_WORLD_SCALE),
@@ -277,7 +299,7 @@ function buildThreeGround() {
             const stripe = addStaticMesh(new THREE.PlaneGeometry(CONFIG.mapWidth * THREE_WORLD_SCALE, 4 * THREE_WORLD_SCALE), stripeMaterial.clone(), threeWorldPosition(CONFIG.mapWidth / 2, y, 0.036));
             stripe.rotation.x = -Math.PI / 2;
         }
-    } else if(currentMap !== 'island') {
+    } else if(currentMap !== 'island' && currentMap !== 'factory') {
         const grid = new THREE.GridHelper(Math.max(CONFIG.mapWidth, CONFIG.mapHeight) * THREE_WORLD_SCALE, 40, 0x52614a, 0x52614a);
         grid.material.transparent = true;
         grid.material.opacity = gameConfig.dayNight === 'night' ? 0.12 : 0.18;
@@ -296,29 +318,215 @@ function buildThreeTerrain() {
         island.scale.set(zone.rx * THREE_WORLD_SCALE, 1, zone.ry * THREE_WORLD_SCALE);
     });
     terrainZones.filter(zone => zone.type === 'bridge').forEach(zone => {
-        const bridge = addStaticMesh(
-            new THREE.BoxGeometry(zone.w * THREE_WORLD_SCALE, 0.9, zone.h * THREE_WORLD_SCALE),
-            makeStandardMaterial(0x805936, { roughness: 0.9 }),
-            threeWorldPosition(zone.centered ? zone.x : zone.x + zone.w / 2, zone.centered ? zone.y : zone.y + zone.h / 2, 0.58)
-        );
+        const bridge = new THREE.Group();
+        bridge.position.copy(threeWorldPosition(zone.centered ? zone.x : zone.x + zone.w / 2, zone.centered ? zone.y : zone.y + zone.h / 2, 0));
         bridge.rotation.y = -(zone.angle || 0);
+        const segments = 18;
+        const segmentLength = zone.w * THREE_WORLD_SCALE / segments;
+        const deckWidth = zone.h * THREE_WORLD_SCALE;
+        const material = makeStandardMaterial(0x805936, { roughness: 0.9 });
+        for(let i = 0; i < segments; i++) {
+            const localX = -zone.w / 2 + zone.w * (i + .5) / segments;
+            const normalized = Math.min(1, Math.abs(localX) / (zone.w / 2));
+            const height = (zone.archHeight || 72) * (1 - normalized * normalized);
+            const nextX = Math.min(zone.w / 2, localX + zone.w / segments * .5);
+            const prevX = Math.max(-zone.w / 2, localX - zone.w / segments * .5);
+            const curve = x => (zone.archHeight || 72) * (1 - Math.min(1, Math.abs(x) / (zone.w / 2)) ** 2);
+            const slope = Math.atan2((curve(nextX) - curve(prevX)) * THREE_WORLD_SCALE, segmentLength);
+            const deck = new THREE.Mesh(new THREE.BoxGeometry(segmentLength * 1.06, (zone.deckThickness || 18) * THREE_WORLD_SCALE, deckWidth), material.clone());
+            deck.position.set(localX * THREE_WORLD_SCALE, height * THREE_WORLD_SCALE, 0);
+            deck.rotation.z = slope;
+            deck.receiveShadow = true; deck.castShadow = true;
+            bridge.add(deck);
+        }
+        threeView.worldRoot.add(bridge);
+    });
+
+    terrainZones.filter(zone => zone.type === 'lava' && zone.points).forEach(zone => {
+        for(let i = 0; i < zone.points.length - 1; i++) {
+            const a = typeof getLavaPoint === 'function' ? getLavaPoint(zone.points[i], i) : zone.points[i];
+            const b = typeof getLavaPoint === 'function' ? getLavaPoint(zone.points[i + 1], i + 1) : zone.points[i + 1];
+            const length = Math.hypot(b.x - a.x, b.y - a.y);
+            const width = (a.width + b.width) * .5;
+            const material = makeStandardMaterial(0xff3d0b, {roughness:.32, emissive:0xff2200, emissiveIntensity:2.4});
+            const river = addStaticMesh(new THREE.PlaneGeometry(length * THREE_WORLD_SCALE, width * THREE_WORLD_SCALE), material, threeWorldPosition((a.x + b.x) / 2, (a.y + b.y) / 2, .08));
+            river.rotation.x = -Math.PI / 2;
+            river.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+            threeView.waterMaterials.push(material);
+            threeView.lavaMeshes.push({mesh:river, index:i, baseLength:length, baseWidth:width, zone});
+        }
+    });
+
+    terrainZones.filter(zone => zone.type === 'crystal').forEach(zone => {
+        const pad = addStaticMesh(new THREE.BoxGeometry(zone.w * THREE_WORLD_SCALE, .22, zone.h * THREE_WORLD_SCALE), makeStandardMaterial(0x4b8989, {emissive:0x164f54, emissiveIntensity:.65, transparent:true, opacity:.72}), threeWorldPosition(zone.x + zone.w / 2, zone.y + zone.h / 2, .08));
+        for(let i = 0; i < 10; i++) {
+            const crystal = new THREE.Mesh(new THREE.ConeGeometry(.42 + (i % 3) * .18, 2.5 + (i % 4), 5), makeStandardMaterial(i % 2 ? 0x8ee9df : 0x4bb7b6, {emissive:0x1d7774, emissiveIntensity:.8}));
+            crystal.position.set(((i * 1.71) % (zone.w * THREE_WORLD_SCALE - 2)) - zone.w * THREE_WORLD_SCALE / 2 + 1, 1.2, ((i * 2.37) % (zone.h * THREE_WORLD_SCALE - 2)) - zone.h * THREE_WORLD_SCALE / 2 + 1);
+            pad.add(crystal);
+        }
+    });
+
+    terrainZones.filter(zone => zone.type === 'factoryRamp').forEach(zone => {
+        const length = (zone.axis === 'y' ? zone.h : zone.w) * THREE_WORLD_SCALE;
+        const width = (zone.axis === 'y' ? zone.w : zone.h) * THREE_WORLD_SCALE;
+        const rise = (zone.toZ - zone.fromZ) * THREE_WORLD_SCALE;
+        const rampLength = Math.hypot(length, rise);
+        const ramp = addStaticMesh(new THREE.BoxGeometry(zone.axis === 'y' ? width : rampLength, .5, zone.axis === 'y' ? rampLength : width), makeStandardMaterial(0x6a6f72, {roughness:.78, metalness:.22}), threeWorldPosition(zone.x + zone.w / 2, zone.y + zone.h / 2, (zone.fromZ + zone.toZ) / 2));
+        const slope = Math.atan2(rise, length) * (zone.reverse ? -1 : 1);
+        if(zone.axis === 'y') ramp.rotation.x = -slope;
+        else ramp.rotation.z = slope;
+    });
+    terrainZones.filter(zone => zone.type === 'factoryFloorSlab').forEach(zone => {
+        const colors = [0x34383b,0x4a4e51,0x555a5e];
+        const slab = addStaticMesh(new THREE.BoxGeometry(zone.w*THREE_WORLD_SCALE,.8,zone.h*THREE_WORLD_SCALE),makeStandardMaterial(colors[zone.factoryFloor]||0x44484b,{roughness:.88}),threeWorldPosition(zone.w/2,zone.h/2,zone.z*THREE_WORLD_SCALE));
+        slab.position.y -= .42; slab.userData.factoryFloor=zone.factoryFloor;
+    });
+    terrainZones.filter(zone => zone.type === 'conveyor').forEach(zone => {
+        const belt=addStaticMesh(new THREE.BoxGeometry(zone.w*THREE_WORLD_SCALE,.35,zone.h*THREE_WORLD_SCALE),makeStandardMaterial(0x24282a,{metalness:.28,roughness:.65}),threeWorldPosition(zone.x+zone.w/2,zone.y+zone.h/2,(getFactoryFloorZ(zone.factoryFloor)+2)*THREE_WORLD_SCALE));
+        belt.userData.factoryFloor=zone.factoryFloor;
+        const stripe=new THREE.Mesh(new THREE.BoxGeometry((Math.abs(zone.dirX)>0?zone.w*.75:18)*THREE_WORLD_SCALE,.08,(Math.abs(zone.dirY)>0?zone.h*.75:18)*THREE_WORLD_SCALE),makeStandardMaterial(0xd0a13e,{emissive:0x5a3900,emissiveIntensity:.35}));
+        stripe.position.y=.22;belt.add(stripe);
+    });
+    terrainZones.filter(zone => ['factoryElevator','factoryRampLink'].includes(zone.type)).forEach(zone => {
+        const floors=zone.floors||[zone.fromFloor,zone.toFloor];
+        floors.forEach(factoryFloor=>{
+            const pad=addStaticMesh(new THREE.BoxGeometry(zone.w*THREE_WORLD_SCALE,.4,zone.h*THREE_WORLD_SCALE),makeStandardMaterial(zone.type==='factoryElevator'?0x3f474b:0x737a7e,{metalness:.25}),threeWorldPosition(zone.x+zone.w/2,zone.y+zone.h/2,(getFactoryFloorZ(factoryFloor)+2)*THREE_WORLD_SCALE));
+            pad.userData.factoryFloor=factoryFloor;
+            pad.userData.factoryConnector=true;
+            const railMaterial=makeStandardMaterial(zone.type==='factoryElevator'?0xd2ad45:0x303538,{metalness:.48});
+            const railA=new THREE.Mesh(new THREE.BoxGeometry(zone.w*THREE_WORLD_SCALE,.75,.35),railMaterial);
+            const railB=railA.clone();
+            railA.position.set(0,.55,-zone.h*THREE_WORLD_SCALE/2+.2);
+            railB.position.set(0,.55,zone.h*THREE_WORLD_SCALE/2-.2);
+            pad.add(railA,railB);
+        });
     });
 }
 
-function buildThreeObstacles() {
-    obstacles.forEach((obs, index) => {
-        const center = threeWorldPosition(obs.x + obs.w / 2, obs.y + obs.h / 2, 0);
-        const height = (typeof getObstacleWorldHeight === 'function' ? getObstacleWorldHeight(obs)
-            : (obs.type === 'building' ? 52 + (obs.floors || 4) * 18 : Math.max(35, Math.min(obs.w, obs.h) * 0.58))) * THREE_WORLD_SCALE;
-        const color = obs.type === 'building' ? (index % 2 ? 0x58616a : 0x6b737b)
-            : (obs.type === 'tree' ? 0x2f7434 : (obs.type === 'ice' ? 0x9fc7d8 : (obs.type === 'rock' ? 0x8a633a : 0x5a4328)));
-        center.y = height / 2;
-        const block = addStaticMesh(
+function createThreeObstacleObject(obs, index) {
+    if(typeof initializeObstacleDurability === 'function') initializeObstacleDurability(obs);
+    if(!obs.terrainId) obs.terrainId = `legacy-obstacle-${index}`;
+    const factoryBaseZ = currentMap === 'factory' && Number.isInteger(obs.factoryFloor) && typeof getFactoryFloorZ === 'function'
+        ? getFactoryFloorZ(obs.factoryFloor) : 0;
+    const worldTop = typeof getObstacleWorldHeight === 'function' ? getObstacleWorldHeight(obs)
+        : (obs.type === 'building' ? 52 + (obs.floors || 4) * 18 : Math.max(35, Math.min(obs.w, obs.h) * 0.58));
+    const height = Math.max(12, worldTop - factoryBaseZ) * THREE_WORLD_SCALE;
+    const center = threeWorldPosition(obs.x + obs.w / 2, obs.y + obs.h / 2, factoryBaseZ * THREE_WORLD_SCALE);
+    const obstacleColors = {
+        tree:0x2f7434, ice:0x9fc7d8, rock:0x8a633a, rubble:0x625b54,
+        volcanicRock:0x433936, oilBarrel:0xa43a1c, factoryFacility:0x69737a,
+        factoryCrate:0x8b6542, factoryBoundary:0x303438
+    };
+    const color = obs.type === 'building' ? (index % 2 ? 0x58616a : 0x6b737b) : (obstacleColors[obs.type] || 0x555b5e);
+    center.y += height / 2;
+    let object;
+    if(obs.type === 'oilBarrel') {
+        object = new THREE.Group();
+        object.position.copy(threeWorldPosition(obs.x + obs.w / 2, obs.y + obs.h / 2, factoryBaseZ * THREE_WORLD_SCALE));
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 1.45, 3.7, 16), makeStandardMaterial(color, {roughness:.55, metalness:.42}));
+        barrel.position.y = 1.85;
+        const bandMaterial = makeStandardMaterial(0x2c2522, {metalness:.6});
+        [-1.1, 1.1].forEach(y => { const band = new THREE.Mesh(new THREE.TorusGeometry(1.48, .11, 7, 18), bandMaterial); band.rotation.x = Math.PI / 2; band.position.y = y; barrel.add(band); });
+        object.add(barrel);
+    } else if(obs.type === 'factoryPlatform') {
+        object = new THREE.Group();
+        object.position.copy(threeWorldPosition(obs.x + obs.w / 2, obs.y + obs.h / 2, 0));
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(obs.w * THREE_WORLD_SCALE, 1.15, obs.h * THREE_WORLD_SCALE), makeStandardMaterial(obs.level === 3 ? 0x666d70 : 0x555b5e, {roughness:.72, metalness:.3}));
+        deck.position.y = (obs.platformHeight || 120) * THREE_WORLD_SCALE;
+        object.add(deck);
+        const legMaterial = makeStandardMaterial(0x34383a, {metalness:.42});
+        [[-.46,-.44],[.46,-.44],[-.46,.44],[.46,.44]].forEach(([lx,lz]) => {
+            const legHeight = (obs.platformHeight || 120) * THREE_WORLD_SCALE;
+            const leg = new THREE.Mesh(new THREE.BoxGeometry(.8, legHeight, .8), legMaterial);
+            leg.position.set(obs.w * THREE_WORLD_SCALE * lx, legHeight / 2, obs.h * THREE_WORLD_SCALE * lz); object.add(leg);
+        });
+    } else if(obs.type === 'rubble') {
+        object = new THREE.Group();
+        object.position.copy(center);
+        const chunks = [
+            { x: -0.22, z: -0.14, w: 0.46, h: 0.58, r: -0.14 },
+            { x: 0.2, z: 0.16, w: 0.42, h: 0.48, r: 0.2 },
+            { x: 0.02, z: -0.02, w: 0.28, h: 0.3, r: 0.48 }
+        ];
+        chunks.forEach((chunk, chunkIndex) => {
+            const blockHeight = height * (chunkIndex === 2 ? 0.72 : 0.5);
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(obs.w * THREE_WORLD_SCALE * chunk.w, blockHeight, obs.h * THREE_WORLD_SCALE * chunk.h),
+                makeStandardMaterial(chunkIndex === 1 ? 0x776d64 : color, { roughness: 0.97 })
+            );
+            mesh.position.set(obs.w * THREE_WORLD_SCALE * chunk.x, blockHeight / 2 - height / 2, obs.h * THREE_WORLD_SCALE * chunk.z);
+            mesh.rotation.y = chunk.r + ((obs.rubbleSeed || 0) % 0.18);
+            mesh.userData.isObstacle = true;
+            mesh.receiveShadow = true;
+            object.add(mesh);
+        });
+    } else {
+        object = new THREE.Mesh(
             new THREE.BoxGeometry(obs.w * THREE_WORLD_SCALE, height, obs.h * THREE_WORLD_SCALE),
-            makeStandardMaterial(color, { roughness: 0.9, metalness: obs.type === 'building' ? 0.05 : 0 }), center
+            makeStandardMaterial(color, { roughness: 0.9, metalness: obs.type === 'building' || obs.type === 'factoryWall' ? 0.16 : 0 })
         );
-        block.userData.isObstacle = true;
-        block.castShadow = obs.type === 'building' && index % 2 === 0;
+        object.position.copy(center);
+        object.userData.isObstacle = true;
+        object.castShadow = obs.type === 'building' && index % 2 === 0;
+        object.receiveShadow = true;
+    }
+    object.userData.terrainId = obs.terrainId;
+    object.userData.visualRevision = obs.visualRevision || 0;
+    if(Number.isInteger(obs.factoryFloor)) object.userData.factoryFloor = obs.factoryFloor;
+    threeView.worldRoot.add(object);
+    threeView.obstacleMeshes.set(obs.terrainId, object);
+    return object;
+}
+
+function buildThreeObstacles() {
+    obstacles.forEach(createThreeObstacleObject);
+    threeView.lastTerrainRevision = typeof terrainRevision !== 'undefined' ? terrainRevision : 0;
+}
+
+function syncThreeTerrainDestruction() {
+    const revision = typeof terrainRevision !== 'undefined' ? terrainRevision : 0;
+    if(threeView.lastTerrainRevision !== revision) {
+        const aliveObstacleIds = new Set();
+        obstacles.forEach((obs, index) => {
+            if(typeof initializeObstacleDurability === 'function') initializeObstacleDurability(obs);
+            if(!obs.terrainId) obs.terrainId = `legacy-obstacle-${index}`;
+            aliveObstacleIds.add(obs.terrainId);
+            const existing = threeView.obstacleMeshes.get(obs.terrainId);
+            if(existing && existing.userData.visualRevision === (obs.visualRevision || 0)) return;
+            if(existing) disposeThreeObject(existing);
+            createThreeObstacleObject(obs, index);
+        });
+        threeView.obstacleMeshes.forEach((object, id) => {
+            if(aliveObstacleIds.has(id)) return;
+            disposeThreeObject(object);
+            threeView.obstacleMeshes.delete(id);
+        });
+        threeView.lastTerrainRevision = revision;
+    }
+    const debris = typeof terrainDebris !== 'undefined' ? terrainDebris : [];
+    const alive = new Set();
+    debris.forEach(piece => {
+        alive.add(piece.id);
+        let mesh = threeView.debrisMeshes.get(piece.id);
+        if(!mesh) {
+            const size = Math.max(0.18, piece.size * THREE_WORLD_SCALE);
+            mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(size, size * 0.62, size * (piece.material === 'wood' ? 1.45 : 0.86)),
+                makeStandardMaterial(piece.color || 0x716961, { roughness: 0.95 })
+            );
+            mesh.castShadow = !(typeof touchControlMode !== 'undefined' && touchControlMode);
+            threeView.dynamicRoot.add(mesh);
+            threeView.debrisMeshes.set(piece.id, mesh);
+        }
+        setThreeWorldPosition(mesh, piece.x, piece.y, Math.max(0.08, piece.z * THREE_WORLD_SCALE));
+        mesh.rotation.set(piece.rotation * 0.7, piece.rotation, piece.rotation * 0.35);
+        mesh.material.opacity = Math.max(0, Math.min(1, piece.life / 0.7));
+        mesh.material.transparent = mesh.material.opacity < 0.99;
+    });
+    threeView.debrisMeshes.forEach((mesh, id) => {
+        if(alive.has(id)) return;
+        disposeThreeObject(mesh);
+        threeView.debrisMeshes.delete(id);
     });
 }
 
@@ -327,9 +535,10 @@ function buildThreeBasesAndOutposts() {
         const base = bases[team];
         if(!base) return;
         const color = team === 'blue' ? 0x2677d9 : 0xd93636;
-        const position = threeWorldPosition(base.x + base.w / 2, base.y + base.h / 2, 2.0);
+        const position = threeWorldPosition(base.x + base.w / 2, base.y + base.h / 2, ((base.z || 0) * THREE_WORLD_SCALE) + 2.0);
         const group = new THREE.Group();
         group.position.copy(position);
+        if(Number.isInteger(base.factoryFloor)) group.userData.factoryFloor = base.factoryFloor;
         const pad = new THREE.Mesh(new THREE.CylinderGeometry(base.w * THREE_WORLD_SCALE * 0.55, base.w * THREE_WORLD_SCALE * 0.68, 1.4, 8), makeStandardMaterial(color, { metalness: 0.18 }));
         const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 2.3, 8, 8), makeStandardMaterial(0x3c4650, { metalness: 0.35 }));
         tower.position.y = 4.5;
@@ -343,7 +552,8 @@ function buildThreeBasesAndOutposts() {
 
     outposts.forEach(op => {
         const group = new THREE.Group();
-        group.position.copy(threeWorldPosition(op.x, op.y, 0.2));
+        group.position.copy(threeWorldPosition(op.x, op.y, ((op.z || 0) * THREE_WORLD_SCALE) + 0.2));
+        if(Number.isInteger(op.factoryFloor)) group.userData.factoryFloor = op.factoryFloor;
         const material = makeStandardMaterial(0xbfc5cc, { emissive: 0x333333, emissiveIntensity: 0.5 });
         const ring = new THREE.Mesh(new THREE.TorusGeometry(op.radius * THREE_WORLD_SCALE * 0.55, 0.48, 10, 48), material);
         ring.rotation.x = Math.PI / 2;
@@ -375,7 +585,32 @@ function buildThreeMapElements() {
     });
 }
 
+function buildThreeMapMechanics() {
+    if(typeof mapMechanicsState === 'undefined') return;
+    if(currentMap === 'volcano') {
+        const positions = [];
+        for(let i = 0; i < 260; i++) {
+            positions.push((Math.random() - .5) * CONFIG.mapWidth * THREE_WORLD_SCALE, 8 + Math.random() * 42, (Math.random() - .5) * CONFIG.mapHeight * THREE_WORLD_SCALE);
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        const ash = new THREE.Points(geometry, new THREE.PointsMaterial({color:0x8d817a, size:.32, transparent:true, opacity:.48, depthWrite:false}));
+        threeView.worldRoot.add(ash); threeView.mechanicMeshes.set('volcano-ash', ash);
+    }
+    if(!mapMechanicsState.crane) return;
+    const crane = mapMechanicsState.crane;
+    const group = new THREE.Group();
+    group.position.copy(threeWorldPosition(crane.x, crane.y, (crane.z || 0) * THREE_WORLD_SCALE));
+    group.userData.factoryFloor = crane.factoryFloor;
+    const steel = makeStandardMaterial(0x9a6c25, {metalness:.5, roughness:.54});
+    const mast = new THREE.Mesh(new THREE.BoxGeometry(2.2, 32, 2.2), steel); mast.position.set(-35, 16, 0);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(72, 2, 2), steel.clone()); beam.position.set(0, 31, 0);
+    group.add(mast, beam); threeView.worldRoot.add(group);
+    threeView.mechanicMeshes.set('crane-structure', group);
+}
+
 function buildThreeBoundary() {
+    if(currentMap === 'factory') return;
     const w = CONFIG.mapWidth * THREE_WORLD_SCALE;
     const h = CONFIG.mapHeight * THREE_WORLD_SCALE;
     const material = makeStandardMaterial(0x9b2535, { emissive: 0x5a0712, emissiveIntensity: 0.8, transparent: true, opacity: 0.68 });
@@ -406,6 +641,22 @@ function createThreeTank(tank) {
         rotor.position.y = 2;
         const tailRotor = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.6, 0.25), bladeMaterial.clone());
         tailRotor.position.set(-7.2, 0.5, 0);
+        const weaponPivot = new THREE.Group();
+        weaponPivot.position.set(1.0, -1.35, 0);
+        const gunPod = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.86, 1.1, 10), makeStandardMaterial(0x30383e, { metalness: .55, roughness: .34 }));
+        const airGun = new THREE.Mesh(new THREE.BoxGeometry(4.6, .42, .5), makeStandardMaterial(0x151a1d, { metalness: .62, roughness: .3 }));
+        airGun.position.set(2.45, -.1, 0);
+        const muzzle = new THREE.Mesh(new THREE.BoxGeometry(.7, .72, .82), makeStandardMaterial(0x66eeff, { emissive: 0x167f99, emissiveIntensity: 1.2 }));
+        muzzle.position.set(4.8, -.1, 0);
+        weaponPivot.add(gunPod, airGun, muzzle);
+        const muzzleFlash = new THREE.Mesh(new THREE.SphereGeometry(1.15, 10, 8), new THREE.MeshBasicMaterial({ color: 0x8ff6ff, transparent: true, opacity: .9, depthWrite: false }));
+        muzzleFlash.scale.set(1.8, .65, .65); muzzleFlash.position.set(5.45, -.1, 0); muzzleFlash.visible = false;
+        weaponPivot.add(muzzleFlash);
+        const bombMaterial = makeStandardMaterial(0xff6238, { metalness: .32, roughness: .46 });
+        const leftBomb = new THREE.Mesh(new THREE.CapsuleGeometry(.45, 1.4, 5, 10), bombMaterial);
+        const rightBomb = leftBomb.clone();
+        leftBomb.rotation.z = Math.PI / 2; rightBomb.rotation.z = Math.PI / 2;
+        leftBomb.position.set(-.6, -1.35, -1.8); rightBomb.position.set(-.6, -1.35, 1.8);
         const fire = new THREE.Group();
         const outerFlame = new THREE.Mesh(new THREE.ConeGeometry(0.9, 3.2, 9), makeStandardMaterial(0xff4b16, { emissive: 0xff2200, emissiveIntensity: 2.4 }));
         const innerFlame = new THREE.Mesh(new THREE.ConeGeometry(0.45, 2.2, 8), makeStandardMaterial(0xffdd42, { emissive: 0xff8a00, emissiveIntensity: 2.8 }));
@@ -414,9 +665,11 @@ function createThreeTank(tank) {
         fire.position.set(-4.6, 1.0, 0);
         fire.add(outerFlame, innerFlame);
         fire.visible = false;
-        group.add(fuselage, cockpit, tail, rotor, tailRotor, fire);
+        group.add(fuselage, cockpit, tail, rotor, tailRotor, weaponPivot, leftBomb, rightBomb, fire);
         group.userData.rotor = rotor;
         group.userData.fire = fire;
+        group.userData.turretPivot = weaponPivot;
+        group.userData.muzzleFlash = muzzleFlash;
     } else {
         const bodyMaterial = makeStandardMaterial(bodyColor, { metalness: 0.3, roughness: 0.55 });
         const trackMaterial = makeStandardMaterial(0x171a1c, { metalness: 0.22, roughness: 0.8 });
@@ -440,9 +693,16 @@ function createThreeTank(tank) {
         muzzleBrake.position.set(barrelLength + 0.75, 0.18, 0);
         const hatch = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 0.25, 10), makeStandardMaterial(0x22292d, { metalness: 0.4 }));
         hatch.position.set(-0.25, 0.67, 0);
-        turretPivot.add(turret, barrel, muzzleBrake, hatch);
+        const gunPitch = new THREE.Group();
+        gunPitch.add(barrel, muzzleBrake);
+        const muzzleFlash = new THREE.Mesh(new THREE.SphereGeometry(1.2, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffb02e, transparent: true, opacity: .95, depthWrite: false }));
+        muzzleFlash.scale.set(2.1, .72, .72); muzzleFlash.position.set(barrelLength + 1.55, .18, 0); muzzleFlash.visible = false;
+        gunPitch.add(muzzleFlash);
+        turretPivot.add(turret, gunPitch, hatch);
         group.add(leftTrack, rightTrack, hull, upperHull, turretPivot);
         group.userData.turretPivot = turretPivot;
+        group.userData.gunPitch = gunPitch;
+        group.userData.muzzleFlash = muzzleFlash;
         const wash = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 0.35, 32), makeStandardMaterial(0x218fc0, { transparent: true, opacity: 0.58, roughness: 0.2 }));
         wash.position.y = 1.25;
         wash.visible = false;
@@ -454,6 +714,14 @@ function createThreeTank(tank) {
     marker.rotation.x = -Math.PI / 2;
     marker.position.y = 0.08;
     group.add(marker);
+    const rescueShield = new THREE.Mesh(
+        new THREE.SphereGeometry(tank.shape === 'helicopter' ? 5.8 : 4.8, 18, 12),
+        new THREE.MeshBasicMaterial({ color: 0x5ee8ff, transparent: true, opacity: 0.18, wireframe: true, depthWrite: false })
+    );
+    rescueShield.position.y = tank.shape === 'helicopter' ? 0 : 1.6;
+    rescueShield.visible = false;
+    group.add(rescueShield);
+    group.userData.rescueShield = rescueShield;
     group.traverse(child => {
         if(!child.isMesh) return;
         child.castShadow = true;
@@ -474,6 +742,7 @@ function syncThreeTanks(now) {
             mesh = createThreeTank(tank);
             threeView.tankMeshes.set(tank.id, mesh);
         }
+        mesh.visible = currentMap !== 'factory' || (typeof isFactoryEntityOnVisibleFloor === 'function' && isFactoryEntityOnVisibleFloor(tank));
         const flying = tank.shape === 'helicopter';
         const inWater = !flying && typeof isTankInWater === 'function' && isTankInWater(tank);
         const storedHeight = (tank.z || 0) * THREE_WORLD_SCALE;
@@ -481,6 +750,20 @@ function syncThreeTanks(now) {
         setThreeWorldPosition(mesh, tank.x, tank.y, baseHeight);
         mesh.rotation.y = -tank.angle;
         if(mesh.userData.turretPivot) mesh.userData.turretPivot.rotation.y = -(tank.turretAngle - tank.angle);
+        if(mesh.userData.gunPitch) {
+            const activeWeapon = tank.isPlayer && typeof currentWeapon !== 'undefined' ? currentWeapon : tank.lastFiredWeapon;
+            const elevation = activeWeapon === 'aa' ? tank.aaElevation : tank.shellElevation;
+            mesh.userData.gunPitch.rotation.z = (elevation || 0) * Math.PI / 180;
+        }
+        if(mesh.userData.muzzleFlash) {
+            const active = (tank.muzzleFlashTimer || 0) > 0;
+            mesh.userData.muzzleFlash.visible = active;
+            if(active) {
+                const pulse = .78 + Math.sin(now * .065) * .22;
+                mesh.userData.muzzleFlash.scale.set(2.1 + pulse, .62 + pulse * .25, .62 + pulse * .25);
+                mesh.userData.muzzleFlash.material.color.setHex(tank.muzzleFlashType === 'aa' ? 0xff66ff : (tank.muzzleFlashType === 'mg' || tank.muzzleFlashType === 'airmg' ? 0xffff9a : 0xff9b22));
+            }
+        }
         if(mesh.userData.rotor) mesh.userData.rotor.rotation.y = now * 0.022;
         if(mesh.userData.fire) {
             mesh.userData.fire.visible = !!tank.helicopterOnFire;
@@ -490,6 +773,10 @@ function syncThreeTanks(now) {
             }
         }
         if(mesh.userData.waterWash) mesh.userData.waterWash.visible = inWater;
+        if(mesh.userData.rescueShield) {
+            mesh.userData.rescueShield.visible = !!(tank.rescueShieldActive && tank.shieldActive && tank.shieldHp > 0);
+            mesh.userData.rescueShield.material.opacity = 0.14 + Math.sin(now * 0.012 + tank.x) * 0.05;
+        }
         const opacity = tank.ghostActive && !tank.ghostRevealed ? 0.28 : 1;
         if(mesh.userData.lastOpacity !== opacity) {
             mesh.userData.lastOpacity = opacity;
@@ -510,11 +797,12 @@ function syncThreeTanks(now) {
 }
 
 function createThreeBullet(bullet) {
-    const color = bullet.type === 'aa' ? 0xff45ff : (bullet.type === 'shell' ? 0xff9a20 : 0xffef65);
-    const radius = bullet.type === 'aa' ? 0.62 : (bullet.type === 'shell' ? 0.48 : 0.22);
-    const material = makeStandardMaterial(color, { emissive: color, emissiveIntensity: bullet.type === 'mg' ? 1.2 : 2.4, roughness: 0.25 });
+    const color = bullet.type === 'bomb' ? 0xff6136 : (bullet.type === 'airmg' ? 0x73f2ff : (bullet.type === 'aa' ? 0xff45ff : (bullet.type === 'shell' ? 0xff9a20 : 0xffef65)));
+    const radius = bullet.type === 'bomb' ? .72 : (bullet.type === 'aa' ? 0.62 : (bullet.type === 'shell' ? 0.48 : 0.22));
+    const material = makeStandardMaterial(color, { emissive: color, emissiveIntensity: bullet.type === 'mg' || bullet.type === 'airmg' ? 1.2 : 2.4, roughness: 0.25 });
     const group = new THREE.Group();
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(radius, 10, 8), material);
+    if(bullet.type === 'bomb') projectile.scale.set(.72, 1.7, .72);
     group.add(projectile);
     group.userData.projectile = projectile;
     if(bullet.type === 'aa') {
@@ -537,6 +825,73 @@ function createThreeBullet(bullet) {
     return group;
 }
 
+function createThreeSupplyDrop(drop) {
+    const group = new THREE.Group();
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2.7, 3.5), makeStandardMaterial(0x477c5b, { metalness: .16, roughness: .72 }));
+    const bandX = new THREE.Mesh(new THREE.BoxGeometry(.5, 2.82, 3.62), makeStandardMaterial(0xf1db55, { emissive: 0x5a4600, emissiveIntensity: .35 }));
+    const bandZ = new THREE.Mesh(new THREE.BoxGeometry(3.62, 2.82, .5), bandX.material.clone());
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(4.7, 22, 10, 0, Math.PI * 2, 0, Math.PI / 2), makeStandardMaterial(0xe8efe0, { transparent: true, opacity: .88, roughness: .9 }));
+    canopy.scale.y = .5; canopy.position.y = 6.3;
+    const cords = new THREE.LineSegments(
+        new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(-3.5,5.5,-2),new THREE.Vector3(-1.4,1.5,-1.4),
+            new THREE.Vector3(3.5,5.5,-2),new THREE.Vector3(1.4,1.5,-1.4),
+            new THREE.Vector3(-3.5,5.5,2),new THREE.Vector3(-1.4,1.5,1.4),
+            new THREE.Vector3(3.5,5.5,2),new THREE.Vector3(1.4,1.5,1.4)
+        ]),
+        new THREE.LineBasicMaterial({color:0xdce9e5,transparent:true,opacity:.8})
+    );
+    group.add(crate, bandX, bandZ, canopy, cords);
+    group.userData.canopy = canopy; group.userData.cords = cords;
+    group.traverse(child => { if(child.isMesh) child.castShadow = true; });
+    threeView.dynamicRoot.add(group);
+    return group;
+}
+
+function syncThreeSupplyDrops(now) {
+    if(typeof supplyDrops === 'undefined') return;
+    const active = new Set(supplyDrops);
+    supplyDrops.forEach(drop => {
+        let mesh = threeView.supplyMeshes.get(drop);
+        if(!mesh) { mesh = createThreeSupplyDrop(drop); threeView.supplyMeshes.set(drop, mesh); }
+        setThreeWorldPosition(mesh, drop.x, drop.y, Math.max(.3, (drop.z || 0) * THREE_WORLD_SCALE + 1.35));
+        mesh.rotation.y = Math.sin(now * .0016 + drop.pulse) * .18;
+        mesh.userData.canopy.visible = !drop.landed;
+        mesh.userData.cords.visible = !drop.landed;
+    });
+    for(const [drop, mesh] of threeView.supplyMeshes) {
+        if(!active.has(drop)) { disposeThreeObject(mesh); threeView.supplyMeshes.delete(drop); }
+    }
+}
+
+function syncThreeAmmoRackFireballs(now) {
+    if(typeof ammoRackFireballs === 'undefined') return;
+    const active = new Set(ammoRackFireballs);
+    ammoRackFireballs.forEach(effect => {
+        let group = threeView.fireballMeshes.get(effect);
+        if(!group) {
+            group = new THREE.Group();
+            const colors = [0xfff0a0, 0xff8a18, 0xe72b08];
+            colors.forEach((color, index) => {
+                const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .9 - index * .14, depthWrite: false }));
+                sphere.position.set((index - 1) * .8, index * .45, (1 - index) * .7);
+                group.add(sphere);
+            });
+            threeView.dynamicRoot.add(group);
+            threeView.fireballMeshes.set(effect, group);
+        }
+        const progress = 1 - effect.life / effect.maxLife;
+        setThreeWorldPosition(group, effect.x, effect.y, effect.z * THREE_WORLD_SCALE);
+        const size = 2.2 + Math.sin(Math.min(1, progress) * Math.PI) * 7.4;
+        group.scale.setScalar(size);
+        group.rotation.y = effect.seed + now * .002;
+        group.children.forEach((sphere, index) => { sphere.material.opacity = Math.max(0, (.95 - index * .12) * (1 - progress)); });
+    });
+    for(const [effect, mesh] of threeView.fireballMeshes) {
+        if(!active.has(effect)) { disposeThreeObject(mesh); threeView.fireballMeshes.delete(effect); }
+    }
+}
+
 function syncThreeBullets() {
     const active = new Set(bullets);
     bullets.forEach(bullet => {
@@ -545,10 +900,16 @@ function syncThreeBullets() {
             mesh = createThreeBullet(bullet);
             threeView.bulletMeshes.set(bullet, mesh);
         }
+        mesh.visible = currentMap !== 'factory' || (typeof getFactoryFloorFromZ === 'function' && getFactoryFloorFromZ(bullet.z || 0) === getFactoryViewFloor());
         let height = Number.isFinite(bullet.z) ? bullet.z * THREE_WORLD_SCALE
             : (bullet.owner && bullet.owner.isFlying ? (bullet.owner.z || CONFIG.helicopterAltitude) * THREE_WORLD_SCALE : 2.2);
         if(bullet.isRocket && !Number.isFinite(bullet.z)) height = 4.2;
         const projectile = mesh.userData.projectile;
+        if(bullet.ricocheted && !mesh.userData.ricocheted) {
+            mesh.userData.ricocheted = true;
+            projectile.material.color.setHex(0x8df8ff);
+            projectile.material.emissive.setHex(0x24cde5);
+        }
         setThreeWorldPosition(projectile, bullet.x, bullet.y, height);
         const angle = Math.atan2(bullet.vy || 0, bullet.vx || 1);
         projectile.rotation.y = -angle;
@@ -652,8 +1013,10 @@ function syncThreeOwnership(now) {
     });
     threeView.baseMeshes.forEach(entry => {
         const ratio = Math.max(0, entry.base.hp / entry.base.maxHp);
-        entry.beacon.scale.setScalar(0.55 + ratio * 0.45);
-        entry.beacon.material.emissiveIntensity = 0.4 + ratio * 1.5;
+        const ragePulse = entry.base.rageActive ? 1 + Math.sin(now * 0.018) * 0.25 : 1;
+        entry.beacon.scale.setScalar((0.55 + ratio * 0.45) * ragePulse);
+        entry.beacon.material.emissiveIntensity = entry.base.rageActive ? 3.1 + Math.sin(now * 0.025) : 0.4 + ratio * 1.5;
+        if(entry.base.rageActive) entry.beacon.material.color.setHex(0xff5a24);
     });
 }
 
@@ -672,6 +1035,37 @@ function syncThreeGameModes(now) {
         threeView.stormRing.material.opacity = 0.55 + Math.sin(now * 0.006) * 0.18;
         threeView.stormRing.visible = true;
     } else if(threeView.stormRing) threeView.stormRing.visible = false;
+
+    const hiddenPoint = typeof sneakHiddenOutpost !== 'undefined' ? sneakHiddenOutpost : null;
+    const showHiddenPoint = gameMode === 'sneak' && hiddenPoint && hiddenPoint.discovered && (!hiddenPoint.triggered || hiddenPoint.signalTimer > 0);
+    if(showHiddenPoint) {
+        if(!threeView.hiddenOutpostMesh) {
+            const group = new THREE.Group();
+            const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x66dcff, transparent: true, opacity: 0.68, side: THREE.DoubleSide, depthWrite: false });
+            const ring = new THREE.Mesh(new THREE.RingGeometry(11.2, 12.2, 48), ringMaterial);
+            ring.rotation.x = -Math.PI / 2;
+            const core = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 2.2, 1.1, 12), makeStandardMaterial(0x92eaff, { emissive: 0x28b9e8, emissiveIntensity: 1.7 }));
+            core.position.y = 0.65;
+            const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.45, 18, 10), new THREE.MeshBasicMaterial({ color: 0x75eaff, transparent: true, opacity: 0.28, depthWrite: false }));
+            beam.position.y = 9;
+            group.add(ring, core, beam);
+            group.userData.ring = ring; group.userData.core = core; group.userData.beam = beam;
+            threeView.modeRoot.add(group);
+            threeView.hiddenOutpostMesh = group;
+        }
+        const mesh = threeView.hiddenOutpostMesh;
+        setThreeWorldPosition(mesh, hiddenPoint.x, hiddenPoint.y, 0.12);
+        mesh.visible = true;
+        const color = hiddenPoint.contested ? 0xff9b38 : (hiddenPoint.triggered ? 0x65ffb2 : 0x66dcff);
+        mesh.userData.ring.material.color.setHex(color);
+        mesh.userData.core.material.color.setHex(color);
+        mesh.userData.core.material.emissive.setHex(color);
+        const progress = hiddenPoint.progress / hiddenPoint.captureTime;
+        mesh.userData.ring.material.opacity = 0.35 + progress * 0.55;
+        mesh.userData.beam.scale.y = hiddenPoint.triggered ? 1.8 : 0.55 + progress * 0.75;
+        mesh.userData.beam.material.opacity = 0.16 + progress * 0.38;
+        mesh.rotation.y = now * 0.0007;
+    } else if(threeView.hiddenOutpostMesh) threeView.hiddenOutpostMesh.visible = false;
 
     if(gameMode === 'ctf') {
         ['blue', 'red'].forEach(team => {
@@ -705,14 +1099,120 @@ function updateThreeEnvironment(now) {
         threeView.scene.fog.far = player && player.isFlying ? 90 : 125;
     } else {
         const night = gameConfig.dayNight === 'night';
-        let sky = night ? 0x050916 : (currentMap === 'desert' ? 0xe3b66f : (currentMap === 'snow' ? 0xcfe6ef : (currentMap === 'city' ? 0x82909b : (currentMap === 'island' ? 0x75b8df : 0x99c9e8))));
+        let sky = currentMap === 'factory' ? (night ? 0x111416 : 0x252a2d) : (night ? (currentMap === 'volcano' ? 0x180405 : 0x050916) : (currentMap === 'desert' ? 0xe3b66f : (currentMap === 'snow' ? 0xcfe6ef : (currentMap === 'city' ? 0x82909b : (currentMap === 'island' ? 0x75b8df : (currentMap === 'volcano' ? 0x5d211b : 0x99c9e8))))));
         threeView.scene.background.setHex(sky);
         threeView.scene.fog.color.setHex(sky);
-        threeView.scene.fog.near = night ? 45 : 70;
-        threeView.scene.fog.far = night ? 145 : 210;
+        threeView.scene.fog.near = currentMap === 'factory' ? 55 : (night ? 45 : 70);
+        threeView.scene.fog.far = currentMap === 'factory' ? 170 : (night ? 145 : 210);
     }
     threeView.waterMaterials.forEach(material => {
-        material.roughness = 0.18 + Math.sin(now * 0.0018) * 0.04;
+        material.roughness = currentMap === 'volcano' ? 0.28 + Math.sin(now * 0.0032) * 0.07 : 0.18 + Math.sin(now * 0.0018) * 0.04;
+        if(currentMap === 'volcano' && material.emissiveIntensity !== undefined) material.emissiveIntensity = 2.1 + Math.sin(now * .004) * .55;
+    });
+}
+
+function syncThreeMapMechanics(now) {
+    if(typeof mapMechanicsState === 'undefined') return;
+    const aliveKeys = new Set();
+    threeView.lavaMeshes.forEach(entry => {
+        const a = typeof getLavaPoint === 'function' ? getLavaPoint(entry.zone.points[entry.index], entry.index) : entry.zone.points[entry.index];
+        const b = typeof getLavaPoint === 'function' ? getLavaPoint(entry.zone.points[entry.index + 1], entry.index + 1) : entry.zone.points[entry.index + 1];
+        const length = Math.hypot(b.x - a.x, b.y - a.y), width = (a.width + b.width) * .5;
+        entry.mesh.position.copy(threeWorldPosition((a.x + b.x) / 2, (a.y + b.y) / 2, .08));
+        entry.mesh.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x);
+        entry.mesh.scale.set(length / entry.baseLength, width / entry.baseWidth, 1);
+    });
+    if(currentMap === 'volcano') {
+        aliveKeys.add('volcano-ash');
+        const ash = threeView.mechanicMeshes.get('volcano-ash');
+        if(ash) { ash.rotation.y = now * .000018; ash.position.y = Math.sin(now * .00035) * 3; }
+    }
+    mapMechanicsState.lavaBalls.forEach(ball => {
+        aliveKeys.add(ball);
+        let mesh = threeView.mechanicMeshes.get(ball);
+        if(!mesh) {
+            mesh = new THREE.Mesh(new THREE.SphereGeometry(1.25, 12, 8), makeStandardMaterial(0xff6a12, {emissive:0xff2600, emissiveIntensity:2.8}));
+            threeView.dynamicRoot.add(mesh); threeView.mechanicMeshes.set(ball, mesh);
+        }
+        setThreeWorldPosition(mesh, ball.x, ball.y, Math.max(.2, ball.z * THREE_WORLD_SCALE));
+        mesh.scale.setScalar(.85 + Math.sin(now * .01) * .12);
+    });
+    mapMechanicsState.fireZones.forEach(fire => {
+        aliveKeys.add(fire);
+        let mesh = threeView.mechanicMeshes.get(fire);
+        if(!mesh) {
+            mesh = new THREE.Mesh(new THREE.CylinderGeometry(fire.radius * THREE_WORLD_SCALE, fire.radius * THREE_WORLD_SCALE * .7, .35, 24), makeStandardMaterial(0xff5312, {emissive:0xff2500, emissiveIntensity:2, transparent:true, opacity:.62}));
+            threeView.dynamicRoot.add(mesh); threeView.mechanicMeshes.set(fire, mesh);
+        }
+        setThreeWorldPosition(mesh, fire.x, fire.y, ((fire.z || 0) * THREE_WORLD_SCALE) + .18);
+        mesh.userData.factoryFloor = fire.factoryFloor;
+        mesh.visible = currentMap !== 'factory' || fire.factoryFloor === getFactoryViewFloor();
+        mesh.material.opacity = Math.max(0, Math.min(.7, fire.life / fire.maxLife));
+        mesh.scale.y = .8 + Math.sin(now * .009) * .25;
+    });
+    const crane = mapMechanicsState.crane;
+    if(crane) {
+        aliveKeys.add('crane-structure');
+        aliveKeys.add('crane-hook');
+        let hook = threeView.mechanicMeshes.get('crane-hook');
+        if(!hook) {
+            hook = new THREE.Group();
+            const cable = new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,1,6), makeStandardMaterial(0x282828, {metalness:.7}));
+            const claw = new THREE.Mesh(new THREE.TorusGeometry(.85,.18,8,16,Math.PI * 1.5), makeStandardMaterial(0xd0a43d, {metalness:.55}));
+            claw.rotation.z = Math.PI / 2; hook.add(cable, claw); hook.userData.cable = cable; hook.userData.claw = claw;
+            threeView.dynamicRoot.add(hook); threeView.mechanicMeshes.set('crane-hook', hook);
+        }
+        const craneBase = (crane.z || 0) * THREE_WORLD_SCALE;
+        const hookZ = crane.phase === 'carry' && crane.target ? (crane.target.z || 0) * THREE_WORLD_SCALE + 4 : craneBase + 3;
+        setThreeWorldPosition(hook, crane.hookX, crane.hookY, hookZ);
+        hook.userData.factoryFloor = crane.factoryFloor;
+        hook.visible = currentMap !== 'factory' || crane.factoryFloor === getFactoryViewFloor();
+        const craneTop = craneBase + 31;
+        hook.userData.cable.position.y = (craneTop - hookZ) / 2;
+        hook.userData.cable.scale.y = Math.max(.2, craneTop - hookZ);
+        hook.userData.claw.position.y = 0;
+        hook.userData.claw.rotation.y = now * .001;
+    }
+    if(currentMap === 'factory' && mapMechanicsState.factory) {
+        obstacles.filter(obs => obs.conveyorMovable).forEach(obs => {
+            const mesh = threeView.obstacleMeshes.get(obs.terrainId);
+            if(mesh) setThreeWorldPosition(mesh, obs.x + obs.w / 2, obs.y + obs.h / 2, (obs.z || 0) * THREE_WORLD_SCALE);
+        });
+        mapMechanicsState.factory.repairRobots.forEach(robot => {
+            aliveKeys.add(robot);
+            let mesh = threeView.mechanicMeshes.get(robot);
+            if(!mesh) {
+                mesh = new THREE.Group();
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(1.5,1.8,2.3,10), makeStandardMaterial(0x67cbd3,{metalness:.42,emissive:0x103f45,emissiveIntensity:.6}));
+                body.position.y=1.45;
+                const head = new THREE.Mesh(new THREE.BoxGeometry(2.1,1.1,1.5), makeStandardMaterial(0xb8edf0,{metalness:.3}));
+                head.position.y=3.15;
+                const arm = new THREE.Mesh(new THREE.BoxGeometry(3.4,.42,.42),makeStandardMaterial(0xf2b84b,{metalness:.4}));
+                arm.position.set(1.7,2.25,0);
+                mesh.add(body,head,arm);
+                mesh.userData.factoryFloor=robot.factoryFloor;
+                threeView.dynamicRoot.add(mesh);
+                threeView.mechanicMeshes.set(robot,mesh);
+            }
+            mesh.visible=!robot.dead && robot.factoryFloor===getFactoryViewFloor();
+            setThreeWorldPosition(mesh,robot.x,robot.y,((robot.z||0)*THREE_WORLD_SCALE)+.1);
+            mesh.rotation.y=-robot.angle;
+        });
+    }
+    threeView.mechanicMeshes.forEach((mesh, key) => {
+        if(aliveKeys.has(key)) return;
+        disposeThreeObject(mesh); threeView.mechanicMeshes.delete(key);
+    });
+}
+
+function applyThreeFactoryFloorVisibility() {
+    if(currentMap !== 'factory') return;
+    const visibleFloor = getFactoryViewFloor();
+    [threeView.worldRoot, threeView.modeRoot].forEach(root => {
+        if(!root) return;
+        root.traverse(object => {
+            if(Number.isInteger(object.userData.factoryFloor)) object.visible = object.userData.factoryFloor === visibleFloor;
+        });
     });
 }
 
@@ -724,6 +1224,26 @@ function updateThreeCamera(dt) {
         threeView.sun.target.position.set(center.x, 0, center.z);
         threeView.sun.target.updateMatrixWorld();
     }
+    if(currentMap === 'factory') {
+        const zoomFactor = Math.max(0.75, camera.zoom || 1);
+        const vehicleHeight = (player.z || 0) * THREE_WORLD_SCALE;
+        const desired = new THREE.Vector3(center.x, vehicleHeight + 62 / zoomFactor, center.z + 0.01);
+        const target = new THREE.Vector3(center.x, vehicleHeight, center.z);
+        threeView.camera.up.set(0,0,-1);
+        threeView.cameraAzimuth = -Math.PI / 2;
+        threeView.groundPlane.constant = -vehicleHeight;
+        if(!threeView.cameraReady) {
+            threeView.camera.position.copy(desired);
+            threeView.cameraReady = true;
+        } else {
+            const smoothing = 1 - Math.pow(0.002, Math.min(0.05, dt));
+            threeView.camera.position.lerp(desired, smoothing);
+        }
+        threeView.camera.lookAt(target);
+        return;
+    }
+    threeView.camera.up.set(0,1,0);
+    threeView.groundPlane.constant = 0;
     // 锁定世界方向：镜头始终从地图南侧朝北看，W/S/A/D 与屏幕上下左右恒定。
     // 坦克转弯只改车身方向，摄像机只平移跟随，绝不旋转。
     const zoomFactor = Math.max(0.75, camera.zoom || 1);
@@ -776,7 +1296,8 @@ function syncThreeHud() {
         label.textContent = tankData ? tankData.name : tank.tankType;
         label.style.color = tank.team === 'blue' ? '#55a7ff' : '#ff5555';
         const hiddenGhost = tank.team !== player.team && tank.ghostActive && !tank.ghostRevealed;
-        const point = hiddenGhost ? null : projectThreeHudPoint(tank.x, tank.y, (tank.z || 0) + (tank.isFlying ? 76 : 68));
+        const hiddenFloor = currentMap === 'factory' && !isFactoryEntityOnVisibleFloor(tank);
+        const point = hiddenGhost || hiddenFloor ? null : projectThreeHudPoint(tank.x, tank.y, (tank.z || 0) + (tank.isFlying ? 76 : 68));
         positionThreeHudElement(label, point, tank === player ? 1 : 0.9);
     });
     for(const [id, label] of threeView.tankLabels) {
@@ -805,7 +1326,8 @@ function syncThreeHud() {
         }
     }
 
-    const activeCaptures = new Set(outposts.filter(op => op.captureProgress > 0 && op.captureProgress < CONFIG.outpostCaptureTime));
+    const activeCaptures = new Set(outposts.filter(op => op.captureProgress > 0 && op.captureProgress < CONFIG.outpostCaptureTime &&
+        (currentMap !== 'factory' || isFactoryEntityOnVisibleFloor(op))));
     activeCaptures.forEach(op => {
         let label = threeView.captureLabels.get(op);
         if(!label) {
@@ -856,12 +1378,17 @@ function renderThreeScene() {
     const now = performance.now();
     const dt = Math.min(0.05, Math.max(0.001, (now - threeView.lastFrame) / 1000));
     threeView.lastFrame = now;
+    syncThreeTerrainDestruction();
     syncThreeTanks(now);
     syncThreeBullets();
     syncThreeTurrets();
+    syncThreeSupplyDrops(now);
+    syncThreeAmmoRackFireballs(now);
     syncThreeSnowTracks(now);
     syncThreeOwnership(now);
     syncThreeGameModes(now);
+    syncThreeMapMechanics(now);
+    applyThreeFactoryFloorVisibility();
     updateThreeEnvironment(now);
     updateThreeCamera(dt);
     threeView.renderer.render(threeView.scene, threeView.camera);

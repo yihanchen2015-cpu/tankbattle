@@ -60,6 +60,30 @@
             min-width: 76px; padding: 4px 8px; text-align: center; color: #8ee8ff;
             background: rgba(0,0,0,.72); border-radius: 8px; font-size: 12px;
         }
+        #gunElevationControls {
+            position: absolute; left: 122px; bottom: 175px; display: none;
+            flex-direction: column; gap: 7px; align-items: center; z-index: 30; pointer-events: auto;
+        }
+        #gunElevationControls.gun-active { display: flex; }
+        #gunElevationControls button {
+            width: 86px; min-height: 42px; border: 1px solid rgba(255,190,75,.78);
+            border-radius: 10px; color: #fff5d9; background: rgba(110,63,0,.78);
+            font-weight: 800; touch-action: manipulation;
+        }
+        #gunElevationReadout {
+            min-width: 96px; padding: 4px 8px; text-align: center; color: #ffd27a;
+            background: rgba(0,0,0,.72); border-radius: 8px; font-size: 12px;
+        }
+        #suddenDeathBanner {
+            position: absolute; top: 112px; left: 50%; transform: translateX(-50%) scale(.9);
+            z-index: 32; display: none; padding: 9px 22px; color: #fff3b0;
+            background: linear-gradient(90deg, rgba(120,0,0,.88), rgba(215,45,0,.9), rgba(120,0,0,.88));
+            border: 2px solid #ffb02e; border-radius: 8px; box-shadow: 0 0 28px rgba(255,55,0,.58);
+            font-size: clamp(14px, 2vw, 22px); font-weight: 950; letter-spacing: .12em;
+            text-shadow: 0 2px 3px #000; pointer-events: none;
+        }
+        #suddenDeathBanner.active { display: block; animation: suddenDeathPulse .72s ease-in-out infinite alternate; }
+        @keyframes suddenDeathPulse { to { transform: translateX(-50%) scale(1.04); filter: brightness(1.18); } }
         #teamScoreDisplay { display: flex; gap: 10px; align-items: center; margin-top: 4px; font-size: 15px; font-weight: 900; }
         #teamScoreDisplay b { color: rgba(255,255,255,.45); }
         .score-blue { color: #66b7ff; } .score-red { color: #ff7474; }
@@ -961,7 +985,12 @@
             align-items: center;
             justify-content: center;
             transition: all 0.15s;
+            flex-direction: column;
+            gap: 2px;
+            line-height: 1.05;
+            text-align: center;
         }
+        .pc-btn .action-icon { display: block; font-size: 20px; line-height: 1; }
         .pc-btn:active, .pc-btn.active {
             transform: scale(0.92);
             background: rgba(255,255,255,0.25);
@@ -992,6 +1021,29 @@
             font-size: 11px;
             align-self: flex-end;
         }
+
+        /* 触控按钮的基础外观不能放在手机宽度媒体查询中，否则高分辨率平板只会显示原生按钮。 */
+        #mobileActionButtons {
+            position: absolute; right: 24px; bottom: 190px; z-index: 31;
+            flex-direction: column; align-items: flex-end; gap: 12px;
+            pointer-events: auto;
+        }
+        .mobile-btn {
+            width: clamp(68px, 12vw, 96px); height: clamp(68px, 12vw, 96px);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+            border: 2px solid rgba(255,255,255,.42); border-radius: 50%;
+            color: #fff; background: rgba(30,38,46,.82); box-shadow: 0 6px 18px rgba(0,0,0,.4), inset 0 0 14px rgba(255,255,255,.08);
+            font: 800 clamp(11px, 1.8vw, 14px)/1.05 'Microsoft YaHei', sans-serif;
+            text-align: center; cursor: pointer; user-select: none; touch-action: manipulation;
+            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+        }
+        .mobile-btn .action-icon { display: block; font: 950 clamp(19px, 4vw, 30px)/1 Arial, sans-serif; }
+        .mobile-btn-weapon { background: radial-gradient(circle at 35% 28%, rgba(35,190,255,.72), rgba(0,70,125,.88)); border-color: #58cfff; }
+        .mobile-btn-ultimate { background: radial-gradient(circle at 35% 28%, rgba(255,220,65,.72), rgba(112,72,0,.9)); border-color: #ffe068; }
+        .mobile-btn-repair { background: radial-gradient(circle at 35% 28%, rgba(78,255,139,.7), rgba(15,94,48,.9)); border-color: #65ff9d; }
+        #mobileRepairBtn { display: none; }
+        #mobileRepairBtn.engineer-active { display: flex; }
+        .mobile-btn:active { transform: scale(.92); filter: brightness(1.22); }
 
         #fireBtn {
             position: absolute;

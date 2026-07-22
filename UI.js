@@ -353,6 +353,11 @@ function setupIntroModal() {
 
 // ==================== 菜单系统 ====================
 let currentTankFilter = 'all';
+const TANK_SERIES_ORDER = ['zuoyan', 'xingchen', 'duoduo', 'niuniu', 'kimi'];
+
+function getTankSeries(key) {
+    return TANK_SERIES_ORDER.find(series => key.startsWith(series)) || 'other';
+}
 
 function filterTanks(series, btn) {
     console.log('[BUTTON] 点击: 系列筛选', series);
@@ -371,16 +376,16 @@ function renderTankList() {
     }
     tankList.innerHTML = '';
 
-    Object.entries(TANKS).forEach(([key, tank]) => {
+    Object.entries(TANKS).sort((a, b) => {
+        const orderA = TANK_SERIES_ORDER.indexOf(getTankSeries(a[0]));
+        const orderB = TANK_SERIES_ORDER.indexOf(getTankSeries(b[0]));
+        return orderA - orderB;
+    }).forEach(([key, tank]) => {
         // 跳过未解锁的隐藏坦克
         if (tank.isHidden && !isTankUnlocked(key)) return;
 
         // 根据系列筛选
-        let series = '';
-        if(key.startsWith('zuoyan')) series = 'zuoyan';
-        else if(key.startsWith('xingchen')) series = 'xingchen';
-        else if(key.startsWith('duoduo')) series = 'duoduo';
-        else if(key.startsWith('kimi')) series = 'kimi';
+        const series = getTankSeries(key);
 
         if(currentTankFilter !== 'all' && series !== currentTankFilter) return;
 
@@ -392,6 +397,7 @@ function renderTankList() {
         if(key.startsWith('zuoyan')) seriesTag = '🔵 左研系';
         else if(key.startsWith('xingchen')) seriesTag = '🟢 星辰系';
         else if(key.startsWith('duoduo')) seriesTag = '🟠 多多系';
+        else if(key.startsWith('niuniu')) seriesTag = '🩵 牛牛系';
         else if(key.startsWith('kimi')) seriesTag = '🟣 AI系';
         card.innerHTML = `
             <div class="tank-preview" id="preview-${key}"></div>
@@ -437,7 +443,9 @@ function setupMapSelection() {
         {key: 'desert', name: '🏜 沙漠风暴', desc: '大视野，随机沙尘暴'},
         {key: 'city', name: '🏙 城市巷战', desc: '街区路网与密集楼群'},
         {key: 'snow', name: '❄️ 雪地突袭', desc: '履带留痕，久停冻结'},
-        {key: 'island', name: '🏝 海岛争夺', desc: '7座据点岛、桥网与树林'}
+        {key: 'island', name: '🏝 海岛争夺', desc: '7座据点岛、桥网与树林'},
+        {key: 'volcano', name: '🌋 火山熔岩', desc: '动态熔岩河、喷发与结晶护甲'},
+        {key: 'factory', name: '🏗 废弃工厂', desc: 'B1传送带、1F维修机器人、2F起重机'}
     ];
 
     maps.forEach(map => {
@@ -517,13 +525,17 @@ function selectTank(key, card) {
     if(gameMode === 'defense') ammoMult = 3;
     ammoSlider.max = Math.floor(tank.maxShells * ammoMult);
     mgSlider.max = Math.floor(tank.maxMG * ammoMult);
-    aaSlider.max = Math.floor((tank.maxAA || 15) * ammoMult);
+    aaSlider.max = Math.floor((tank.maxAA ?? 15) * ammoMult);
     ammoSlider.value = Math.floor(tank.maxShells * 0.7 * ammoMult);
     mgSlider.value = Math.floor(tank.maxMG * 0.7 * ammoMult);
-    aaSlider.value = Math.floor((tank.maxAA || 15) * 0.5 * ammoMult);
+    aaSlider.value = Math.floor((tank.maxAA ?? 15) * 0.5 * ammoMult);
     document.getElementById('ammoValue').textContent = ammoSlider.value;
     document.getElementById('mgValue').textContent = mgSlider.value;
     document.getElementById('aaValue').textContent = aaSlider.value;
+    const helicopter = !!tank.isFlying;
+    document.getElementById('shellConfigLabel').textContent = helicopter ? '炸药包数量 (个)' : '主炮弹药量 (发)';
+    document.getElementById('mgConfigLabel').textContent = helicopter ? '空对空机枪弹量 (发)' : '机枪弹量 (发)';
+    document.getElementById('aaConfigRow').style.display = helicopter ? 'none' : 'flex';
     document.getElementById('startBtn').disabled = false;
 }
 
@@ -535,10 +547,16 @@ function setupControls() {
 
     const keydownHandler = (e) => {
         keys[e.code] = true;
-        if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+        if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','BracketLeft','BracketRight'].includes(e.code)) e.preventDefault();
         if(e.code === 'KeyF') mouse.down = true;
         if(e.code === 'KeyT') switchWeapon();
+        if(e.code === 'Digit1' && !e.repeat) selectWeaponSlot(0);
+        if(e.code === 'Digit2' && !e.repeat) selectWeaponSlot(1);
+        if(e.code === 'Digit3' && !e.repeat) selectWeaponSlot(2);
+        if(e.code === 'BracketLeft' && !e.repeat) adjustGunElevation(-CONFIG.gunElevationStep);
+        if(e.code === 'BracketRight' && !e.repeat) adjustGunElevation(CONFIG.gunElevationStep);
         if(e.code === 'KeyG') activateUltimate();
+        if(e.code === 'KeyR' && !e.repeat && typeof attemptEngineerRepair === 'function') attemptEngineerRepair(player, true);
         if(e.code === 'KeyV' && !e.repeat) toggleViewMode();
         if(e.code === 'KeyY' && player) {
             toggleAutoAim(player);
@@ -634,6 +652,11 @@ function setupControls() {
     bindLiftButton(heliAscendBtn, 1);
     bindLiftButton(heliDescendBtn, -1);
 
+    const lowerGunBtn = document.getElementById('gunLowerBtn');
+    const raiseGunBtn = document.getElementById('gunRaiseBtn');
+    if(lowerGunBtn) lowerGunBtn.addEventListener('click', event => { event.preventDefault(); adjustGunElevation(-CONFIG.gunElevationStep); });
+    if(raiseGunBtn) raiseGunBtn.addEventListener('click', event => { event.preventDefault(); adjustGunElevation(CONFIG.gunElevationStep); });
+
     
     const pcFireBtn = document.getElementById('pcFireBtn');
     const pcFireDown = () => { mouse.down = true; pcFireBtn.classList.add('active'); };
@@ -690,12 +713,13 @@ function showMessage(text, color) {
 
 function switchWeapon() {
     console.log('[WEAPON] Switching weapon, current:', currentWeapon);
-    const weapons = ['shell', 'mg', 'aa'];
-    const weaponNames = { shell: '主炮', mg: '机枪', aa: '高射炮' };
-    const weaponColors = { shell: '#ff8800', mg: '#ffff00', aa: '#ff44ff' };
+    const helicopter = !!(player && player.isFlying);
+    const weapons = helicopter ? ['bomb', 'airmg'] : ['shell', 'mg', 'aa'];
+    const weaponNames = { shell: '主炮', mg: '机枪', aa: '高射炮', bomb: '垂直炸药包', airmg: '空对空机枪' };
+    const weaponColors = { shell: '#ff8800', mg: '#ffff00', aa: '#ff44ff', bomb: '#ff6b35', airmg: '#7df4ff' };
 
     const idx = weapons.indexOf(currentWeapon);
-    currentWeapon = weapons[(idx + 1) % weapons.length];
+    currentWeapon = weapons[(Math.max(-1, idx) + 1) % weapons.length];
     console.log('[WEAPON] Switched to:', currentWeapon);
 
     document.getElementById('currentWeapon').textContent = weaponNames[currentWeapon];
@@ -703,5 +727,47 @@ function switchWeapon() {
     indicator.textContent = `已切换: ${weaponNames[currentWeapon]}`;
     indicator.style.display = 'block';
     indicator.style.color = weaponColors[currentWeapon];
+    const switchButtons = [document.getElementById('pcSwitchBtn'), document.getElementById('mobileSwitchBtn')];
+    switchButtons.forEach(button => {
+        const label = button && button.querySelector('span:last-child');
+        if(label) label.textContent = weaponNames[currentWeapon];
+    });
     setTimeout(() => { indicator.style.display = 'none'; }, 1500);
+}
+
+function selectWeaponSlot(index) {
+    if(!player) return;
+    const weapons = player.isFlying ? ['bomb', 'airmg'] : ['shell', 'mg', 'aa'];
+    if(index < 0 || index >= weapons.length) return;
+    currentWeapon = weapons[index];
+    updateWeaponHudMode(player);
+    const names = { shell: '主炮', mg: '机枪', aa: '高射炮', bomb: '垂直炸药包', airmg: '空对空机枪' };
+    showMessage(`武器 ${index + 1}：${names[currentWeapon]}`, '#8ee8ff');
+}
+
+function adjustGunElevation(delta) {
+    if(!player || player.isFlying || (currentWeapon !== 'shell' && currentWeapon !== 'aa')) return;
+    const key = currentWeapon === 'aa' ? 'aaElevation' : 'shellElevation';
+    const min = currentWeapon === 'aa' ? CONFIG.aaElevationMin : CONFIG.gunElevationMin;
+    const max = currentWeapon === 'aa' ? CONFIG.aaElevationMax : CONFIG.gunElevationMax;
+    player[key] = Math.max(min, Math.min(max, (player[key] ?? (currentWeapon === 'aa' ? CONFIG.aaDefaultElevation : CONFIG.shellDefaultElevation)) + delta));
+    player.gunElevation = player[key];
+    const readout = document.getElementById('gunElevationReadout');
+    if(readout) readout.textContent = `${currentWeapon === 'aa' ? '高射炮' : '主炮'}仰角 ${Math.round(player[key])}°`;
+}
+
+function updateWeaponHudMode(tank) {
+    if(!tank) return;
+    const helicopter = !!tank.isFlying;
+    const names = { shell: '主炮', mg: '机枪', aa: '高射炮', bomb: '垂直炸药包', airmg: '空对空机枪' };
+    const current = document.getElementById('currentWeapon');
+    const shellLabel = document.getElementById('shellAmmoLabel');
+    const mgLabel = document.getElementById('mgAmmoLabel');
+    const aaGroup = document.getElementById('aaAmmoGroup');
+    if(current) current.textContent = names[currentWeapon] || names.shell;
+    if(shellLabel) shellLabel.textContent = helicopter ? '炸药包' : '主炮';
+    if(mgLabel) mgLabel.textContent = helicopter ? '空对空机枪' : '机枪';
+    if(aaGroup) aaGroup.style.display = helicopter ? 'none' : 'inline';
+    const switchLabel = document.querySelector('#mobileSwitchBtn span:last-child');
+    if(switchLabel) switchLabel.textContent = names[currentWeapon] || '切换武器';
 }

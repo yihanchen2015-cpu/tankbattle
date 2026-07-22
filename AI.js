@@ -1,4 +1,19 @@
 // ==================== AI 系统 ====================
+function solveAIGunElevation(tank, target, weaponType) {
+    if(!tank || !target || (weaponType !== 'shell' && weaponType !== 'aa')) return;
+    const horizontalDistance = Math.max(1, Math.hypot(target.x - tank.x, target.y - tank.y));
+    const launchZ = (tank.z || 0) + (weaponType === 'aa' ? 18 : 24);
+    const targetZ = typeof getProjectileTargetHeight === 'function' ? getProjectileTargetHeight(target) : (target.z || 0) + (target.isFlying ? 8 : 22);
+    const speed = (weaponType === 'aa' ? CONFIG.aaSpeed : CONFIG.bulletSpeed) * 60;
+    const gravity = weaponType === 'aa' ? CONFIG.aaGravity : CONFIG.shellGravity;
+    const discriminant = speed ** 4 - gravity * (gravity * horizontalDistance ** 2 + 2 * (targetZ - launchZ) * speed ** 2);
+    if(discriminant < 0) return;
+    const angle = Math.atan((speed ** 2 - Math.sqrt(discriminant)) / (gravity * horizontalDistance)) * 180 / Math.PI;
+    const min = weaponType === 'aa' ? CONFIG.aaElevationMin : CONFIG.gunElevationMin;
+    const max = weaponType === 'aa' ? CONFIG.aaElevationMax : CONFIG.gunElevationMax;
+    tank[weaponType === 'aa' ? 'aaElevation' : 'shellElevation'] = Math.max(min, Math.min(max, angle));
+}
+
 function updateAITank(tank, dt) {
     if(tank.dead) return;
     if(tank.invincible > 0) tank.invincible -= dt;
@@ -25,14 +40,20 @@ function updateAITank(tank, dt) {
     else tank.stuckTimer = 0;
     tank.lastPos.x = tank.x; tank.lastPos.y = tank.y;
     
-    const enemyList = (tank.team === 'blue' ? enemies.filter(e => !e.dead) : [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])]).filter(e => e !== tank && e.team !== tank.team);
-    const enemyBase = tank.team === 'blue' ? bases.red : bases.blue;
-    const myBase = tank.team === 'blue' ? bases.blue : bases.red;
+    const enemyList = (tank.team === 'blue' ? enemies.filter(e => !e.dead) : [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])])
+        .filter(e => e !== tank && e.team !== tank.team)
+        .filter(e => typeof areEntitiesOnSameFactoryFloor !== 'function' || areEntitiesOnSameFactoryFloor(tank, e));
+    const rawEnemyBase = tank.team === 'blue' ? bases.red : bases.blue;
+    const rawMyBase = tank.team === 'blue' ? bases.blue : bases.red;
+    const enemyBase = rawEnemyBase;
+    const myBase = rawMyBase;
+    const enemyBaseAccessible = !!enemyBase && (currentMap !== 'factory' || areEntitiesOnSameFactoryFloor(tank, enemyBase));
+    const myBaseAccessible = !!myBase && (currentMap !== 'factory' || areEntitiesOnSameFactoryFloor(tank, myBase));
     const myTeamList = tank.team === 'blue' ? [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])] : enemies.filter(e => !e.dead);
     const isRedAI = tank.team === 'red' || tank.team === 'infected';
 
     // AI 回到基地后真正维修和补给，避免残血/空弹单位永久卡在撤退状态。
-    if(myBase) {
+    if(myBaseAccessible) {
         const baseCenterX = myBase.x + myBase.w / 2;
         const baseCenterY = myBase.y + myBase.h / 2;
         if(Math.hypot(tank.x - baseCenterX, tank.y - baseCenterY) < 230) {
@@ -48,7 +69,8 @@ function updateAITank(tank, dt) {
     
     const sensorRange = isRedAI ? 2200 : 1550;
     const nearbyEnemies = getNearbyTanks(tank.x, tank.y, sensorRange);
-    const filteredEnemies = nearbyEnemies.filter(e => e.team !== tank.team && !e.dead);
+    const filteredEnemies = nearbyEnemies.filter(e => e.team !== tank.team && !e.dead &&
+        (typeof areEntitiesOnSameFactoryFloor !== 'function' || areEntitiesOnSameFactoryFloor(tank, e)));
     
     filteredEnemies.forEach(e => {
         const d = Math.hypot(e.x - tank.x, e.y - tank.y);
@@ -86,11 +108,13 @@ function updateAITank(tank, dt) {
     
     let nearestOutpost = null, minOutpostDist = Infinity;
     outposts.forEach(op => {
+        if(currentMap === 'factory' && !areEntitiesOnSameFactoryFloor(tank, op)) return;
         const d = Math.hypot(op.x - tank.x, op.y - tank.y);
         if(d < minOutpostDist) { minOutpostDist = d; nearestOutpost = op; }
     });
     let capturableOutpost = null;
     outposts.forEach(op => {
+        if(currentMap === 'factory' && !areEntitiesOnSameFactoryFloor(tank, op)) return;
         if(op.owner !== tank.team) {
             const d = Math.hypot(op.x - tank.x, op.y - tank.y);
             if(!capturableOutpost || d < Math.hypot(capturableOutpost.x - tank.x, capturableOutpost.y - tank.y)) {
@@ -103,7 +127,7 @@ function updateAITank(tank, dt) {
     tank.aiAmmoSaveMode = ammoRatio < 0.2;
     
     const totalAmmo = tank.shells + tank.mg + (tank.aa || 0);
-    const hasAmmo = totalAmmo > 0 || (tank.stormActive && tank.tankType === 'duoduo_ifv');
+    const hasAmmo = totalAmmo > 0 || tank.suddenDeathInfiniteAmmo || (tank.stormActive && tank.tankType === 'duoduo_ifv');
     
     if(tank.aiBehaviorTimer <= 0) {
         tank.aiBehaviorTimer = 3 + Math.random() * 2;
@@ -164,7 +188,7 @@ function updateAITank(tank, dt) {
             tank.aiState = 'capturing'; tank.aiCaptureTarget = capturableOutpost; tank.aiStateTimer = 15;
         } else if(nearestOutpost && nearestOutpost.owner === tank.team && minEnemyDist < 800 && gameMode !== 'sneak') {
             tank.aiState = 'defending'; tank.aiStateTimer = 8;
-        } else if(isRedAI && !['sneak', 'infection', 'storm'].includes(gameMode) && enemyBase) {
+        } else if(isRedAI && !['sneak', 'infection', 'storm'].includes(gameMode) && enemyBaseAccessible) {
             tank.aiState = 'attackBase'; tank.aiStateTimer = 12;
         } else {
             tank.aiState = 'patrol'; if(!tank.patrolCenter) tank.patrolCenter = {x: tank.x, y: tank.y}; tank.aiStateTimer = 10;
@@ -175,6 +199,11 @@ function updateAITank(tank, dt) {
     let shouldFire = false; 
     let stopDist = 350; 
     let usePathfinding = false;
+    if(currentMap === 'factory' && ((!enemyBaseAccessible && tank.aiState === 'attackBase') ||
+        (!myBaseAccessible && ['retreating','defendBase'].includes(tank.aiState)))) {
+        tank.aiState = 'patrol';
+        tank.aiStateTimer = Math.min(tank.aiStateTimer || 4, 4);
+    }
     
     switch(tank.aiState) {
         case 'ctf': {
@@ -227,9 +256,11 @@ function updateAITank(tank, dt) {
                         stopDist = minEnemyDist > 500 ? 50 : (minEnemyDist > 300 ? 100 : 250);
                 }
                 shouldFire = true;
-            } else { 
+            } else if(enemyBaseAccessible) {
                 targetX = enemyBase.x + enemyBase.w/2; targetY = enemyBase.y + enemyBase.h/2; 
                 stopDist = 250; shouldFire = true; 
+            } else {
+                tank.aiState = 'patrol';
             }
             usePathfinding = true; 
             break;
@@ -251,8 +282,10 @@ function updateAITank(tank, dt) {
                 tank.aiState = 'combat';
                 if(nearestEnemy) {
                     targetX = nearestEnemy.x; targetY = nearestEnemy.y; shouldFire = true;
-                } else {
+                } else if(enemyBaseAccessible) {
                     targetX = enemyBase.x + enemyBase.w/2; targetY = enemyBase.y + enemyBase.h/2;
+                } else {
+                    tank.aiState = 'patrol';
                 }
             }
             break;
@@ -268,8 +301,10 @@ function updateAITank(tank, dt) {
                     targetX = capturableOutpost.x; targetY = capturableOutpost.y;
                 } else if(nearestEnemy) {
                     targetX = nearestEnemy.x; targetY = nearestEnemy.y; shouldFire = true;
-                } else {
+                } else if(enemyBaseAccessible) {
                     targetX = enemyBase.x + enemyBase.w/2; targetY = enemyBase.y + enemyBase.h/2;
+                } else {
+                    tank.aiState = 'patrol';
                 }
             }
             break;
@@ -306,6 +341,21 @@ function updateAITank(tank, dt) {
             usePathfinding = true; 
             break;
     }
+
+    // 直升机不再像地面坦克一样在目标附近横射：对地时压到目标正上方，对空时先对齐高度。
+    if(tank.isFlying && nearestEnemy) {
+        targetX = nearestEnemy.x;
+        targetY = nearestEnemy.y;
+        shouldFire = true;
+        usePathfinding = false;
+        stopDist = nearestEnemy.isFlying ? 170 : 18;
+        const desiredAltitude = nearestEnemy.isFlying
+            ? Math.max(CONFIG.helicopterMinAltitude, Math.min(CONFIG.helicopterMaxAltitude, nearestEnemy.z || CONFIG.helicopterAltitude))
+            : Math.max(CONFIG.helicopterMinAltitude, Math.min(320, 180 + minEnemyDist * 0.08));
+        const altitudeStep = CONFIG.helicopterClimbSpeed * dt;
+        const nextZ = (tank.z || CONFIG.helicopterAltitude) + Math.max(-altitudeStep, Math.min(altitudeStep, desiredAltitude - (tank.z || CONFIG.helicopterAltitude)));
+        if(nextZ >= (tank.z || 0) || !flyingTankHitsObstacle(tank.x, tank.y, nextZ, CONFIG.tankSize * 0.8)) tank.z = nextZ;
+    }
     
     let targetAngle = null;
     if(nearestEnemy) {
@@ -332,13 +382,21 @@ function updateAITank(tank, dt) {
 
     const aimDiff = targetAngle !== null ? Math.abs(normalizeAngle(tank.turretAngle - targetAngle)) : Infinity;
 
+    if(nearestEnemy && !tank.isFlying) {
+        solveAIGunElevation(tank, nearestEnemy, 'shell');
+        solveAIGunElevation(tank, nearestEnemy, 'aa');
+    }
+
     const validTankTarget = !!(shouldFire && nearestEnemy && !nearestEnemy.dead && minEnemyDist <= sensorRange);
     const baseDistance = enemyBase ? Math.hypot(targetX - tank.x, targetY - tank.y) : Infinity;
-    const validBaseTarget = !!(!nearestEnemy && shouldFire && enemyBase && enemyBase.hp > 0 && baseDistance < 950);
+    const validBaseTarget = !!(!nearestEnemy && shouldFire && enemyBaseAccessible && enemyBase.hp > 0 && baseDistance < 950);
 
     if(validBaseTarget && hasAmmo) {
         const isAimedAtBase = aimDiff < 0.24;
-        if(isAimedAtBase && lineOfSight(tank.x, tank.y, enemyBase.x + enemyBase.w/2, enemyBase.y + enemyBase.h/2) && tank.shells > 0 && tank.fireCooldown <= 0) {
+        if(tank.isFlying && baseDistance < 55 && (tank.shells > 0 || tank.suddenDeathInfiniteAmmo) && tank.fireCooldown <= 0) {
+            fireBullet(tank, 'bomb');
+            tank.fireCooldown = .95 / tank.fireRate;
+        } else if(!tank.isFlying && isAimedAtBase && lineOfSight(tank.x, tank.y, enemyBase.x + enemyBase.w/2, enemyBase.y + enemyBase.h/2, tank.factoryFloor) && tank.shells > 0 && tank.fireCooldown <= 0) {
             fireBullet(tank, 'shell');
             tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)) * (isRedAI ? 1.08 : 1));
         }
@@ -371,32 +429,38 @@ function updateAITank(tank, dt) {
         // 每3帧检查一次视线，减少开销
         if((tank.aiLOSCheckTimer || 0) <= 0) {
             tank.aiLOSCheckTimer = 0.05; // 约3帧检查一次
-            tank.aiCachedLOS = nearestEnemy ? lineOfSight(tank.x, tank.y, nearestEnemy.x, nearestEnemy.y) : false;
+            tank.aiCachedLOS = nearestEnemy ? lineOfSight(tank.x, tank.y, nearestEnemy.x, nearestEnemy.y, tank.factoryFloor) : false;
         }
         tank.aiLOSCheckTimer -= dt;
         const aaReadyForTarget = (tank.aa || 0) > 0 && (tank.aaCooldown || 0) <= 0;
         hasLOS = aaReadyForTarget ? true : tank.aiCachedLOS;
         
         if (isAimed && hasLOS && nearestEnemy && !nearestEnemy.dead) {
-            const canFireShell = tank.shells > 0 && tank.fireCooldown <= 0;
-            const canFireMG = tank.mg > 0 && tank.mgCooldown <= 0 && !nearestEnemy.isFlying;
-            const canFireAA = (tank.aa || 0) > 0 && (tank.aaCooldown || 0) <= 0;
+            const canFireShell = (tank.shells > 0 || tank.suddenDeathInfiniteAmmo) && tank.fireCooldown <= 0;
+            const canFireMG = (tank.mg > 0 || tank.suddenDeathInfiniteAmmo) && tank.mgCooldown <= 0 && !nearestEnemy.isFlying;
+            const canFireAA = ((tank.aa || 0) > 0 || tank.suddenDeathInfiniteAmmo) && (tank.aaCooldown || 0) <= 0;
             const isStormActive = tank.stormActive && tank.tankType === 'duoduo_ifv';
 
-            if(canFireAA && (nearestEnemy.isFlying || !tank.aiCachedLOS)) {
+            if(tank.isFlying && nearestEnemy.isFlying && Math.abs((tank.z || 0) - (nearestEnemy.z || 0)) <= 42 && (tank.mg > 0 || tank.suddenDeathInfiniteAmmo) && tank.mgCooldown <= 0) {
+                fireBullet(tank, 'airmg');
+                tank.mgCooldown = .095 / tank.fireRate;
+            } else if(tank.isFlying && !nearestEnemy.isFlying && minEnemyDist < 55 && canFireShell) {
+                fireBullet(tank, 'bomb');
+                tank.fireCooldown = .95 / tank.fireRate;
+            } else if(!tank.isFlying && canFireAA && (nearestEnemy.isFlying || !tank.aiCachedLOS)) {
                 fireBullet(tank, 'aa');
                 tank.aaCooldown = CONFIG.aaCooldown / tank.fireRate;
-            } else if(nearestEnemy.isFlying) {
+            } else if(!tank.isFlying && nearestEnemy.isFlying) {
                 if(canFireShell) {
                     fireBullet(tank, 'shell');
                     tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
                 }
-            } else if (isStormActive) {
+            } else if(!tank.isFlying && isStormActive) {
                 if (tank.mgCooldown <= 0) {
                     fireBullet(tank, 'mg');
                     tank.mgCooldown = (CONFIG.mgCooldown / tank.fireRate) / (tank.ultimateData.mgRateMult || 3);
                 }
-            } else if (minEnemyDist < 200) {
+            } else if(!tank.isFlying && minEnemyDist < 200) {
                 if (canFireMG) {
                     fireBullet(tank, 'mg');
                     tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
@@ -404,7 +468,7 @@ function updateAITank(tank, dt) {
                     fireBullet(tank, 'shell');
                     tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
                 }
-            } else if (minEnemyDist < 500) {
+            } else if(!tank.isFlying && minEnemyDist < 500) {
                 if (canFireMG && mgRatio > 0.15) {
                     fireBullet(tank, 'mg');
                     tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
@@ -415,7 +479,7 @@ function updateAITank(tank, dt) {
                     fireBullet(tank, 'mg');
                     tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
                 }
-            } else {
+            } else if(!tank.isFlying) {
                 if (canFireShell && shellRatio > 0.05) {
                     fireBullet(tank, 'shell');
                     tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
@@ -446,7 +510,7 @@ function updateAITank(tank, dt) {
         
         const shouldUseAStar = usePathfinding && ((tank.stuckTimer || 0) > 0.5 || (tank.pathRefreshTimer || 0) <= 0 || !tank.path || tank.path.length === 0);
         if(shouldUseAStar && dist > stopDist + 100) {
-            const newPath = aStar({x: tank.x, y: tank.y}, {x: targetX, y: targetY});
+            const newPath = aStar({x: tank.x, y: tank.y}, {x: targetX, y: targetY}, tank.factoryFloor);
             if(newPath && newPath.length > 1) { 
                 tank.path = simplifyPath(newPath); 
                 tank.pathRefreshTimer = CONFIG.pathRefreshInterval; 

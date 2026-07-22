@@ -20,10 +20,10 @@ const CONFIG = {
     mgCooldown: 0.08,
     aaCooldown: 0.6,
     aaArcHeight: 80,
-    helicopterAltitude: 120,
-    helicopterMinAltitude: 35,
-    helicopterMaxAltitude: 280,
-    helicopterClimbSpeed: 95,
+    helicopterAltitude: 240,
+    helicopterMinAltitude: 100,
+    helicopterMaxAltitude: 1000,
+    helicopterClimbSpeed: 180,
     helicopterCollisionDamage: 45,
     helicopterIgniteHits: 4,
     helicopterFireDuration: 12,
@@ -36,6 +36,14 @@ const CONFIG = {
     aaTrackingDelay: 0.20,
     aaTrackingDuration: 0.85,
     aaTurnRate: 1.65,
+    shellGravity: 320,
+    shellDefaultElevation: 6,
+    aaDefaultElevation: 12,
+    gunElevationMin: -2,
+    gunElevationMax: 45,
+    aaElevationMin: 2,
+    aaElevationMax: 70,
+    gunElevationStep: 2,
     apsCharges: 4,
     apsCooldown: 15,
     cameraSmooth: 0.06,
@@ -48,6 +56,13 @@ const CONFIG = {
     baseDefenseRange: 400,
     baseDefenseDamage: 120,
     baseDefenseCooldown: 2.0,
+    baseRageThreshold: 0.30,
+    baseRageDamageMultiplier: 2,
+    baseRageFireRateMultiplier: 2,
+    ricochetMaxGrazingAngle: 15,
+    ricochetDamageMultiplier: 0.5,
+    ricochetFriendlySpeedBoost: 0.10,
+    ricochetFriendlyBoostDuration: 5,
     aiTankMinDistance: 70,
     mgPenetration: 3,
     spatialGridSize: 300,
@@ -205,10 +220,10 @@ const TANKS = {
         ultimate: { name: "电磁脉冲", cooldown: 35, duration: 5, radius: 400, jamDuration: 8, damage: 100 }
     },
     niuniu_heli: {
-        name: "牛牛直升机", desc: "空中支援型 - 可越障侦察",
+        name: "牛牛直升机", desc: "空中支援型 - 垂直轰炸与空对空压制",
         hp: 600, maxHp: 600, speed: 7.0, turnSpeed: 0.15, armor: 0.4, fireRate: 1.3,
         color: "#44ddff", accent: "#88eeff", shape: "helicopter",
-        maxShells: 40, maxMG: 80, maxAA: 30, turretSize: 14, exhaustColor: "#44ddff",
+        maxShells: 32, maxMG: 220, maxAA: 0, turretSize: 22, exhaustColor: "#44ddff",
         isFlying: true, canPassObstacles: true, weight: 0.6,
         ultimate: { name: "空中打击", cooldown: 35, duration: 4, bombCount: 5, bombDamage: 300, bombRadius: 100 }
     },
@@ -297,6 +312,7 @@ let currentWeapon = 'shell';
 let pathGrid = null;
 let pathGridWidth = 0;
 let pathGridHeight = 0;
+let factoryPathGrids = null;
 
 let spatialGrid = new Map();
 let spatialGridKeys = [];

@@ -35,7 +35,7 @@ function getReplayTankName(tank) {
 }
 
 function getReplayWeaponName(type) {
-    return ({ shell: '主炮', mg: '机枪', aa: '高射炮', rocket: '火箭' })[type] || '攻击';
+    return ({ shell: '主炮', mg: '机枪', aa: '高射炮', rocket: '火箭', bomb: '垂直炸药包', airmg: '空对空机枪' })[type] || '攻击';
 }
 
 function ensureCombatReplayProjectileId(projectile) {

@@ -490,8 +490,8 @@ function recordSurvivalState(tank, dt) {
 }
 
 function recordShot(type) {
-    if(type === 'shell') playerStats.shellsFired++;
-    else if(type === 'mg') playerStats.mgFired++;
+    if(type === 'shell' || type === 'bomb') playerStats.shellsFired++;
+    else if(type === 'mg' || type === 'airmg') playerStats.mgFired++;
     else if(type === 'aa') playerStats.aaFired++;
     checkAchievements();
 }

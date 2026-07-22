@@ -40,7 +40,7 @@ const sandbox = {
         { x: 800, y: 700, w: 180, h: 200, type: 'building', floors: 5 },
         { x: 1200, y: 900, w: 80, h: 80, type: 'tree' }
     ],
-    terrainZones: [],
+    terrainZones: [{ type:'bridge', centered:true, x:1500, y:900, w:700, h:180, angle:0, archHeight:72, deckThickness:18 }],
     bases: {
         blue: { x: 200, y: 1100, w: 120, h: 120, hp: 1000, maxHp: 1000 },
         red: { x: 2680, y: 1100, w: 120, h: 120, hp: 1000, maxHp: 1000 }
@@ -53,11 +53,17 @@ const sandbox = {
     gameMode: 'classic',
     snowTracks: [],
     bullets: [],
+    supplyDrops: [],
+    ammoRackFireballs: [{ x:1520, y:1180, z:28, life:.8, maxLife:1.15, seed:.4 }],
+    terrainGeneration: 1,
+    terrainRevision: 0,
+    terrainDebris: [],
     damageNumbers: [],
     allies: [],
     enemies: [],
     isTankInWater: () => false
 };
+sandbox.currentWeapon = 'shell';
 sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
@@ -68,7 +74,8 @@ vm.runInContext(`
     player = {
         id: 'player', x: 1500, y: 1200, angle: 0, turretAngle: 0,
         color: '#4488ff', accent: '#88ccff', shape: 'medium', team: 'blue',
-        tankType: 'test', turretSize: 30, isPlayer: true, dead: false, isFlying: false
+        tankType: 'test', turretSize: 30, isPlayer: true, dead: false, isFlying: false,
+        shellElevation: 18, aaElevation: 30, muzzleFlashTimer:.1, muzzleFlashType:'shell'
     };
     threeView.initialized = true;
     threeView.scene = new THREE.Scene();
@@ -93,6 +100,15 @@ vm.runInContext(`
         color: '#ff4444', accent: '#ffaaaa', shape: 'helicopter', team: 'red',
         tankType: 'heli', turretSize: 25, isPlayer: false, dead: false, isFlying: true
     });
+    supplyDrops.push({ id:'supply-test', x:1450, y:1160, z:180, landed:false, pulse:0 });
+    const preservedObstacleId = obstacles[0].terrainId;
+    const preservedObstacleMesh = threeView.obstacleMeshes.get(preservedObstacleId);
+    obstacles.push({ terrainId:'rubble-test', x:1300, y:1040, w:120, h:80, type:'rubble', rubbleHeight:28, rubbleSeed:0.42 });
+    terrainDebris.push({ id:'debris-test', x:1400, y:1100, z:35, size:12, rotation:0.4, color:'#716961', material:'stone', life:3 });
+    terrainRevision++;
+    player.rescueShieldActive = true; player.shieldActive = true; player.shieldHp = 200;
+    gameMode = 'sneak';
+    sneakHiddenOutpost = { x:1500, y:1200, discovered:true, triggered:false, signalTimer:0, contested:false, progress:3, captureTime:6 };
     player.angle = Math.PI / 2;
     renderThreeScene();
     const secondDirection = new THREE.Vector3();
@@ -108,6 +124,7 @@ vm.runInContext(`
     const obstacleMeshes = [];
     threeView.worldRoot.traverse(child => { if(child.userData.isObstacle) obstacleMeshes.push(child); });
     const aaMesh = threeView.bulletMeshes.get(aaBullet);
+    const helicopterMesh = threeView.tankMeshes.get('enemy-heli');
     const viewTop = threeScreenToWorld(640, 0);
     const viewBottom = threeScreenToWorld(640, 720);
     const viewLeft = threeScreenToWorld(0, 360);
@@ -120,6 +137,18 @@ vm.runInContext(`
         aim: threeScreenToWorld(640, 360),
         aaHeight: aaMesh.userData.projectile.position.y,
         aaTrailPoints: aaMesh.userData.trailPoints.length,
+        helicopterTurret: !!helicopterMesh.userData.turretPivot,
+        tankGunPitch: !!threeView.tankMeshes.get('player').userData.gunPitch,
+        tankGunPitchAngle: threeView.tankMeshes.get('player').userData.gunPitch.rotation.z,
+        muzzleFlashVisible: threeView.tankMeshes.get('player').userData.muzzleFlash.visible,
+        archedBridge: threeView.worldRoot.children.some(child => child.isGroup && child.children.length === 18),
+        fireballMeshes: threeView.fireballMeshes.size,
+        supplyMeshes: threeView.supplyMeshes.size,
+        rubbleMesh: threeView.obstacleMeshes.has('rubble-test'),
+        preservedObstacleMesh: threeView.obstacleMeshes.get(preservedObstacleId) === preservedObstacleMesh,
+        debrisMeshes: threeView.debrisMeshes.size,
+        rescueShieldVisible: threeView.tankMeshes.get('player').userData.rescueShield.visible,
+        hiddenOutpostVisible: !!threeView.hiddenOutpostMesh && threeView.hiddenOutpostMesh.visible,
         pointLights,
         fixedCameraDelta: firstDirection.distanceTo(secondDirection),
         worldAxisAlignment: settledDirection.dot(expectedForward),
@@ -142,6 +171,18 @@ assert.strictEqual(result.cameraReady, true, 'perspective camera should follow t
 assert(result.aim && Number.isFinite(result.aim.x) && Number.isFinite(result.aim.y), 'camera ray should intersect the ground');
 assert(result.aaHeight > 10, 'AA projectile should have an obvious visual arc height');
 assert(result.aaTrailPoints >= 2, 'AA projectile should retain a curved flight trail');
+assert.strictEqual(result.helicopterTurret, true, 'helicopter should have a visible rotating weapon turret');
+assert.strictEqual(result.tankGunPitch, true, 'tank barrel should have an independent 3D elevation pivot');
+assert(Math.abs(result.tankGunPitchAngle - 18 * Math.PI / 180) < 1e-9, '3D barrel pitch should mirror adjustable shell elevation');
+assert.strictEqual(result.muzzleFlashVisible, true, '3D muzzle flash should appear while the flash timer is active');
+assert.strictEqual(result.archedBridge, true, 'island bridge should be built from raised arch segments');
+assert.strictEqual(result.fireballMeshes, 1, 'ammo-rack detonation should synchronize a 3D fireball');
+assert.strictEqual(result.supplyMeshes, 1, 'air supply should be synchronized into the 3D scene');
+assert.strictEqual(result.rubbleMesh, true, 'new rubble cover should be synchronized without rebuilding the whole scene');
+assert.strictEqual(result.preservedObstacleMesh, true, 'unchanged obstacle meshes should be preserved during incremental terrain sync');
+assert.strictEqual(result.debrisMeshes, 1, 'physical terrain debris should be synchronized into the 3D scene');
+assert.strictEqual(result.rescueShieldVisible, true, 'rescue shield should be visible around the reinforced player');
+assert.strictEqual(result.hiddenOutpostVisible, true, 'discovered sneak outpost should be visible in the 3D world');
 assert.strictEqual(result.pointLights, 0, 'projectiles must not accumulate expensive dynamic lights');
 assert(result.fixedCameraDelta < 1e-9, 'turning the tank must never rotate the world-aligned camera');
 assert(result.worldAxisAlignment > 0.98, 'camera should remain aligned with map north');

@@ -91,7 +91,7 @@ function playWorldSound(type, x, y, strength = 1) {
     const ctx = ensureGameAudio();
     if(!ctx) return;
     const nowMs = performance.now();
-    const limits = { mg: 38, hit: 45, shell: 90, aa: 90, kill: 180, death: 180, heliWarning: 2200, capture: 500 };
+    const limits = { mg: 38, hit: 45, shell: 90, bomb: 120, aa: 90, kill: 180, death: 180, ammoRack: 220, repair: 180, heliWarning: 2200, capture: 500 };
     if(nowMs - (gameSoundThrottle.get(type) || 0) < (limits[type] || 70)) return;
     gameSoundThrottle.set(type, nowMs);
 
@@ -109,6 +109,9 @@ function playWorldSound(type, x, y, strength = 1) {
         playToneLayer(ctx, { from: 52, to: 29, duration: .42, wave: 'triangle', volume: .12 * volume, filter: 260, pan, delay: .012 });
         playNoiseLayer(ctx, { duration: .13, volume: .09 * volume, filter: 520, pan });
         if(attenuation > .55) triggerScreenShake(3.5 * strength, .13);
+    } else if(type === 'bomb') {
+        playToneLayer(ctx, { from: 360, to: 95, duration: .34, wave: 'triangle', volume: .08 * volume, filter: 1200, pan });
+        playNoiseLayer(ctx, { duration: .09, volume: .04 * volume, filter: 800, pan });
     } else if(type === 'mg') {
         playToneLayer(ctx, { from: 520, to: 170, duration: .045, wave: 'square', volume: .055 * volume, filter: 1400, pan });
         playNoiseLayer(ctx, { duration: .032, volume: .026 * volume, filter: 2200, filterType: 'highpass', pan });
@@ -125,6 +128,14 @@ function playWorldSound(type, x, y, strength = 1) {
         playToneLayer(ctx, { from: 210, to: 62, duration: .34, wave: 'triangle', volume: .12 * volume * boost, filter: 1100, pan });
         playNoiseLayer(ctx, { duration: .28, volume: .15 * volume * boost, filter: 620, pan });
         triggerScreenShake((type === 'death' ? 11 : 8) * strength, .34);
+    } else if(type === 'ammoRack') {
+        playToneLayer(ctx, { from: 96, to: 24, duration: .82, wave: 'sine', volume: .38 * volume, filter: 460, pan });
+        playToneLayer(ctx, { from: 245, to: 48, duration: .52, wave: 'sawtooth', volume: .16 * volume, filter: 900, pan });
+        playNoiseLayer(ctx, { duration: .46, volume: .22 * volume, filter: 700, pan });
+        triggerScreenShake(14 * strength, .48);
+    } else if(type === 'repair') {
+        playToneLayer(ctx, { from: 520, to: 760, duration: .12, wave: 'square', volume: .045 * volume, filter: 1800, pan });
+        playToneLayer(ctx, { from: 680, to: 980, duration: .16, wave: 'sine', volume: .04 * volume, filter: 2200, pan, delay: .11 });
     } else if(type === 'capture') {
         playToneLayer(ctx, { from: 420, to: 880, duration: .42, wave: 'sine', volume: .09 * volume, filter: 1600, pan });
     } else if(type === 'heliWarning') {

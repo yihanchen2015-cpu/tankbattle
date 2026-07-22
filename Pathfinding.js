@@ -3,8 +3,12 @@ function initPathGrid() {
     pathGridWidth = Math.ceil(CONFIG.mapWidth / CONFIG.pathGridSize);
     pathGridHeight = Math.ceil(CONFIG.mapHeight / CONFIG.pathGridSize);
     pathGrid = new Array(pathGridWidth * pathGridHeight).fill(false);
+    factoryPathGrids = currentMap === 'factory' ? [0,1,2].map(() => new Array(pathGridWidth * pathGridHeight).fill(false)) : null;
     
     for(let obs of obstacles) {
+        const targetGrid = currentMap === 'factory' && Number.isInteger(obs.factoryFloor) ? factoryPathGrids[obs.factoryFloor] : pathGrid;
+        if(obs.type === 'factoryPlatform') continue;
+        if(obs.conveyorMovable) continue;
         const startGx = Math.floor(obs.x / CONFIG.pathGridSize);
         const startGy = Math.floor(obs.y / CONFIG.pathGridSize);
         const endGx = Math.ceil((obs.x + obs.w) / CONFIG.pathGridSize);
@@ -13,7 +17,7 @@ function initPathGrid() {
         for(let gx = startGx; gx < endGx && gx < pathGridWidth; gx++) {
             for(let gy = startGy; gy < endGy && gy < pathGridHeight; gy++) {
                 if(gx >= 0 && gy >= 0) {
-                    pathGrid[gy * pathGridWidth + gx] = true;
+                    targetGrid[gy * pathGridWidth + gx] = true;
                 }
             }
         }
@@ -30,6 +34,15 @@ function initPathGrid() {
             }
         }
     }
+    // AI 把熔岩河视为致命风险，通常绕行；玩家仍可选择强行涉越。
+    if(typeof isPointInLava === 'function' && currentMap === 'volcano') {
+        for(let gx = 0; gx < pathGridWidth; gx++) {
+            for(let gy = 0; gy < pathGridHeight; gy++) {
+                const world = gridToWorld(gx, gy);
+                if(isPointInLava(world.x, world.y, CONFIG.pathGridSize * .2)) pathGrid[gy * pathGridWidth + gx] = true;
+            }
+        }
+    }
     
     for(let gx = 0; gx < pathGridWidth; gx++) {
         pathGrid[0 * pathGridWidth + gx] = true;
@@ -38,6 +51,19 @@ function initPathGrid() {
     for(let gy = 0; gy < pathGridHeight; gy++) {
         pathGrid[gy * pathGridWidth + 0] = true;
         pathGrid[gy * pathGridWidth + (pathGridWidth - 1)] = true;
+    }
+    if(factoryPathGrids) {
+        factoryPathGrids.forEach(grid => {
+            for(let gx = 0; gx < pathGridWidth; gx++) {
+                grid[gx] = true;
+                grid[(pathGridHeight - 1) * pathGridWidth + gx] = true;
+            }
+            for(let gy = 0; gy < pathGridHeight; gy++) {
+                grid[gy * pathGridWidth] = true;
+                grid[gy * pathGridWidth + pathGridWidth - 1] = true;
+            }
+        });
+        pathGrid = factoryPathGrids[1];
     }
 }
 
@@ -54,7 +80,17 @@ function isGridWalkable(gx, gy) {
     return !pathGrid[gy * pathGridWidth + gx];
 }
 
-function aStar(start, goal) {
+function aStar(start, goal, factoryFloor = null) {
+    const previousGrid = pathGrid;
+    if(currentMap === 'factory' && factoryPathGrids && Number.isInteger(factoryFloor)) pathGrid = factoryPathGrids[factoryFloor];
+    try {
+        return aStarOnCurrentGrid(start, goal);
+    } finally {
+        pathGrid = previousGrid;
+    }
+}
+
+function aStarOnCurrentGrid(start, goal) {
     const startG = worldToGrid(start.x, start.y);
     const goalG = worldToGrid(goal.x, goal.y);
     
@@ -302,7 +338,7 @@ function followPath(tank, dt) {
 
 function getActualSpeed(tank) {
     if(tank.isPlayer) {
-        const speed = tank.speed * (1 + (tank.speedBoost || 0) + (tank.mapSpeedBoost || 0) + (tank.speedBuffFromCommander || 0));
+        const speed = tank.speed * (1 + (tank.speedBoost || 0) + (tank.mapSpeedBoost || 0) + (tank.speedBuffFromCommander || 0) + (tank.ricochetSpeedBoost || 0));
         recordSpeed(speed);
     }
     if(!tank || isNaN(tank.speed)) {
@@ -310,7 +346,7 @@ function getActualSpeed(tank) {
         return 0;
     }
     let speed = tank.speed;
-    let totalSpeedBoost = (tank.speedBoost || 0) + (tank.mapSpeedBoost || 0) + (tank.speedBuffFromCommander || 0);
+    let totalSpeedBoost = (tank.speedBoost || 0) + (tank.mapSpeedBoost || 0) + (tank.speedBuffFromCommander || 0) + (tank.ricochetSpeedBoost || 0);
     if(totalSpeedBoost > 0) speed *= (1 + totalSpeedBoost);
 
     // 重量系统：基础重量 + 弹药重量
@@ -323,13 +359,13 @@ function getActualSpeed(tank) {
     const weightFactor = gameMode === 'defense' ? 1 : Math.max(0.3, 1.0 - totalWeight * 0.008);
 
     // 直升机不受障碍物影响，但重量影响仍然适用
-    const statusSlow = Math.max(0.2, 1 - (tank.toxinSlow || 0));
+    const statusSlow = Math.max(0.2, 1 - Math.max(tank.toxinSlow || 0, tank.mapSlow || 0));
     const freezeSlow = Math.max(0.45, 1 - (tank.freezeLevel || 0) * 0.55);
     const inWater = isTankInWater(tank);
     const waterSlow = inWater ? (tank.tankType === 'duoduo_ifv' ? 0.3 : 0.18) : 1;
     if(tank.isFlying) {
         const sandstormSlow = currentMap === 'desert' && environmentState.sandstormActive ? 0.62 : 1;
-        const mapFlightPenalty = currentMap === 'city' ? 0.78 : currentMap === 'snow' ? 0.70 : currentMap === 'island' ? 0.80 : 1;
+        const mapFlightPenalty = currentMap === 'city' ? 0.78 : currentMap === 'snow' ? 0.70 : currentMap === 'island' ? 0.80 : currentMap === 'volcano' ? 0.88 : currentMap === 'factory' ? 0.84 : 1;
         return speed * weightFactor * 1.3 * statusSlow * sandstormSlow * mapFlightPenalty;
     }
 
