@@ -209,7 +209,7 @@
                     <div class="mode-intro-box"><h4>🏙 城市巷战</h4><p>规则街区、十字路口、道路中线和多层建筑构成密集城市。重火力可炸塌建筑的一部分，形成低矮但仍能挡车、挡弹的废墟掩体。直升机受楼群乱流影响，速度降低 22%。</p></div>
                     <div class="mode-intro-box"><h4>🏝 海岛争夺</h4><p>整张地图以水域为底，由 7 座独立小岛和有真实高度的拱桥网组成，每座岛都有一个据点。普通坦克可冒险入水，但会大幅减速并因车体进水持续掉血；多多号步战车免疫进水伤害，水中速度为 30%。</p></div>
                     <div class="mode-intro-box"><h4>🌋 火山熔岩</h4><p>200–400 宽的熔岩河会缓慢流动。地面载具在河中每秒受到 100 伤害，直升机会被热气流自动抬升；每 30–60 秒喷发的熔岩球造成 150 伤害和 3 秒减速。地图边缘的冷却结晶为坦克提供 +0.5 装甲。</p></div>
-                    <div class="mode-intro-box"><h4>🏗 废弃工厂</h4><p>约 3000×3000 的室内厂房分为面积相同的 B1、1F 和 2F，建筑外墙就是战场边界，每层各有一个据点。B1 密布油桶与会推动坦克和物体的地面传送带；1F 是设施主区，300 HP、0 护甲的机器人会自动维修受损建筑；2F 是起重机吊装区。电梯换层快速但落点容易被伏击，狭窄斜坡更稳定却容易拥堵；工厂采用平直切层视角，只显示玩家当前楼层。</p></div>
+                    <div class="mode-intro-box"><h4>🏗 废弃工厂</h4><p>约 3000×3000 的室内厂房分为面积相同的 B1、1F 和 2F，每层净高 500，拥有不透明的实体楼板与天花板，建筑外墙就是战场边界，每层各有一个据点。B1 密布油桶与会推动坦克和物体的地面传送带；1F 是设施主区，300 HP、0 护甲的机器人会自动维修受损建筑；2F 是起重机吊装区。坦克沿连接楼层的实体狭窄斜坡行驶，或驶入空心井道中的升降平台随电梯上下移动；三层处于同一个连续的立体空间，并使用标准战术相机。</p></div>
                 </div>
 
                 <div class="intro-section">
@@ -780,6 +780,7 @@
     </div>
 
     <script src="vendor/three.min.js"></script>
+    <script src="vendor/ammo.wasm.js"></script>
     <script src="Config.js"></script>
     <script src="Audio.js"></script>
     <script src="Score.js"></script>
@@ -792,6 +793,7 @@
     <script src="Ultimate.js"></script>
     <script src="GameCore.js"></script>
     <script src="MapMechanics.js"></script>
+    <script src="FactoryPhysics.js"></script>
     <script src="AI.js"></script>
     <script src="Combat.js"></script>
     <script src="Render.js"></script>

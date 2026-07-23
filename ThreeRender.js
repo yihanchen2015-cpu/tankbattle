@@ -265,6 +265,46 @@ function addStaticMesh(geometry, material, position, root = threeView.worldRoot)
     return mesh;
 }
 
+function getFactorySlabOpenings(zone) {
+    if(currentMap!=='factory'||zone.type!=='factoryFloorSlab'||zone.z<=0||
+        zone.z>=getFactoryFloorZ(3)||!mapMechanicsState.factory)return [];
+    const openings=mapMechanicsState.factory.elevators.map(elevator=>({
+        x:elevator.x,y:elevator.y,w:elevator.w,h:elevator.h
+    }));
+    mapMechanicsState.factory.ramps.forEach(ramp=>{
+        if(Math.abs(ramp.toZ-zone.z)>1)return;
+        const portion=.3;
+        if(ramp.axis==='x'){
+            openings.push(ramp.reverse
+                ? {x:ramp.x,y:ramp.y,w:ramp.w*portion,h:ramp.h}
+                : {x:ramp.x+ramp.w*(1-portion),y:ramp.y,w:ramp.w*portion,h:ramp.h});
+        }else{
+            openings.push(ramp.reverse
+                ? {x:ramp.x,y:ramp.y,w:ramp.w,h:ramp.h*portion}
+                : {x:ramp.x,y:ramp.y+ramp.h*(1-portion),w:ramp.w,h:ramp.h*portion});
+        }
+    });
+    return openings;
+}
+
+function splitFactorySlabAroundOpenings(zone,openings) {
+    let pieces=[{x:zone.x,y:zone.y,w:zone.w,h:zone.h}];
+    openings.forEach(hole=>{
+        const next=[];
+        pieces.forEach(piece=>{
+            const left=Math.max(piece.x,hole.x),right=Math.min(piece.x+piece.w,hole.x+hole.w);
+            const top=Math.max(piece.y,hole.y),bottom=Math.min(piece.y+piece.h,hole.y+hole.h);
+            if(right<=left||bottom<=top){next.push(piece);return;}
+            if(top>piece.y)next.push({x:piece.x,y:piece.y,w:piece.w,h:top-piece.y});
+            if(bottom<piece.y+piece.h)next.push({x:piece.x,y:bottom,w:piece.w,h:piece.y+piece.h-bottom});
+            if(left>piece.x)next.push({x:piece.x,y:top,w:left-piece.x,h:bottom-top});
+            if(right<piece.x+piece.w)next.push({x:right,y:top,w:piece.x+piece.w-right,h:bottom-top});
+        });
+        pieces=next;
+    });
+    return pieces.filter(piece=>piece.w>1&&piece.h>1);
+}
+
 function buildThreeGround() {
     const night = gameConfig.dayNight === 'night';
     const template = MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic;
@@ -371,15 +411,49 @@ function buildThreeTerrain() {
         const width = (zone.axis === 'y' ? zone.w : zone.h) * THREE_WORLD_SCALE;
         const rise = (zone.toZ - zone.fromZ) * THREE_WORLD_SCALE;
         const rampLength = Math.hypot(length, rise);
-        const ramp = addStaticMesh(new THREE.BoxGeometry(zone.axis === 'y' ? width : rampLength, .5, zone.axis === 'y' ? rampLength : width), makeStandardMaterial(0x6a6f72, {roughness:.78, metalness:.22}), threeWorldPosition(zone.x + zone.w / 2, zone.y + zone.h / 2, (zone.fromZ + zone.toZ) / 2));
+        const deckThickness=(zone.deckThickness||18)*THREE_WORLD_SCALE;
+        const railHeight=(zone.guardrailHeight||64)*THREE_WORLD_SCALE;
+        const railWidth=(zone.guardrailWidth||14)*THREE_WORLD_SCALE;
         const slope = Math.atan2(rise, length) * (zone.reverse ? -1 : 1);
-        if(zone.axis === 'y') ramp.rotation.x = -slope;
-        else ramp.rotation.z = slope;
+        const ramp=new THREE.Group();
+        ramp.position.copy(threeWorldPosition(zone.x+zone.w/2,zone.y+zone.h/2,(zone.fromZ+zone.toZ)*.5*THREE_WORLD_SCALE));
+        if(zone.axis==='y')ramp.rotation.x=-slope;
+        else ramp.rotation.z=slope;
+        const deck=new THREE.Mesh(
+            new THREE.BoxGeometry(zone.axis==='y'?width:rampLength,deckThickness,zone.axis==='y'?rampLength:width),
+            makeStandardMaterial(0x6a6f72,{roughness:.78,metalness:.22})
+        );
+        deck.position.y=-deckThickness/2;
+        deck.receiveShadow=true;
+        const railMaterial=makeStandardMaterial(0x30363a,{roughness:.72,metalness:.58});
+        [-1,1].forEach(side=>{
+            const rail=new THREE.Mesh(
+                new THREE.BoxGeometry(zone.axis==='y'?railWidth:rampLength,railHeight,zone.axis==='y'?rampLength:railWidth),
+                railMaterial.clone()
+            );
+            rail.position.y=railHeight/2;
+            if(zone.axis==='y')rail.position.x=side*(width/2-railWidth/2);
+            else rail.position.z=side*(width/2-railWidth/2);
+            rail.castShadow=true;
+            ramp.add(rail);
+        });
+        ramp.add(deck);
+        threeView.worldRoot.add(ramp);
     });
-    terrainZones.filter(zone => zone.type === 'factoryFloorSlab').forEach(zone => {
+    terrainZones.filter(zone => zone.type === 'factoryFloorSlab' || zone.type === 'factoryCeilingSlab').forEach(zone => {
         const colors = [0x34383b,0x4a4e51,0x555a5e];
-        const slab = addStaticMesh(new THREE.BoxGeometry(zone.w*THREE_WORLD_SCALE,.8,zone.h*THREE_WORLD_SCALE),makeStandardMaterial(colors[zone.factoryFloor]||0x44484b,{roughness:.88}),threeWorldPosition(zone.w/2,zone.h/2,zone.z*THREE_WORLD_SCALE));
-        slab.position.y -= .42; slab.userData.factoryFloor=zone.factoryFloor;
+        const color=zone.type==='factoryCeilingSlab'?0x6b7276:(colors[zone.factoryFloor]||0x44484b);
+        splitFactorySlabAroundOpenings(zone,getFactorySlabOpenings(zone)).forEach(piece=>{
+            const slab=addStaticMesh(
+                new THREE.BoxGeometry(piece.w*THREE_WORLD_SCALE,1.2,piece.h*THREE_WORLD_SCALE),
+                makeStandardMaterial(color,{roughness:.88}),
+                threeWorldPosition(piece.x+piece.w/2,piece.y+piece.h/2,zone.z*THREE_WORLD_SCALE)
+            );
+            slab.position.y-=.62;
+            slab.userData.factoryStructure=true;
+            slab.userData.factorySlabZ=zone.z;
+            slab.userData.factoryCeiling=zone.type==='factoryCeilingSlab';
+        });
     });
     terrainZones.filter(zone => zone.type === 'conveyor').forEach(zone => {
         const belt=addStaticMesh(new THREE.BoxGeometry(zone.w*THREE_WORLD_SCALE,.35,zone.h*THREE_WORLD_SCALE),makeStandardMaterial(0x24282a,{metalness:.28,roughness:.65}),threeWorldPosition(zone.x+zone.w/2,zone.y+zone.h/2,(getFactoryFloorZ(zone.factoryFloor)+2)*THREE_WORLD_SCALE));
@@ -387,27 +461,13 @@ function buildThreeTerrain() {
         const stripe=new THREE.Mesh(new THREE.BoxGeometry((Math.abs(zone.dirX)>0?zone.w*.75:18)*THREE_WORLD_SCALE,.08,(Math.abs(zone.dirY)>0?zone.h*.75:18)*THREE_WORLD_SCALE),makeStandardMaterial(0xd0a13e,{emissive:0x5a3900,emissiveIntensity:.35}));
         stripe.position.y=.22;belt.add(stripe);
     });
-    terrainZones.filter(zone => ['factoryElevator','factoryRampLink'].includes(zone.type)).forEach(zone => {
-        const floors=zone.floors||[zone.fromFloor,zone.toFloor];
-        floors.forEach(factoryFloor=>{
-            const pad=addStaticMesh(new THREE.BoxGeometry(zone.w*THREE_WORLD_SCALE,.4,zone.h*THREE_WORLD_SCALE),makeStandardMaterial(zone.type==='factoryElevator'?0x3f474b:0x737a7e,{metalness:.25}),threeWorldPosition(zone.x+zone.w/2,zone.y+zone.h/2,(getFactoryFloorZ(factoryFloor)+2)*THREE_WORLD_SCALE));
-            pad.userData.factoryFloor=factoryFloor;
-            pad.userData.factoryConnector=true;
-            const railMaterial=makeStandardMaterial(zone.type==='factoryElevator'?0xd2ad45:0x303538,{metalness:.48});
-            const railA=new THREE.Mesh(new THREE.BoxGeometry(zone.w*THREE_WORLD_SCALE,.75,.35),railMaterial);
-            const railB=railA.clone();
-            railA.position.set(0,.55,-zone.h*THREE_WORLD_SCALE/2+.2);
-            railB.position.set(0,.55,zone.h*THREE_WORLD_SCALE/2-.2);
-            pad.add(railA,railB);
-        });
-    });
 }
 
 function createThreeObstacleObject(obs, index) {
     if(typeof initializeObstacleDurability === 'function') initializeObstacleDurability(obs);
     if(!obs.terrainId) obs.terrainId = `legacy-obstacle-${index}`;
-    const factoryBaseZ = currentMap === 'factory' && Number.isInteger(obs.factoryFloor) && typeof getFactoryFloorZ === 'function'
-        ? getFactoryFloorZ(obs.factoryFloor) : 0;
+    const factoryBaseZ = currentMap === 'factory'
+        ? (Number.isFinite(obs.z) ? obs.z : (Number.isInteger(obs.factoryFloor) && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(obs.factoryFloor) : 0)) : 0;
     const worldTop = typeof getObstacleWorldHeight === 'function' ? getObstacleWorldHeight(obs)
         : (obs.type === 'building' ? 52 + (obs.floors || 4) * 18 : Math.max(35, Math.min(obs.w, obs.h) * 0.58));
     const height = Math.max(12, worldTop - factoryBaseZ) * THREE_WORLD_SCALE;
@@ -415,7 +475,7 @@ function createThreeObstacleObject(obs, index) {
     const obstacleColors = {
         tree:0x2f7434, ice:0x9fc7d8, rock:0x8a633a, rubble:0x625b54,
         volcanicRock:0x433936, oilBarrel:0xa43a1c, factoryFacility:0x69737a,
-        factoryCrate:0x8b6542, factoryBoundary:0x303438
+        factoryCrate:0x8b6542, factoryBoundary:0x303438, factoryElevatorShaft:0x454b4f
     };
     const color = obs.type === 'building' ? (index % 2 ? 0x58616a : 0x6b737b) : (obstacleColors[obs.type] || 0x555b5e);
     center.y += height / 2;
@@ -428,6 +488,7 @@ function createThreeObstacleObject(obs, index) {
         const bandMaterial = makeStandardMaterial(0x2c2522, {metalness:.6});
         [-1.1, 1.1].forEach(y => { const band = new THREE.Mesh(new THREE.TorusGeometry(1.48, .11, 7, 18), bandMaterial); band.rotation.x = Math.PI / 2; band.position.y = y; barrel.add(band); });
         object.add(barrel);
+        object.userData.physicsBodyMesh=barrel;
     } else if(obs.type === 'factoryPlatform') {
         object = new THREE.Group();
         object.position.copy(threeWorldPosition(obs.x + obs.w / 2, obs.y + obs.h / 2, 0));
@@ -461,9 +522,13 @@ function createThreeObstacleObject(obs, index) {
             object.add(mesh);
         });
     } else {
+        const transparentFactoryWall=obs.type==='factoryBoundary';
+        const wallOpacity=obs.type==='factoryBoundary'?.10:1;
+        const obstacleMaterial=makeStandardMaterial(color, { roughness: 0.9, metalness: obs.type === 'building' || obs.type === 'factoryWall' ? 0.16 : 0, transparent:transparentFactoryWall, opacity:wallOpacity });
+        if(transparentFactoryWall)obstacleMaterial.depthWrite=false;
         object = new THREE.Mesh(
             new THREE.BoxGeometry(obs.w * THREE_WORLD_SCALE, height, obs.h * THREE_WORLD_SCALE),
-            makeStandardMaterial(color, { roughness: 0.9, metalness: obs.type === 'building' || obs.type === 'factoryWall' ? 0.16 : 0 })
+            obstacleMaterial
         );
         object.position.copy(center);
         object.userData.isObstacle = true;
@@ -472,6 +537,7 @@ function createThreeObstacleObject(obs, index) {
     }
     object.userData.terrainId = obs.terrainId;
     object.userData.visualRevision = obs.visualRevision || 0;
+    if(obs.conveyorMovable&&!object.userData.physicsBodyMesh)object.userData.physicsBodyMesh=object;
     if(Number.isInteger(obs.factoryFloor)) object.userData.factoryFloor = obs.factoryFloor;
     threeView.worldRoot.add(object);
     threeView.obstacleMeshes.set(obs.terrainId, object);
@@ -596,6 +662,17 @@ function buildThreeMapMechanics() {
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         const ash = new THREE.Points(geometry, new THREE.PointsMaterial({color:0x8d817a, size:.32, transparent:true, opacity:.48, depthWrite:false}));
         threeView.worldRoot.add(ash); threeView.mechanicMeshes.set('volcano-ash', ash);
+    }
+    if(currentMap==='factory'&&mapMechanicsState.factory){
+        mapMechanicsState.factory.elevators.forEach(elevator=>{
+            const platform=new THREE.Group();
+            const deck=new THREE.Mesh(new THREE.BoxGeometry((elevator.w-72)*THREE_WORLD_SCALE,1.1,(elevator.h-72)*THREE_WORLD_SCALE),makeStandardMaterial(0x3f474b,{metalness:.46,roughness:.55}));
+            const stripe=new THREE.Mesh(new THREE.BoxGeometry((elevator.w-105)*THREE_WORLD_SCALE,.12,8*THREE_WORLD_SCALE),makeStandardMaterial(0xf0c34c,{emissive:0x5a4200,emissiveIntensity:.5}));
+            stripe.position.y=.62;
+            platform.add(deck,stripe);
+            threeView.dynamicRoot.add(platform);
+            threeView.mechanicMeshes.set(`elevator-platform-${elevator.id}`,platform);
+        });
     }
     if(!mapMechanicsState.crane) return;
     const crane = mapMechanicsState.crane;
@@ -742,7 +819,7 @@ function syncThreeTanks(now) {
             mesh = createThreeTank(tank);
             threeView.tankMeshes.set(tank.id, mesh);
         }
-        mesh.visible = currentMap !== 'factory' || (typeof isFactoryEntityOnVisibleFloor === 'function' && isFactoryEntityOnVisibleFloor(tank));
+        mesh.visible = true;
         const flying = tank.shape === 'helicopter';
         const inWater = !flying && typeof isTankInWater === 'function' && isTankInWater(tank);
         const storedHeight = (tank.z || 0) * THREE_WORLD_SCALE;
@@ -900,7 +977,7 @@ function syncThreeBullets() {
             mesh = createThreeBullet(bullet);
             threeView.bulletMeshes.set(bullet, mesh);
         }
-        mesh.visible = currentMap !== 'factory' || (typeof getFactoryFloorFromZ === 'function' && getFactoryFloorFromZ(bullet.z || 0) === getFactoryViewFloor());
+        mesh.visible = true;
         let height = Number.isFinite(bullet.z) ? bullet.z * THREE_WORLD_SCALE
             : (bullet.owner && bullet.owner.isFlying ? (bullet.owner.z || CONFIG.helicopterAltitude) * THREE_WORLD_SCALE : 2.2);
         if(bullet.isRocket && !Number.isFinite(bullet.z)) height = 4.2;
@@ -1146,7 +1223,7 @@ function syncThreeMapMechanics(now) {
         }
         setThreeWorldPosition(mesh, fire.x, fire.y, ((fire.z || 0) * THREE_WORLD_SCALE) + .18);
         mesh.userData.factoryFloor = fire.factoryFloor;
-        mesh.visible = currentMap !== 'factory' || fire.factoryFloor === getFactoryViewFloor();
+        mesh.visible = true;
         mesh.material.opacity = Math.max(0, Math.min(.7, fire.life / fire.maxLife));
         mesh.scale.y = .8 + Math.sin(now * .009) * .25;
     });
@@ -1166,7 +1243,7 @@ function syncThreeMapMechanics(now) {
         const hookZ = crane.phase === 'carry' && crane.target ? (crane.target.z || 0) * THREE_WORLD_SCALE + 4 : craneBase + 3;
         setThreeWorldPosition(hook, crane.hookX, crane.hookY, hookZ);
         hook.userData.factoryFloor = crane.factoryFloor;
-        hook.visible = currentMap !== 'factory' || crane.factoryFloor === getFactoryViewFloor();
+        hook.visible = true;
         const craneTop = craneBase + 31;
         hook.userData.cable.position.y = (craneTop - hookZ) / 2;
         hook.userData.cable.scale.y = Math.max(.2, craneTop - hookZ);
@@ -1174,9 +1251,26 @@ function syncThreeMapMechanics(now) {
         hook.userData.claw.rotation.y = now * .001;
     }
     if(currentMap === 'factory' && mapMechanicsState.factory) {
+        mapMechanicsState.factory.elevators.forEach(elevator=>{
+            const key=`elevator-platform-${elevator.id}`;
+            aliveKeys.add(key);
+            const mesh=threeView.mechanicMeshes.get(key);
+            if(mesh)setThreeWorldPosition(mesh,elevator.x+elevator.w/2,elevator.y+elevator.h/2,elevator.platformZ*THREE_WORLD_SCALE);
+        });
         obstacles.filter(obs => obs.conveyorMovable).forEach(obs => {
             const mesh = threeView.obstacleMeshes.get(obs.terrainId);
-            if(mesh) setThreeWorldPosition(mesh, obs.x + obs.w / 2, obs.y + obs.h / 2, (obs.z || 0) * THREE_WORLD_SCALE);
+            if(!mesh)return;
+            const baseZ=obs.z||0;
+            if(obs.type==='oilBarrel'){
+                setThreeWorldPosition(mesh,obs.x+obs.w/2,obs.y+obs.h/2,baseZ*THREE_WORLD_SCALE);
+            }else{
+                const top=typeof getObstacleWorldHeight==='function'?getObstacleWorldHeight(obs):baseZ+Math.max(obs.w,obs.h);
+                setThreeWorldPosition(mesh,obs.x+obs.w/2,obs.y+obs.h/2,(baseZ+(top-baseZ)/2)*THREE_WORLD_SCALE);
+            }
+            const bodyMesh=mesh.userData.physicsBodyMesh;
+            if(bodyMesh&&obs.physicsQuaternion){
+                bodyMesh.quaternion.set(obs.physicsQuaternion.x,obs.physicsQuaternion.y,obs.physicsQuaternion.z,obs.physicsQuaternion.w);
+            }
         });
         mapMechanicsState.factory.repairRobots.forEach(robot => {
             aliveKeys.add(robot);
@@ -1194,7 +1288,7 @@ function syncThreeMapMechanics(now) {
                 threeView.dynamicRoot.add(mesh);
                 threeView.mechanicMeshes.set(robot,mesh);
             }
-            mesh.visible=!robot.dead && robot.factoryFloor===getFactoryViewFloor();
+            mesh.visible=!robot.dead;
             setThreeWorldPosition(mesh,robot.x,robot.y,((robot.z||0)*THREE_WORLD_SCALE)+.1);
             mesh.rotation.y=-robot.angle;
         });
@@ -1202,17 +1296,6 @@ function syncThreeMapMechanics(now) {
     threeView.mechanicMeshes.forEach((mesh, key) => {
         if(aliveKeys.has(key)) return;
         disposeThreeObject(mesh); threeView.mechanicMeshes.delete(key);
-    });
-}
-
-function applyThreeFactoryFloorVisibility() {
-    if(currentMap !== 'factory') return;
-    const visibleFloor = getFactoryViewFloor();
-    [threeView.worldRoot, threeView.modeRoot].forEach(root => {
-        if(!root) return;
-        root.traverse(object => {
-            if(Number.isInteger(object.userData.factoryFloor)) object.visible = object.userData.factoryFloor === visibleFloor;
-        });
     });
 }
 
@@ -1224,31 +1307,13 @@ function updateThreeCamera(dt) {
         threeView.sun.target.position.set(center.x, 0, center.z);
         threeView.sun.target.updateMatrixWorld();
     }
-    if(currentMap === 'factory') {
-        const zoomFactor = Math.max(0.75, camera.zoom || 1);
-        const vehicleHeight = (player.z || 0) * THREE_WORLD_SCALE;
-        const desired = new THREE.Vector3(center.x, vehicleHeight + 62 / zoomFactor, center.z + 0.01);
-        const target = new THREE.Vector3(center.x, vehicleHeight, center.z);
-        threeView.camera.up.set(0,0,-1);
-        threeView.cameraAzimuth = -Math.PI / 2;
-        threeView.groundPlane.constant = -vehicleHeight;
-        if(!threeView.cameraReady) {
-            threeView.camera.position.copy(desired);
-            threeView.cameraReady = true;
-        } else {
-            const smoothing = 1 - Math.pow(0.002, Math.min(0.05, dt));
-            threeView.camera.position.lerp(desired, smoothing);
-        }
-        threeView.camera.lookAt(target);
-        return;
-    }
     threeView.camera.up.set(0,1,0);
-    threeView.groundPlane.constant = 0;
+    threeView.groundPlane.constant = -(player.z||0)*THREE_WORLD_SCALE;
     // 锁定世界方向：镜头始终从地图南侧朝北看，W/S/A/D 与屏幕上下左右恒定。
     // 坦克转弯只改车身方向，摄像机只平移跟随，绝不旋转。
     const zoomFactor = Math.max(0.75, camera.zoom || 1);
-    const distance = (player.isFlying ? 440 : 390) * THREE_WORLD_SCALE / zoomFactor;
-    const height = (player.isFlying ? 540 : 480) * THREE_WORLD_SCALE / zoomFactor;
+    const distance = (currentMap==='factory'&&!player.isFlying?280:(player.isFlying ? 440 : 390)) * THREE_WORLD_SCALE / zoomFactor;
+    const height = (currentMap==='factory'&&!player.isFlying?340:(player.isFlying ? 540 : 480)) * THREE_WORLD_SCALE / zoomFactor;
     const azimuth = -Math.PI / 2;
     threeView.cameraAzimuth = azimuth;
     const vehicleHeight = (player.z || 0) * THREE_WORLD_SCALE;
@@ -1262,7 +1327,7 @@ function updateThreeCamera(dt) {
         desired.x += shake.x;
         desired.y += shake.y * 0.45;
     }
-    const lookAhead = (player.isFlying ? 150 : 125) * THREE_WORLD_SCALE;
+    const lookAhead = (currentMap==='factory'&&!player.isFlying?95:(player.isFlying ? 150 : 125)) * THREE_WORLD_SCALE;
     const target = new THREE.Vector3(
         center.x + Math.cos(azimuth) * lookAhead,
         vehicleHeight + (player.isFlying ? 1.2 : 1.6),
@@ -1296,8 +1361,7 @@ function syncThreeHud() {
         label.textContent = tankData ? tankData.name : tank.tankType;
         label.style.color = tank.team === 'blue' ? '#55a7ff' : '#ff5555';
         const hiddenGhost = tank.team !== player.team && tank.ghostActive && !tank.ghostRevealed;
-        const hiddenFloor = currentMap === 'factory' && !isFactoryEntityOnVisibleFloor(tank);
-        const point = hiddenGhost || hiddenFloor ? null : projectThreeHudPoint(tank.x, tank.y, (tank.z || 0) + (tank.isFlying ? 76 : 68));
+        const point = hiddenGhost ? null : projectThreeHudPoint(tank.x, tank.y, (tank.z || 0) + (tank.isFlying ? 76 : 68));
         positionThreeHudElement(label, point, tank === player ? 1 : 0.9);
     });
     for(const [id, label] of threeView.tankLabels) {
@@ -1388,7 +1452,6 @@ function renderThreeScene() {
     syncThreeOwnership(now);
     syncThreeGameModes(now);
     syncThreeMapMechanics(now);
-    applyThreeFactoryFloorVisibility();
     updateThreeEnvironment(now);
     updateThreeCamera(dt);
     threeView.renderer.render(threeView.scene, threeView.camera);

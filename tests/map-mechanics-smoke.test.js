@@ -57,15 +57,22 @@ vm.runInContext(`
     initializeMapMechanics();
 `, context);
 assert.strictEqual(vm.runInContext("terrainZones.filter(z => z.type === 'factoryFloorSlab').length", context), 3, 'factory should have B1, 1F and 2F slabs');
+assert.strictEqual(vm.runInContext("terrainZones.filter(z => z.type === 'factoryCeilingSlab').length", context), 1, '2F should have a roof ceiling above the shared floor slabs');
 assert.strictEqual(vm.runInContext("terrainZones.filter(z => z.type === 'conveyor').length", context), 4, 'B1 should contain floor conveyors');
 assert.strictEqual(vm.runInContext("terrainZones.filter(z => z.type === 'factoryElevator').length", context), 2, 'factory should contain two elevators');
-assert.strictEqual(vm.runInContext("terrainZones.filter(z => z.type === 'factoryRampLink').length", context), 2, 'factory should contain two narrow ramp links');
-assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'factoryBoundary').length", context), 12, 'each floor should have four building boundary walls');
+assert.strictEqual(vm.runInContext("terrainZones.filter(z => z.type === 'factoryRamp').length", context), 2, 'factory should contain two physical inclined ramps');
+assert.strictEqual(vm.runInContext("mapMechanicsState.factory.elevators.every(e => e.dwellTime === 5 && e.doorsOpen)", context), true, 'factory elevators should hold for five seconds with permanently open doors');
+assert.strictEqual(vm.runInContext("mapMechanicsState.factory.ramps.every(r => r.guardrailHeight >= 60 && r.deckThickness >= 18)", context), true, 'factory ramps should have thick decks and protective guardrails');
+assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'factoryBoundary').length", context), 4, 'the building should have four continuous outer walls');
+assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'factoryElevatorShaft').length", context), 10, 'each hollow elevator shaft should have walls and a doorway');
 assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'oilBarrel' && o.factoryFloor === 0).length", context), 24, 'B1 should contain many oil barrels');
 assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'factoryFacility' && o.factoryFloor === 1).length", context), 12, '1F should be the main facility area');
 assert.strictEqual(vm.runInContext('getFactoryFloorZ(0)', context), 0, 'B1 floor height should be zero');
-assert.strictEqual(vm.runInContext('getFactoryFloorZ(1)', context), 160, '1F should use the middle slice');
-assert.strictEqual(vm.runInContext('getFactoryFloorZ(2)', context), 320, '2F should use the upper slice');
+assert.strictEqual(vm.runInContext('getFactoryFloorZ(1)', context), 500, '1F should be 500 units above B1');
+assert.strictEqual(vm.runInContext('getFactoryFloorZ(2)', context), 1000, '2F should be 1000 units above B1');
+assert.strictEqual(vm.runInContext('getFactoryFloorZ(3)', context), 1500, 'the top ceiling should be 1500 units above B1');
+assert.strictEqual(vm.runInContext("areEntitiesOnSameFactoryFloor({z:0},{z:1000})", context), true, 'factory entities should share one continuous 3D space instead of logical floor isolation');
+assert.strictEqual(vm.runInContext("isFactoryEntityOnVisibleFloor({factoryFloor:2})", context), true, 'upper-floor entities should remain rendered without floor visibility isolation');
 
 vm.runInContext('finalizeMapMechanicsElements()', context);
 assert.strictEqual(vm.runInContext("mapElements.filter(e => e.type === 'repairRobot').length", context), 6, '1F should contain repair robots');
@@ -75,7 +82,7 @@ vm.runInContext(`(() => {
     player = {id:'belt-tank',x:800,y:585,z:0,factoryFloor:0,hp:1000,maxHp:1000,dead:false,isFlying:false,canMove:true};
     updateMapMechanics(.5);
 })()`, context);
-assert.strictEqual(vm.runInContext('player.x', context), 841, 'a B1 conveyor should automatically move a tank');
+assert(vm.runInContext('player.x', context) > 830 && vm.runInContext('player.x', context) < 841, 'a B1 conveyor should accelerate a tank instead of moving it with an instant fixed offset');
 
 vm.runInContext(`(() => {
     const facility = obstacles.find(o => o.type === 'factoryFacility' && o.factoryFloor === 1);
@@ -89,12 +96,35 @@ vm.runInContext(`(() => {
 assert.strictEqual(vm.runInContext("obstacles.find(o => o.type === 'factoryFacility' && o.factoryFloor === 1).terrainHp", context), 545, 'robots should repair damaged 1F facilities');
 
 vm.runInContext(`(() => {
-    player = {id:'elevator-tank',x:300,y:300,z:0,factoryFloor:0,hp:1000,maxHp:1000,dead:false,isFlying:false,canMove:true};
+    const ramp=mapMechanicsState.factory.ramps[0];
+    player={id:'ramp-tank',x:ramp.x+ramp.w/2,y:ramp.y,z:0,factoryFloor:0,hp:1000,maxHp:1000,dead:false,isFlying:false,canMove:true};
+    for(let step=1;step<=9;step++){
+        player.y=ramp.y+ramp.h*step/9;
+        updateFactoryTankSurfaces([player]);
+    }
+})()`,context);
+assert.strictEqual(vm.runInContext('player.z',context),500,'driving along the ramp should continuously raise the tank to 1F');
+
+vm.runInContext(`(() => {
+    const elevator=mapMechanicsState.factory.elevators[0];
+    player={id:'elevator-tank',x:elevator.x+elevator.w/2,y:elevator.y+elevator.h/2,z:0,factoryFloor:0,hp:1000,maxHp:1000,dead:false,isFlying:false,canMove:true};
     updateMapMechanics(.01);
-    updateMapMechanics(1.1);
+    updateMapMechanics(5);
+    updateMapMechanics(1);
 })()`, context);
-assert.strictEqual(vm.runInContext('player.factoryFloor', context), 1, 'elevators should quickly transfer tanks to the next floor');
-assert.strictEqual(vm.runInContext('player.z', context), 160, 'elevator arrival should snap to the destination floor height');
+assert.strictEqual(vm.runInContext('player.z', context), 240, 'a tank standing on the elevator platform should move with it');
+assert.strictEqual(vm.runInContext('player.canMove', context), true, 'the elevator must not disable tank controls');
+assert.strictEqual(vm.runInContext('player.factoryTransit', context), undefined, 'elevators should not use automatic floor-transition state');
+
+vm.runInContext(`(() => {
+    const elevator=mapMechanicsState.factory.elevators[0];
+    elevator.platformZ=0;elevator.currentFloor=0;elevator.targetFloor=0;elevator.dwell=5;
+    player={id:'falling-tank',x:elevator.x+elevator.w/2,y:elevator.y+elevator.h/2,z:500,factoryFloor:1,hp:1000,maxHp:1000,dead:false,isFlying:false,canMove:true};
+    for(let step=0;step<20;step++)updateFactoryTankSurfaces(.1,[player]);
+})()`, context);
+assert.strictEqual(vm.runInContext('player.z', context), 0, 'an open elevator shaft should let a tank fall to the lower support');
+assert(vm.runInContext('player.hp', context) < 1000, 'a 500-unit fall should cause impact damage');
+assert.strictEqual(vm.runInContext('isFactoryElevatorExitBlocked(player,player.x,player.y+200)', context), false, 'open elevator doors must not create an invisible exit barrier');
 
 vm.runInContext(`(() => {
     const robot = mapElements.find(e => e.type === 'repairRobot');

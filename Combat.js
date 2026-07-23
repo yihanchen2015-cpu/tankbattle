@@ -130,7 +130,7 @@ function updateBullets(dt) {
             }
             continue;
         }
-        b.prevX = b.x; b.prevY = b.y;
+        b.prevX = b.x; b.prevY = b.y; b.prevZ = b.z;
         b.x += b.vx * 60 * dt; b.y += b.vy * 60 * dt; b.life -= dt;
         if(b.type === 'aa' || b.type === 'shell') {
             b.z += b.vz * dt;
@@ -144,6 +144,11 @@ function updateBullets(dt) {
             continue;
         }
         if(b.life <= 0 || b.z < -5 || b.x < 0 || b.x > CONFIG.mapWidth || b.y < 0 || b.y > CONFIG.mapHeight) { bullets.splice(i, 1); continue; }
+        if(currentMap === 'factory' && typeof factoryProjectileCrossedSlab === 'function' && factoryProjectileCrossedSlab(b)) {
+            createParticles(b.x,b.y,6,'#8d9498',.7);
+            bullets.splice(i,1);
+            continue;
+        }
         if(typeof handleMapMechanicProjectile === 'function' && handleMapMechanicProjectile(b)) { bullets.splice(i, 1); continue; }
         if(b.ignoresObstacles) continue;
         for(let obs of obstacles) {
@@ -450,10 +455,12 @@ function lineOfSight(x1, y1, x2, y2, factoryFloor = null) {
 
 function getObstacleWorldHeight(obs) {
     if(!obs) return 0;
-    const baseZ = typeof currentMap !== 'undefined' && currentMap === 'factory' && Number.isInteger(obs.factoryFloor) && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(obs.factoryFloor) : 0;
+    const baseZ = typeof currentMap !== 'undefined' && currentMap === 'factory'
+        ? (Number.isFinite(obs.z) ? obs.z : (Number.isInteger(obs.factoryFloor) && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(obs.factoryFloor) : 0)) : 0;
+    if(Number.isFinite(obs.worldHeight)) return baseZ + obs.worldHeight;
     if(obs.type === 'factoryPlatform') return (obs.platformHeight || 120) + 18;
     if(obs.type === 'oilBarrel') return baseZ + 58;
-    if(obs.type === 'factoryBoundary') return baseZ + 150;
+    if(obs.type === 'factoryBoundary' || obs.type === 'factoryElevatorShaft') return baseZ + (typeof FACTORY_FLOOR_HEIGHT!=='undefined'?FACTORY_FLOOR_HEIGHT:500) * 3;
     if(obs.type === 'factoryFacility') return baseZ + 86;
     if(obs.type === 'factoryCrate') return baseZ + 54;
     if(obs.type === 'factoryWall') return baseZ + 70 + (obs.floors || 3) * 18;
@@ -465,6 +472,7 @@ function getObstacleWorldHeight(obs) {
 
 function flyingTankHitsObstacle(x, y, z, radius) {
     const bodyBottom = z - 24;
+    if(typeof factoryFlightHitsSlab==='function'&&factoryFlightHitsSlab(x,y,z,24))return true;
     for(const obs of obstacles) {
         const closestX = Math.max(obs.x, Math.min(x, obs.x + obs.w));
         const closestY = Math.max(obs.y, Math.min(y, obs.y + obs.h));
@@ -528,11 +536,11 @@ function updateHelicopterFlight(tank, dt) {
 function checkObstacleCollision(x, y, radius, tank = null) {
     if(tank && tank.isFlying) return flyingTankHitsObstacle(x, y, tank.z || CONFIG.helicopterAltitude, radius * 0.82);
     if(tank && !canTankCrossWater(tank) && isPositionInWater(x, y, radius * 0.75)) return true;
+    if(currentMap === 'factory' && tank && typeof isFactoryRampGuardrailCollision === 'function' && isFactoryRampGuardrailCollision(x,y,tank.z||0,radius*.65)) return true;
+    if(currentMap === 'factory' && tank && typeof isFactoryElevatorExitBlocked === 'function' && isFactoryElevatorExitBlocked(tank,x,y)) return true;
+    if(currentMap === 'factory' && tank && typeof isFactorySurfaceReachable === 'function' && !isFactorySurfaceReachable(x,y,tank.z||0)) return true;
     for(let obs of obstacles) {
-        if(currentMap === 'factory' && typeof factoryObstacleMatchesFloor === 'function') {
-            const floor = tank ? getFactoryEntityFloor(tank) : getFactoryViewFloor();
-            if(!factoryObstacleMatchesFloor(obs, floor)) continue;
-        }
+        if(currentMap === 'factory' && tank && typeof factoryObstacleOverlapsHeight === 'function' && !factoryObstacleOverlapsHeight(obs,tank.z||0,58)) continue;
         if(obs.type === 'factoryPlatform') continue;
         const closestX = Math.max(obs.x, Math.min(x, obs.x + obs.w));
         const closestY = Math.max(obs.y, Math.min(y, obs.y + obs.h));
@@ -586,7 +594,7 @@ function updateOutposts(dt) {
     outposts.forEach(op => {
         let blueIn = false, redIn = false;
         allTanks.forEach(t => {
-            if(currentMap === 'factory' && Number.isInteger(op.factoryFloor) && typeof getFactoryEntityFloor === 'function' && getFactoryEntityFloor(t) !== op.factoryFloor) return;
+            if(currentMap === 'factory' && Math.abs((t.z||0)-(op.z||0))>85) return;
             const dist = Math.hypot(t.x - op.x, t.y - op.y);
             if(dist < op.radius) { if(t.team === 'blue') blueIn = true; else redIn = true; }
         });

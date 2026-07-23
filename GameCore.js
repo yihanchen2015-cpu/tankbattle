@@ -235,7 +235,7 @@ function generateMap() {
         defenseCooldown: 0, rageActive: false, rageAnnounced: false
     };
     if(currentMap === 'factory') {
-        const floorZ = typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(1) : 160;
+        const floorZ = typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(1) : 500;
         bases.blue.x = 650;
         bases.blue.y = 150;
         bases.red.x = CONFIG.mapWidth - 650 - CONFIG.baseSize;
@@ -542,8 +542,7 @@ function createTank(data, x, y, team, isPlayer) {
     return {
         x, y, z: data.isFlying ? CONFIG.helicopterAltitude : (currentMap === 'factory' && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(1) : 0),
         factoryFloor: currentMap === 'factory' ? 1 : null,
-        factoryTransit: null,
-        factoryConnectorKey: null,
+        factoryElevatorRide: null,
         angle: team === 'blue' ? 0 : Math.PI,
         turretAngle: team === 'blue' ? 0 : Math.PI,
         gunElevation: data.isFlying ? 0 : CONFIG.shellDefaultElevation,

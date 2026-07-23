@@ -6,7 +6,9 @@ function initPathGrid() {
     factoryPathGrids = currentMap === 'factory' ? [0,1,2].map(() => new Array(pathGridWidth * pathGridHeight).fill(false)) : null;
     
     for(let obs of obstacles) {
-        const targetGrid = currentMap === 'factory' && Number.isInteger(obs.factoryFloor) ? factoryPathGrids[obs.factoryFloor] : pathGrid;
+        const targetGrids = currentMap === 'factory'
+            ? (Number.isInteger(obs.factoryFloor) ? [factoryPathGrids[obs.factoryFloor]] : factoryPathGrids)
+            : [pathGrid];
         if(obs.type === 'factoryPlatform') continue;
         if(obs.conveyorMovable) continue;
         const startGx = Math.floor(obs.x / CONFIG.pathGridSize);
@@ -17,7 +19,7 @@ function initPathGrid() {
         for(let gx = startGx; gx < endGx && gx < pathGridWidth; gx++) {
             for(let gy = startGy; gy < endGy && gy < pathGridHeight; gy++) {
                 if(gx >= 0 && gy >= 0) {
-                    targetGrid[gy * pathGridWidth + gx] = true;
+                    targetGrids.forEach(grid=>grid[gy * pathGridWidth + gx] = true);
                 }
             }
         }

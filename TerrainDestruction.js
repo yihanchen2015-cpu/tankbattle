@@ -14,7 +14,7 @@ let terrainPathRefreshTimer = 0;
 
 function getTerrainObstacleColor(obs) {
     if(obs.type === 'oilBarrel') return '#9a3f20';
-    if(['factoryPlatform','factoryWall','factoryBoundary','factoryFacility','factoryCrate'].includes(obs.type)) return '#6f7478';
+    if(['factoryPlatform','factoryWall','factoryBoundary','factoryElevatorShaft','factoryFacility','factoryCrate'].includes(obs.type)) return '#6f7478';
     if(obs.type === 'volcanicRock') return '#423b38';
     if(obs.type === 'tree') return '#416f32';
     if(obs.type === 'rock') return '#8a633a';
@@ -34,7 +34,7 @@ function getTerrainObstacleDurability(obs) {
     if(obs.type === 'factoryWall') return 780;
     if(obs.type === 'factoryFacility') return 700;
     if(obs.type === 'factoryCrate') return 260;
-    if(obs.type === 'factoryBoundary') return Infinity;
+    if(obs.type === 'factoryBoundary' || obs.type === 'factoryElevatorShaft') return Infinity;
     if(obs.type === 'oilBarrel') return 1;
     if(obs.type === 'volcanicRock') return 310;
     return 320;

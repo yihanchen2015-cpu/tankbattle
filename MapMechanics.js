@@ -16,6 +16,7 @@ function createEmptyMapMechanicsState() {
 }
 
 function initializeMapMechanics() {
+    if(typeof disposeFactoryPhysics === 'function') disposeFactoryPhysics();
     mapMechanicsState = createEmptyMapMechanicsState();
     if(currentMap === 'volcano') generateVolcanoMechanics();
     else if(currentMap === 'factory') generateFactoryMechanics();
@@ -61,10 +62,14 @@ function generateFactoryMechanics() {
         type: 'factoryFloorSlab', x: 0, y: 0, w: CONFIG.mapWidth, h: CONFIG.mapHeight,
         factoryFloor, z: getFactoryFloorZ(factoryFloor)
     }));
-    terrainZones.push(...floorSlabs);
+    const roofSlab = {
+        type:'factoryCeilingSlab', x:0, y:0, w:CONFIG.mapWidth, h:CONFIG.mapHeight,
+        factoryFloor:2, z:getFactoryFloorZ(3)
+    };
+    terrainZones.push(...floorSlabs, roofSlab);
 
     const conveyors = [
-        {type:'conveyor', x:420, y:480, w:2160, h:220, factoryFloor:0, dirX:1, dirY:0, speed:82},
+        {type:'conveyor', x:600, y:480, w:1980, h:220, factoryFloor:0, dirX:1, dirY:0, speed:82},
         {type:'conveyor', x:2300, y:700, w:220, h:1550, factoryFloor:0, dirX:0, dirY:1, speed:68},
         {type:'conveyor', x:500, y:2250, w:1800, h:220, factoryFloor:0, dirX:-1, dirY:0, speed:76},
         {type:'conveyor', x:520, y:850, w:220, h:1200, factoryFloor:0, dirX:0, dirY:-1, speed:62}
@@ -72,24 +77,37 @@ function generateFactoryMechanics() {
     terrainZones.push(...conveyors);
 
     const elevators = [
-        {type:'factoryElevator', id:'E-A', x:250, y:250, w:260, h:260, floors:[0,1,2], occupant:null},
-        {type:'factoryElevator', id:'E-B', x:2490, y:2490, w:260, h:260, floors:[0,1,2], occupant:null}
+        {type:'factoryElevator', id:'E-A', x:220, y:220, w:320, h:320, platformZ:0, currentFloor:0, targetFloor:0, direction:1, dwell:5, dwellTime:5, speed:240, doorsOpen:true},
+        {type:'factoryElevator', id:'E-B', x:2460, y:2460, w:320, h:320, platformZ:getFactoryFloorZ(2), currentFloor:2, targetFloor:2, direction:-1, dwell:5, dwellTime:5, speed:240, doorsOpen:true}
     ];
     const ramps = [
-        {type:'factoryRampLink', id:'R-B1-1F', x:180, y:1050, w:230, h:900, fromFloor:0, toFloor:1, occupant:null},
-        {type:'factoryRampLink', id:'R-1F-2F', x:2590, y:1050, w:230, h:900, fromFloor:1, toFloor:2, occupant:null}
+        {type:'factoryRamp', id:'R-B1-1F', x:180, y:1050, w:230, h:900, axis:'y', reverse:false, fromFloor:0, toFloor:1, fromZ:getFactoryFloorZ(0), toZ:getFactoryFloorZ(1), deckThickness:18, guardrailHeight:64, guardrailWidth:14},
+        {type:'factoryRamp', id:'R-1F-2F', x:2590, y:1050, w:230, h:900, axis:'y', reverse:true, fromFloor:1, toFloor:2, fromZ:getFactoryFloorZ(1), toZ:getFactoryFloorZ(2), deckThickness:18, guardrailHeight:64, guardrailWidth:14}
     ];
     terrainZones.push(...elevators, ...ramps);
 
-    // 三层的边界都是同一座室内建筑的外墙。
-    [0,1,2].forEach(factoryFloor => {
-        const boundary = [
-            [0,0,3000,110], [0,2890,3000,110], [0,0,110,3000], [2890,0,110,3000]
-        ];
-        boundary.forEach(rect => obstacles.push({
-            x:rect[0], y:rect[1], w:rect[2], h:rect[3], type:'factoryBoundary',
-            factoryFloor, z:getFactoryFloorZ(factoryFloor), indestructible:true,
-            maxTerrainHp:Infinity, terrainHp:Infinity
+    // 一整座建筑的连续外墙，从 B1 地面延伸到 2F 天花板。
+    [
+        [0,0,3000,110], [0,2890,3000,110], [0,0,110,3000], [2890,0,110,3000]
+    ].forEach(rect => obstacles.push({
+        x:rect[0], y:rect[1], w:rect[2], h:rect[3], type:'factoryBoundary',
+        z:0, worldHeight:getFactoryFloorZ(3), indestructible:true,
+        maxTerrainHp:Infinity, terrainHp:Infinity
+    }));
+
+    // 电梯井是贯穿三层的空心柱，南侧留门；平台在井内真实升降。
+    elevators.forEach(elevator => {
+        const t = 34, door = 130, side = (elevator.w - door) / 2;
+        [
+            [elevator.x,elevator.y,t,elevator.h],
+            [elevator.x+elevator.w-t,elevator.y,t,elevator.h],
+            [elevator.x+t,elevator.y,elevator.w-t*2,t],
+            [elevator.x,elevator.y+elevator.h-t,side,t],
+            [elevator.x+side+door,elevator.y+elevator.h-t,side,t]
+        ].forEach(rect => obstacles.push({
+            x:rect[0],y:rect[1],w:rect[2],h:rect[3],type:'factoryElevatorShaft',
+            z:0,worldHeight:getFactoryFloorZ(3),indestructible:true,
+            maxTerrainHp:Infinity,terrainHp:Infinity
         }));
     });
 
@@ -111,9 +129,9 @@ function generateFactoryMechanics() {
 
     // 1F：主厂房设施与维修机器人。
     const facilities = [
-        [520,420,420,250],[1120,360,300,460],[1640,380,620,240],[2390,410,300,520],
+        [650,420,300,250],[1120,360,300,460],[1640,380,620,240],[2390,410,300,520],
         [430,1120,380,500],[980,1050,300,280],[1740,1050,330,300],[2300,1120,360,480],
-        [420,2180,540,300],[1120,2050,300,520],[1650,2150,570,300],[2400,2100,280,520]
+        [420,2180,540,300],[1120,2050,300,520],[1650,2150,570,300],[2150,1750,300,300]
     ];
     facilities.forEach((rect,index) => obstacles.push({
         x:rect[0], y:rect[1], w:rect[2], h:rect[3], type:'factoryFacility', factoryFloor:1,
@@ -126,13 +144,14 @@ function generateFactoryMechanics() {
     }));
 
     // 2F：起重机轨道和少量维护间，保留开阔吊装区。
-    [[400,420,550,220],[2050,420,550,220],[420,2300,420,260],[2160,2260,430,300]]
+    [[650,420,300,220],[2050,420,550,220],[420,2300,420,260],[1900,2300,400,260]]
         .forEach((rect,index) => obstacles.push({
             x:rect[0], y:rect[1], w:rect[2], h:rect[3], type:'factoryFacility', factoryFloor:2,
             z:getFactoryFloorZ(2), facilityKind:index+3, maxTerrainHp:700, terrainHp:700
         }));
 
-    mapMechanicsState.factory = {floorHeight:160, conveyors, elevators, ramps, repairRobots};
+    mapMechanicsState.factory = {floorHeight:FACTORY_FLOOR_HEIGHT, ceilingHeight:FACTORY_FLOOR_HEIGHT, conveyors, elevators, ramps, repairRobots};
+    if(typeof initializeFactoryPhysics === 'function') initializeFactoryPhysics();
     mapMechanicsState.crane = {
         x: CONFIG.mapWidth / 2,
         y: CONFIG.mapHeight / 2,
@@ -193,11 +212,11 @@ function isPointInCoolingCrystal(x, y, padding = 0) {
     return mapMechanicsState.crystals.some(zone => x >= zone.x - padding && x <= zone.x + zone.w + padding && y >= zone.y - padding && y <= zone.y + zone.h + padding);
 }
 
-const FACTORY_FLOOR_HEIGHT = 160;
+const FACTORY_FLOOR_HEIGHT = 500;
 const FACTORY_FLOOR_LABELS = ['B1', '1F', '2F'];
 
 function getFactoryFloorZ(factoryFloor) {
-    return Math.max(0, Math.min(2, factoryFloor || 0)) * FACTORY_FLOOR_HEIGHT;
+    return Math.max(0, Math.min(3, factoryFloor || 0)) * FACTORY_FLOOR_HEIGHT;
 }
 
 function getFactoryFloorFromZ(z) {
@@ -205,8 +224,7 @@ function getFactoryFloorFromZ(z) {
 }
 
 function getFactoryEntityFloor(entity) {
-    if(!entity) return currentMap === 'factory' && player ? (player.factoryFloor ?? getFactoryFloorFromZ(player.z)) : null;
-    if(Number.isInteger(entity.factoryFloor)) return entity.factoryFloor;
+    if(!entity) return currentMap === 'factory' && player ? getFactoryFloorFromZ(player.z) : null;
     return getFactoryFloorFromZ(entity.z || 0);
 }
 
@@ -219,31 +237,111 @@ function getFactoryFloorLabel(factoryFloor) {
 }
 
 function areEntitiesOnSameFactoryFloor(a, b) {
-    return currentMap !== 'factory' || !a || !b || getFactoryEntityFloor(a) === getFactoryEntityFloor(b);
+    return true;
 }
 
 function isFactoryEntityOnVisibleFloor(entity) {
-    if(currentMap !== 'factory' || !entity) return true;
-    if(Array.isArray(entity.floors)) return entity.floors.includes(getFactoryViewFloor());
-    if(Number.isInteger(entity.fromFloor) && Number.isInteger(entity.toFloor)) {
-        const viewFloor = getFactoryViewFloor();
-        return viewFloor === entity.fromFloor || viewFloor === entity.toFloor;
-    }
-    return getFactoryEntityFloor(entity) === getFactoryViewFloor();
+    return true;
 }
 
 function factoryObstacleMatchesFloor(obstacle, factoryFloor) {
-    return currentMap !== 'factory' || !obstacle || !Number.isInteger(obstacle.factoryFloor) || obstacle.factoryFloor === factoryFloor;
+    if(currentMap !== 'factory' || !obstacle) return true;
+    const z = Number.isFinite(factoryFloor) ? getFactoryFloorZ(factoryFloor) : 0;
+    return factoryObstacleOverlapsHeight(obstacle, z, 58);
 }
 
 function factoryObstacleMatchesProjectile(obstacle, projectile) {
-    if(currentMap !== 'factory' || !obstacle || !Number.isInteger(obstacle.factoryFloor)) return true;
-    return obstacle.factoryFloor === getFactoryFloorFromZ(projectile && projectile.z || 0);
+    if(currentMap !== 'factory' || !obstacle) return true;
+    const z = projectile && projectile.z || 0;
+    const baseZ = Number.isFinite(obstacle.z) ? obstacle.z :
+        (Number.isInteger(obstacle.factoryFloor) ? getFactoryFloorZ(obstacle.factoryFloor) : 0);
+    const topZ = Number.isFinite(obstacle.worldHeight) ? baseZ + obstacle.worldHeight :
+        (typeof getObstacleWorldHeight === 'function' ? getObstacleWorldHeight(obstacle) : baseZ + 80);
+    return z >= baseZ - 6 && z <= topZ + 6;
 }
 
 function getFactorySurfaceHeightAt(x, y, currentZ = null) {
     if(currentMap !== 'factory') return 0;
-    return getFactoryFloorZ(currentZ === null ? getFactoryViewFloor() : getFactoryFloorFromZ(currentZ));
+    const z = currentZ === null ? (player ? player.z || 0 : getFactoryFloorZ(1)) : currentZ;
+    const factory = mapMechanicsState.factory;
+    if(factory) {
+        let closestRamp = null;
+        factory.ramps.forEach(ramp => {
+            if(!pointInFactoryZone(x,y,ramp,CONFIG.tankSize*.15)) return;
+            const rampZ = getFactoryRampHeightAt(ramp,x,y);
+            const distance = Math.abs(rampZ-z);
+            if(!closestRamp || distance < closestRamp.distance) closestRamp={z:rampZ,distance};
+        });
+        if(closestRamp && closestRamp.distance <= 72) return closestRamp.z;
+        const elevator = factory.elevators.find(item => pointInFactoryElevatorPlatform(x,y,item,CONFIG.tankSize*.15) &&
+            Math.abs(item.platformZ-z) <= 72);
+        if(elevator) return elevator.platformZ;
+    }
+    return getFactoryFloorZ(getFactoryFloorFromZ(z));
+}
+
+function getFactoryRampHeightAt(ramp,x,y) {
+    const coordinate = ramp.axis === 'x' ? (x-ramp.x)/ramp.w : (y-ramp.y)/ramp.h;
+    const progress = Math.max(0,Math.min(1,ramp.reverse ? 1-coordinate : coordinate));
+    return ramp.fromZ+(ramp.toZ-ramp.fromZ)*progress;
+}
+
+function pointInFactoryElevatorPlatform(x,y,elevator,padding=0) {
+    const wall=34;
+    return x>=elevator.x+wall-padding && x<=elevator.x+elevator.w-wall+padding &&
+        y>=elevator.y+wall-padding && y<=elevator.y+elevator.h-wall+padding;
+}
+
+function factoryObstacleOverlapsHeight(obstacle,z,height=58) {
+    if(currentMap!=='factory' || !obstacle) return true;
+    const baseZ=Number.isFinite(obstacle.z)?obstacle.z:
+        (Number.isInteger(obstacle.factoryFloor)?getFactoryFloorZ(obstacle.factoryFloor):0);
+    const topZ=Number.isFinite(obstacle.worldHeight)?baseZ+obstacle.worldHeight:
+        (typeof getObstacleWorldHeight==='function'?getObstacleWorldHeight(obstacle):baseZ+80);
+    return z+height>baseZ+4 && z-8<topZ;
+}
+
+function isFactorySurfaceReachable(x,y,currentZ) {
+    const factory=mapMechanicsState.factory;
+    if(!factory) return true;
+    const ramp=factory.ramps.find(item=>pointInFactoryZone(x,y,item,CONFIG.tankSize*.15) &&
+        Math.abs(getFactoryRampHeightAt(item,x,y)-currentZ)<=72);
+    if(ramp)return true;
+    const elevator=factory.elevators.find(item=>pointInFactoryZone(x,y,item,CONFIG.tankSize*.2));
+    if(elevator) {
+        const centeredDoor=Math.abs(x-(elevator.x+elevator.w/2))<=55 &&
+            y>=elevator.y+elevator.h-85;
+        return pointInFactoryElevatorPlatform(x,y,elevator,CONFIG.tankSize*.1)||centeredDoor;
+    }
+    return true;
+}
+
+function factoryProjectileCrossedSlab(projectile) {
+    if(currentMap!=='factory'||!projectile||!Number.isFinite(projectile.prevZ)||!Number.isFinite(projectile.z))return false;
+    const low=Math.min(projectile.prevZ,projectile.z),high=Math.max(projectile.prevZ,projectile.z);
+    for(const slabZ of [1,2,3].map(getFactoryFloorZ)){
+        if(low>slabZ||high<slabZ)continue;
+        if(isFactorySlabOpeningAt(projectile.x,projectile.y,slabZ))continue;
+        return true;
+    }
+    return false;
+}
+
+function isFactorySlabOpeningAt(x,y,slabZ) {
+    const factory=mapMechanicsState.factory;
+    if(!factory)return false;
+    if(slabZ<getFactoryFloorZ(3)&&factory.elevators.some(elevator=>pointInFactoryElevatorPlatform(x,y,elevator,0)))return true;
+    return factory.ramps.some(ramp=>{
+        if(Math.abs(ramp.toZ-slabZ)>1)return false;
+        const coordinate=ramp.axis==='x'?(x-ramp.x)/ramp.w:(y-ramp.y)/ramp.h;
+        const upperProgress=ramp.reverse?1-coordinate:coordinate;
+        return pointInFactoryZone(x,y,ramp,0)&&upperProgress>.72;
+    });
+}
+
+function factoryFlightHitsSlab(x,y,z,halfHeight=24) {
+    if(currentMap!=='factory')return false;
+    return [1,2,3].map(getFactoryFloorZ).some(slabZ=>Math.abs(z-slabZ)<=halfHeight+6&&!isFactorySlabOpeningAt(x,y,slabZ));
 }
 
 function pointInFactoryZone(x, y, zone, padding = 0) {
@@ -333,14 +431,10 @@ function updateLavaBalls(dt, tanks) {
 }
 
 function updateFactoryMechanics(dt, tanks) {
-    tanks.forEach(tank => {
-        if(!Number.isInteger(tank.factoryFloor)) tank.factoryFloor = getFactoryFloorFromZ(tank.z || getFactoryFloorZ(1));
-        if(!tank.isFlying && !tank.factoryTransit && !(mapMechanicsState.crane && mapMechanicsState.crane.target === tank && mapMechanicsState.crane.phase === 'carry')) {
-            tank.z = getFactoryFloorZ(tank.factoryFloor);
-        }
-    });
-    updateFactoryConnectors(dt, tanks);
+    updateFactoryElevators(dt,tanks);
+    updateFactoryTankSurfaces(dt,tanks);
     updateFactoryConveyors(dt, tanks);
+    if(typeof updateFactoryPhysics === 'function') updateFactoryPhysics(dt,tanks);
     updateFactoryRepairRobots(dt);
     updateCrane(dt, tanks);
     updateFactoryFire(dt, tanks);
@@ -365,16 +459,26 @@ function distributeFactoryInitialTanks() {
 function updateFactoryConveyors(dt, tanks) {
     const factory = mapMechanicsState.factory;
     if(!factory) return;
-    factory.conveyors.forEach(conveyor => {
-        tanks.forEach(tank => {
-            if(tank.isFlying || tank.factoryTransit || getFactoryEntityFloor(tank) !== conveyor.factoryFloor || !pointInFactoryZone(tank.x, tank.y, conveyor, CONFIG.tankSize * .35)) return;
-            const dx = conveyor.dirX * conveyor.speed * dt, dy = conveyor.dirY * conveyor.speed * dt;
-            const nx = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapWidth - CONFIG.tankSize, tank.x + dx));
-            const ny = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapHeight - CONFIG.tankSize, tank.y + dy));
-            if(typeof checkObstacleCollision !== 'function' || !checkObstacleCollision(nx, ny, CONFIG.tankSize, tank)) { tank.x = nx; tank.y = ny; }
-            tank.onConveyorTimer = .2;
-        });
-
+    tanks.forEach(tank=>{
+        if(tank.isFlying)return;
+        const conveyor=factory.conveyors.find(zone=>Math.abs((tank.z||0)-getFactoryFloorZ(zone.factoryFloor))<=65&&
+            pointInFactoryZone(tank.x,tank.y,zone,CONFIG.tankSize*.35));
+        const targetVX=conveyor?conveyor.dirX*conveyor.speed:0;
+        const targetVY=conveyor?conveyor.dirY*conveyor.speed:0;
+        const response=conveyor?1-Math.exp(-dt*5):1-Math.exp(-dt*1.8);
+        tank.factoryConveyorVX=(tank.factoryConveyorVX||0)+(targetVX-(tank.factoryConveyorVX||0))*response;
+        tank.factoryConveyorVY=(tank.factoryConveyorVY||0)+(targetVY-(tank.factoryConveyorVY||0))*response;
+        const nx=Math.max(CONFIG.tankSize,Math.min(CONFIG.mapWidth-CONFIG.tankSize,tank.x+tank.factoryConveyorVX*dt));
+        const ny=Math.max(CONFIG.tankSize,Math.min(CONFIG.mapHeight-CONFIG.tankSize,tank.y+tank.factoryConveyorVY*dt));
+        if(typeof checkObstacleCollision!=='function'||!checkObstacleCollision(nx,ny,CONFIG.tankSize,tank)){
+            tank.x=nx;tank.y=ny;
+        }else{
+            tank.factoryConveyorVX*=.3;tank.factoryConveyorVY*=.3;
+        }
+        tank.onConveyorTimer=conveyor ? .2 : Math.max(0,(tank.onConveyorTimer||0)-dt);
+    });
+    if(typeof isFactoryPhysicsReady !== 'function'||!isFactoryPhysicsReady()) {
+        factory.conveyors.forEach(conveyor => {
         obstacles.filter(obs => obs.conveyorMovable && obs.factoryFloor === conveyor.factoryFloor && pointInFactoryZone(obs.x + obs.w / 2, obs.y + obs.h / 2, conveyor)).forEach(obs => {
             obs.x += conveyor.dirX * conveyor.speed * dt;
             obs.y += conveyor.dirY * conveyor.speed * dt;
@@ -383,56 +487,140 @@ function updateFactoryConveyors(dt, tanks) {
             if(conveyor.dirY > 0 && obs.y > conveyor.y + conveyor.h - obs.h) obs.y = conveyor.y;
             if(conveyor.dirY < 0 && obs.y + obs.h < conveyor.y) obs.y = conveyor.y + conveyor.h - obs.h;
         });
-    });
-    tanks.forEach(tank => { if(tank.onConveyorTimer > 0) tank.onConveyorTimer = Math.max(0, tank.onConveyorTimer - dt); });
+        });
+    }
 }
 
-function updateFactoryConnectors(dt, tanks) {
+function updateFactoryElevators(dt,tanks) {
     const factory = mapMechanicsState.factory;
     if(!factory) return;
-    const allConnectors = [...factory.elevators, ...factory.ramps];
-    tanks.forEach(tank => {
-        if(tank.isFlying) return;
-        if(tank.factoryConnectorCooldown > 0) tank.factoryConnectorCooldown -= dt;
-        if(tank.factoryTransit) {
-            const transit = tank.factoryTransit;
-            transit.timer -= dt;
-            const progress = Math.max(0, Math.min(1, 1 - transit.timer / transit.duration));
-            tank.z = getFactoryFloorZ(transit.fromFloor) + (getFactoryFloorZ(transit.toFloor) - getFactoryFloorZ(transit.fromFloor)) * progress;
-            if(transit.timer <= 0) finishFactoryTransit(tank);
-            return;
+    factory.elevators.forEach(elevator=>{
+        if(elevator.dwell>0){
+            elevator.dwell=Math.max(0,elevator.dwell-dt);
+            if(elevator.dwell<=0){
+                let next=elevator.currentFloor+elevator.direction;
+                if(next>2||next<0){elevator.direction*=-1;next=elevator.currentFloor+elevator.direction;}
+                elevator.targetFloor=next;
+            }
+        }else{
+            const targetZ=getFactoryFloorZ(elevator.targetFloor);
+            const delta=targetZ-elevator.platformZ;
+            const step=Math.sign(delta)*Math.min(Math.abs(delta),elevator.speed*dt);
+            elevator.platformZ+=step;
+            if(Math.abs(targetZ-elevator.platformZ)<.01){
+                elevator.platformZ=targetZ;
+                elevator.currentFloor=elevator.targetFloor;
+                elevator.dwell=elevator.dwellTime||5;
+            }
         }
-        const connector = allConnectors.find(zone => pointInFactoryZone(tank.x, tank.y, zone, CONFIG.tankSize * .2) &&
-            (zone.floors ? zone.floors.includes(tank.factoryFloor) : tank.factoryFloor === zone.fromFloor || tank.factoryFloor === zone.toFloor));
-        if(!connector) { tank.factoryConnectorKey = null; return; }
-        if(tank.factoryConnectorKey === connector.id || tank.factoryConnectorCooldown > 0 || connector.occupant) return;
-        tank.factoryConnectorKey = connector.id;
-        const elevator = connector.type === 'factoryElevator';
-        const toFloor = elevator ? (tank.factoryFloor + 1) % 3 : (tank.factoryFloor === connector.fromFloor ? connector.toFloor : connector.fromFloor);
-        connector.occupant = tank;
-        tank.factoryTransit = {
-            connector, type:elevator ? 'elevator' : 'ramp', fromFloor:tank.factoryFloor, toFloor,
-            duration:elevator ? 1.05 : 2.8, timer:elevator ? 1.05 : 2.8,
-            previousCanMove:tank.canMove
-        };
-        tank.canMove = false;
-        if(tank === player) showMessage(elevator ? `🛗 电梯前往 ${getFactoryFloorLabel(toFloor)}，到达点已暴露` : `↗ 通过狭窄斜坡前往 ${getFactoryFloorLabel(toFloor)}`, elevator ? '#ffd45b' : '#9fc7d8');
     });
 }
 
-function finishFactoryTransit(tank) {
-    const transit = tank.factoryTransit;
-    if(!transit) return;
-    tank.factoryFloor = transit.toFloor;
-    tank.z = getFactoryFloorZ(transit.toFloor);
-    tank.canMove = transit.previousCanMove !== false;
-    tank.factoryConnectorCooldown = 1.2;
-    if(transit.connector) transit.connector.occupant = null;
-    tank.factoryTransit = null;
-    tank.path = null;
-    tank.aiCaptureTarget = null;
-    if(tank.aiState) { tank.aiState = 'patrol'; tank.aiStateTimer = 0; }
-    if(tank === player) showMessage(`已到达 ${getFactoryFloorLabel(tank.factoryFloor)}`, '#7dffad');
+function updateFactoryTankSurfaces(dt,tanks) {
+    if(Array.isArray(dt)){tanks=dt;dt=1/60;}
+    const factory=mapMechanicsState.factory;
+    if(!factory)return;
+    tanks.forEach(tank => {
+        if(tank.isFlying) return;
+        if(mapMechanicsState.crane&&mapMechanicsState.crane.target===tank&&mapMechanicsState.crane.phase==='carry')return;
+        let elevator=tank.factoryElevatorRide?factory.elevators.find(item=>item.id===tank.factoryElevatorRide):null;
+        if(elevator&&!pointInFactoryElevatorPlatform(tank.x,tank.y,elevator,CONFIG.tankSize*.2)){
+            tank.factoryElevatorRide=null;
+            elevator=null;
+        }
+        if(!elevator){
+            elevator=factory.elevators.find(item=>pointInFactoryElevatorPlatform(tank.x,tank.y,item,CONFIG.tankSize*.15)&&
+                Math.abs((tank.z||0)-item.platformZ)<=72);
+            if(elevator)tank.factoryElevatorRide=elevator.id;
+        }
+        if(elevator){
+            if(tank.factoryVerticalVelocity<0&&Number.isFinite(tank.factoryFallStartZ)){
+                applyFactoryFallImpact(tank,Math.max(0,tank.factoryFallStartZ-elevator.platformZ));
+            }
+            tank.z=elevator.platformZ;
+            tank.factoryFloor=getFactoryFloorFromZ(tank.z);
+            tank.factoryVerticalVelocity=0;
+            tank.factoryFallStartZ=null;
+            return;
+        }
+        const ramp=factory.ramps.find(item=>pointInFactoryZone(tank.x,tank.y,item,CONFIG.tankSize*.12)&&
+            Math.abs(getFactoryRampHeightAt(item,tank.x,tank.y)-(tank.z||0))<=90);
+        if(ramp){
+            tank.z=getFactoryRampHeightAt(ramp,tank.x,tank.y);
+            tank.factoryVerticalVelocity=0;
+            tank.factoryFallStartZ=null;
+            tank.factoryFloor=getFactoryFloorFromZ(tank.z);
+            return;
+        }
+        const support=getFactorySupportHeightAt(tank.x,tank.y,tank.z||0);
+        if((tank.z||0)<=support+10&&!(tank.factoryVerticalVelocity<0)){
+            tank.z=support;
+            tank.factoryVerticalVelocity=0;
+            tank.factoryFallStartZ=null;
+        }else if(support<(tank.z||0)-10){
+            if(!Number.isFinite(tank.factoryFallStartZ))tank.factoryFallStartZ=tank.z||0;
+            tank.factoryVerticalVelocity=(tank.factoryVerticalVelocity||0)-980*dt;
+            const nextZ=(tank.z||0)+tank.factoryVerticalVelocity*dt;
+            if(nextZ<=support){
+                const fallDistance=Math.max(0,(tank.factoryFallStartZ||support)-support);
+                tank.z=support;
+                tank.factoryVerticalVelocity=0;
+                tank.factoryFallStartZ=null;
+                applyFactoryFallImpact(tank,fallDistance);
+            }else tank.z=nextZ;
+        }else{
+            tank.z=support;
+            tank.factoryVerticalVelocity=0;
+        }
+        tank.factoryFloor=getFactoryFloorFromZ(tank.z);
+    });
+}
+
+function applyFactoryFallImpact(tank,fallDistance) {
+    if(fallDistance<=180||typeof applyDirectDamage!=='function')return;
+    const damage=Math.min(600,Math.round((fallDistance-180)*.42));
+    applyDirectDamage(tank,damage,null,'高处坠落');
+    if(tank===player&&typeof showDamageNumber==='function')showDamageNumber(tank.x,tank.y-34,damage);
+}
+
+function getFactorySupportHeightAt(x,y,currentZ) {
+    let support=0;
+    [1,2].forEach(floor=>{
+        const slabZ=getFactoryFloorZ(floor);
+        if(slabZ<=currentZ+10&&!isFactorySlabOpeningAt(x,y,slabZ))support=Math.max(support,slabZ);
+    });
+    const factory=mapMechanicsState.factory;
+    if(!factory)return support;
+    factory.ramps.forEach(ramp=>{
+        if(!pointInFactoryZone(x,y,ramp,CONFIG.tankSize*.12))return;
+        const rampZ=getFactoryRampHeightAt(ramp,x,y);
+        if(rampZ<=currentZ+90)support=Math.max(support,rampZ);
+    });
+    factory.elevators.forEach(elevator=>{
+        if(pointInFactoryElevatorPlatform(x,y,elevator,0)&&elevator.platformZ<=currentZ+80){
+            support=Math.max(support,elevator.platformZ);
+        }
+    });
+    return support;
+}
+
+function isFactoryRampGuardrailCollision(x,y,z,radius=0) {
+    const factory=mapMechanicsState.factory;
+    if(!factory)return false;
+    return factory.ramps.some(ramp=>{
+        if(!pointInFactoryZone(x,y,ramp,radius))return false;
+        const rampZ=getFactoryRampHeightAt(ramp,x,y);
+        if(Math.abs((z||0)-rampZ)>ramp.guardrailHeight+35)return false;
+        const rail=ramp.guardrailWidth||14;
+        return ramp.axis==='y'
+            ? x<=ramp.x+rail+radius||x>=ramp.x+ramp.w-rail-radius
+            : y<=ramp.y+rail+radius||y>=ramp.y+ramp.h-rail-radius;
+    });
+}
+
+function isFactoryElevatorExitBlocked(tank,x,y) {
+    // 井门始终敞开；驶离运行中的平台会直接进入坠落状态，而不是撞上隐形门。
+    return false;
 }
 
 function updateFactoryRepairRobots(dt) {
@@ -479,7 +667,8 @@ function updateCrane(dt, tanks) {
     if(!crane) return;
     crane.timer -= dt;
     if(crane.phase === 'idle' && crane.timer <= 0) {
-        const candidates = tanks.filter(tank => !tank.isFlying && !tank.factoryTransit && getFactoryEntityFloor(tank) === crane.factoryFloor && Math.hypot(tank.x - crane.x, tank.y - crane.y) <= crane.range);
+        const candidates = tanks.filter(tank => !tank.isFlying && Math.abs((tank.z||0)-crane.z)<=75 &&
+            Math.hypot(tank.x - crane.x, tank.y - crane.y) <= crane.range);
         if(!candidates.length) {
             crane.timer = 2;
             return;
@@ -575,15 +764,15 @@ function triggerOilBarrelExplosion(barrel, source = null, visited = new Set()) {
     visited.add(barrel);
     barrel.exploded = true;
     const x = barrel.x + barrel.w / 2, y = barrel.y + barrel.h / 2;
-    const factoryFloor = getFactoryEntityFloor(barrel);
+    const factoryFloor = getFactoryEntityFloor(barrel), explosionZ=barrel.z||getFactoryFloorZ(factoryFloor);
     removeTerrainObstacle(barrel);
     const tanks = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead);
     tanks.forEach(tank => {
-        if(tank.isFlying || getFactoryEntityFloor(tank) !== factoryFloor || Math.hypot(tank.x - x, tank.y - y) > 175) return;
+        if(tank.isFlying || Math.abs((tank.z||0)-explosionZ)>90 || Math.hypot(tank.x - x, tank.y - y) > 175) return;
         applyDirectDamage(tank, 200, source, '油桶爆炸');
         showDamageNumber(tank.x, tank.y - 34, 200);
     });
-    mapMechanicsState.fireZones.push({x, y, z:getFactoryFloorZ(factoryFloor), factoryFloor, radius:125, life:5, maxLife:5, tick:0});
+    mapMechanicsState.fireZones.push({x, y, z:explosionZ, factoryFloor, radius:125, life:5, maxLife:5, tick:0});
     createParticles(x, y, 32, '#ff5b16', 2.8);
     if(typeof spawnTerrainDebris === 'function') spawnTerrainDebris(x, y, '#7d3d20', 1.2, 12, 'metal');
     if(typeof playWorldSound === 'function') playWorldSound('ammoRack', x, y, 0.9);
@@ -605,7 +794,7 @@ function updateFactoryFire(dt, tanks) {
             const ticks = Math.floor(fire.tick / 0.25);
             fire.tick -= ticks * 0.25;
             tanks.forEach(tank => {
-                if(tank.isFlying || getFactoryEntityFloor(tank) !== fire.factoryFloor || Math.hypot(tank.x - fire.x, tank.y - fire.y) > fire.radius) return;
+                if(tank.isFlying || Math.abs((tank.z||0)-(fire.z||0))>90 || Math.hypot(tank.x - fire.x, tank.y - fire.y) > fire.radius) return;
                 applyDirectDamage(tank, ticks * 5, null, '工厂火灾');
             });
         }

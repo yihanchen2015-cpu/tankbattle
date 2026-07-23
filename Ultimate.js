@@ -568,10 +568,12 @@ function render() {
     for(let obs of obstacles) {
         if(currentMap === 'factory' && typeof isFactoryEntityOnVisibleFloor === 'function' && !isFactoryEntityOnVisibleFloor(obs)) continue;
         if(obs.x + obs.w < viewLeft || obs.x > viewRight || obs.y + obs.h < viewTop || obs.y > viewBottom) continue;
+        ctx.save();
+        if(currentMap==='factory')ctx.translate(0,-(obs.z||0)*ALTITUDE_DRAW_SCALE);
         if(obs.type === 'tree') drawTreeObstacle(obs);
         else if(obs.type === 'building') drawBuildingObstacle(obs);
         else if(obs.type === 'rubble' && typeof drawRubbleObstacle === 'function') drawRubbleObstacle(ctx, obs);
-        else if(['factoryPlatform', 'factoryWall', 'factoryBoundary', 'factoryFacility', 'factoryCrate', 'oilBarrel'].includes(obs.type) && typeof drawFactoryObstacle2D === 'function') drawFactoryObstacle2D(obs);
+        else if(['factoryPlatform', 'factoryWall', 'factoryBoundary', 'factoryElevatorShaft', 'factoryFacility', 'factoryCrate', 'oilBarrel'].includes(obs.type) && typeof drawFactoryObstacle2D === 'function') drawFactoryObstacle2D(obs);
         else {
             ctx.fillStyle = obs.type === 'ice' ? '#9db7c4' : (obs.type === 'rock' ? '#8a633a' : (obs.type === 'volcanicRock' ? '#463c38' : (gameConfig.dayNight === 'night' ? '#151525' : '#5a4328')));
             ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
@@ -581,6 +583,7 @@ function render() {
         ctx.fillRect(obs.x + 4, obs.y + obs.h, obs.w, 4);
         ctx.fillRect(obs.x + obs.w, obs.y + 4, 4, obs.h);
         ctx.fillStyle = gameConfig.dayNight === 'night' ? '#151525' : '#5a4328';
+        ctx.restore();
     }
     if(typeof drawTerrainDebris2D === 'function') drawTerrainDebris2D(ctx);
     
@@ -613,7 +616,6 @@ function render() {
     });
     
     bullets.forEach(b => {
-        if(currentMap === 'factory' && typeof getFactoryFloorFromZ === 'function' && getFactoryFloorFromZ(b.z || 0) !== getFactoryViewFloor()) return;
         if(b.x < viewLeft || b.x > viewRight || b.y < viewTop || b.y > viewBottom) return;
         drawBullet(b);
     });
