@@ -23,17 +23,20 @@ function initializeMapMechanics() {
 }
 
 function generateVolcanoMechanics() {
+    const scaleX=CONFIG.mapWidth/8000;
+    const scaleY=CONFIG.mapHeight/7000;
+    const lavaPoint=(x,y,width)=>({x:x*scaleX,y:y*scaleY,width});
     const river = {
         type: 'lava',
         points: [
-            {x: 3850, y: 420, width: 250},
-            {x: 4180, y: 900, width: 330},
-            {x: 3650, y: 1850, width: 285},
-            {x: 4310, y: 2950, width: 390},
-            {x: 3770, y: 4050, width: 310},
-            {x: 4240, y: 5150, width: 355},
-            {x: 3860, y: 6250, width: 270},
-            {x: 4100, y: 6580, width: 320}
+            lavaPoint(3850,420,250),
+            lavaPoint(4180,900,330),
+            lavaPoint(3650,1850,285),
+            lavaPoint(4310,2950,390),
+            lavaPoint(3770,4050,310),
+            lavaPoint(4240,5150,355),
+            lavaPoint(3860,6250,270),
+            lavaPoint(4100,6580,320)
         ],
         flowPhase: Math.random() * Math.PI * 2
     };
@@ -41,10 +44,10 @@ function generateVolcanoMechanics() {
     terrainZones.push(river);
 
     const crystals = [
-        {type: 'crystal', x: 250, y: 450, w: 820, h: 920},
-        {type: 'crystal', x: 6930, y: 450, w: 820, h: 920},
-        {type: 'crystal', x: 250, y: 5630, w: 820, h: 920},
-        {type: 'crystal', x: 6930, y: 5630, w: 820, h: 920}
+        {type:'crystal',x:250*scaleX,y:450*scaleY,w:820*scaleX,h:920*scaleY},
+        {type:'crystal',x:6930*scaleX,y:450*scaleY,w:820*scaleX,h:920*scaleY},
+        {type:'crystal',x:250*scaleX,y:5630*scaleY,w:820*scaleX,h:920*scaleY},
+        {type:'crystal',x:6930*scaleX,y:5630*scaleY,w:820*scaleX,h:920*scaleY}
     ];
     mapMechanicsState.crystals = crystals;
     terrainZones.push(...crystals);
@@ -126,6 +129,15 @@ function generateFactoryMechanics() {
         x:x-34, y:y-34, w:68, h:68, type:'factoryCrate', factoryFloor:0, z:getFactoryFloorZ(0),
         conveyorMovable:true, conveyorSeed:index, maxTerrainHp:260, terrainHp:260
     }));
+    // 油桶滑板：低摩擦板与油桶完全交给 Ammo.js 叠放、滑动和滚落。
+    obstacles.push({
+        x:1320,y:1450,w:210,h:82,type:'factorySkateboard',factoryFloor:0,z:0,
+        conveyorMovable:true,physicsLowFriction:true,maxTerrainHp:220,terrainHp:220
+    });
+    obstacles.push({
+        x:1399,y:1467,w:48,h:48,type:'oilBarrel',factoryFloor:0,z:14,
+        conveyorMovable:true,conveyorSeed:99,maxTerrainHp:1,terrainHp:1,skateboardRider:true
+    });
 
     // 1F：主厂房设施与维修机器人。
     const facilities = [
@@ -149,9 +161,34 @@ function generateFactoryMechanics() {
             x:rect[0], y:rect[1], w:rect[2], h:rect[3], type:'factoryFacility', factoryFloor:2,
             z:getFactoryFloorZ(2), facilityKind:index+3, maxTerrainHp:700, terrainHp:700
         }));
+    // 上层也放置可坠井/被吊装的油桶。
+    [
+        {x:610,y:720,floor:1,seed:110},
+        {x:2390,y:2280,floor:2,seed:111},
+        {x:2140,y:1500,floor:2,seed:112}
+    ].forEach(item=>obstacles.push({
+        x:item.x-24,y:item.y-24,w:48,h:48,type:'oilBarrel',factoryFloor:item.floor,z:getFactoryFloorZ(item.floor),
+        conveyorMovable:true,conveyorSeed:item.seed,maxTerrainHp:1,terrainHp:1
+    }));
 
-    mapMechanicsState.factory = {floorHeight:FACTORY_FLOOR_HEIGHT, ceilingHeight:FACTORY_FLOOR_HEIGHT, conveyors, elevators, ramps, repairRobots};
-    if(typeof initializeFactoryPhysics === 'function') initializeFactoryPhysics();
+    const fans=[
+        {id:'FAN-B1',type:'factoryFan',x:500,y:1320,z:0,factoryFloor:0,dirX:1,dirY:0,range:720,width:360,strength:260},
+        {id:'FAN-1F',type:'factoryFan',x:2080,y:1720,z:getFactoryFloorZ(1),factoryFloor:1,dirX:-1,dirY:0,range:620,width:280,strength:230}
+    ];
+    const forklift={
+        id:'forklift-1',type:'factoryForklift',x:900,y:1050,z:0,factoryFloor:0,angle:0,
+        speed:105,phase:'seek',timer:1.5,target:null,pathIndex:0,
+        path:[{x:900,y:1050},{x:1850,y:1050},{x:1850,y:2050},{x:900,y:2050}]
+    };
+    const press={
+        id:'press-1',type:'factoryPress',x:1320,y:760,w:360,h:300,z:getFactoryFloorZ(1),factoryFloor:1,
+        plateZ:getFactoryFloorZ(1)+250,minZ:getFactoryFloorZ(1)+28,maxZ:getFactoryFloorZ(1)+250,
+        speed:190,direction:-1,dwell:1.5,cycleDwell:1.5
+    };
+    mapMechanicsState.factory = {
+        floorHeight:FACTORY_FLOOR_HEIGHT,ceilingHeight:FACTORY_FLOOR_HEIGHT,
+        conveyors,elevators,ramps,repairRobots,fans,forklift,press
+    };
     mapMechanicsState.crane = {
         x: CONFIG.mapWidth / 2,
         y: CONFIG.mapHeight / 2,
@@ -167,6 +204,7 @@ function generateFactoryMechanics() {
         lockY: 0,
         destination: null
     };
+    if(typeof initializeFactoryPhysics === 'function') initializeFactoryPhysics();
 }
 
 function finalizeMapMechanicsElements() {
@@ -431,12 +469,17 @@ function updateLavaBalls(dt, tanks) {
 }
 
 function updateFactoryMechanics(dt, tanks) {
+    updateFactoryFlattening(dt,tanks);
     updateFactoryElevators(dt,tanks);
     updateFactoryTankSurfaces(dt,tanks);
+    updateFactoryPress(dt,tanks);
+    updateFactoryCrushHazards(tanks);
     updateFactoryConveyors(dt, tanks);
+    updateFactoryFans(dt,tanks);
+    updateFactoryForklift(dt);
+    updateCrane(dt, tanks);
     if(typeof updateFactoryPhysics === 'function') updateFactoryPhysics(dt,tanks);
     updateFactoryRepairRobots(dt);
-    updateCrane(dt, tanks);
     updateFactoryFire(dt, tanks);
 }
 
@@ -463,6 +506,10 @@ function updateFactoryConveyors(dt, tanks) {
         if(tank.isFlying)return;
         const conveyor=factory.conveyors.find(zone=>Math.abs((tank.z||0)-getFactoryFloorZ(zone.factoryFloor))<=65&&
             pointInFactoryZone(tank.x,tank.y,zone,CONFIG.tankSize*.35));
+        if(tank===player&&conveyor&&!tank.factoryConveyorCueActive){
+            showFactoryJuiceCue('传 送 弹 射！','传送带开始持续加速','#56ffc6',.9,tank.x,tank.y,tank.z,true);
+        }
+        tank.factoryConveyorCueActive=!!conveyor;
         const targetVX=conveyor?conveyor.dirX*conveyor.speed:0;
         const targetVY=conveyor?conveyor.dirY*conveyor.speed:0;
         const response=conveyor?1-Math.exp(-dt*5):1-Math.exp(-dt*1.8);
@@ -495,6 +542,7 @@ function updateFactoryElevators(dt,tanks) {
     const factory = mapMechanicsState.factory;
     if(!factory) return;
     factory.elevators.forEach(elevator=>{
+        elevator.previousPlatformZ=elevator.platformZ;
         if(elevator.dwell>0){
             elevator.dwell=Math.max(0,elevator.dwell-dt);
             if(elevator.dwell<=0){
@@ -514,6 +562,150 @@ function updateFactoryElevators(dt,tanks) {
             }
         }
     });
+}
+
+function updateFactoryFlattening(dt,tanks) {
+    tanks.forEach(tank=>{
+        tank.flattenedTimer=Math.max(0,(tank.flattenedTimer||0)-dt);
+        tank.factoryCrushCooldown=Math.max(0,(tank.factoryCrushCooldown||0)-dt);
+        tank.factoryFlattened=tank.flattenedTimer>0;
+    });
+}
+
+function showFactoryJuiceCue(title,subtitle,color,intensity=1,x=null,y=null,z=null,force=false) {
+    if(typeof showJuiceCue!=='function')return false;
+    if(!force&&player&&Number.isFinite(x)&&Number.isFinite(y)){
+        if(Math.hypot(player.x-x,player.y-y)>1500)return false;
+        if(Number.isFinite(z)&&Math.abs((player.z||0)-z)>180)return false;
+    }
+    return showJuiceCue(title,subtitle,color,intensity);
+}
+
+function getFactoryPhysicsObjectName(obs) {
+    if(!obs)return '货物';
+    if(obs.type==='oilBarrel')return '油桶';
+    if(obs.type==='factorySkateboard')return '油桶滑板';
+    return '工业货物';
+}
+
+function applyFactoryFlatten(tank,damage=180,cause='工业设备碾压') {
+    if(!tank||tank.dead)return false;
+    tank.flattenedTimer=5;
+    tank.factoryFlattened=true;
+    tank.factoryCrushCooldown=.8;
+    if(typeof applyDirectDamage==='function')applyDirectDamage(tank,damage,null,cause);
+    if(tank===player){
+        if(typeof showDamageNumber==='function')showDamageNumber(tank.x,tank.y-34,damage);
+        if(typeof showMessage==='function')showMessage('🫓 你被压扁了！5 秒后恢复','#ff8a48');
+        showFactoryJuiceCue('压 成 铁 饼！',`${cause} · -${damage} HP · 5 秒扁平`,'#ff713c',1.2,tank.x,tank.y,tank.z,true);
+        if(typeof createParticles==='function')createParticles(tank.x,tank.y,28,'#ffb04a',1.5);
+        if(typeof playWorldSound==='function')playWorldSound('hit',tank.x,tank.y,1.35);
+    }
+    return true;
+}
+
+function updateFactoryPress(dt,tanks) {
+    const press=mapMechanicsState.factory&&mapMechanicsState.factory.press;
+    if(!press)return;
+    press.previousPlateZ=press.plateZ;
+    if(press.dwell>0){press.dwell=Math.max(0,press.dwell-dt);return;}
+    press.plateZ+=press.direction*press.speed*dt;
+    if(press.plateZ<=press.minZ){
+        press.plateZ=press.minZ;press.direction=1;press.dwell=press.cycleDwell;
+    }else if(press.plateZ>=press.maxZ){
+        press.plateZ=press.maxZ;press.direction=-1;press.dwell=press.cycleDwell;
+    }
+}
+
+function updateFactoryCrushHazards(tanks) {
+    const factory=mapMechanicsState.factory;
+    if(!factory)return;
+    const crushWithPlate=(plate,previousZ,currentZ,x,y,w,h,cause)=>{
+        if(!(previousZ>currentZ))return;
+        tanks.forEach(tank=>{
+            if(tank.isFlying||tank.factoryCrushCooldown>0||tank.x<x||tank.x>x+w||tank.y<y||tank.y>y+h)return;
+            const tankTop=(tank.z||0)+38;
+            if(previousZ>=tankTop&&currentZ<=tankTop+14)applyFactoryFlatten(tank,180,cause);
+        });
+        obstacles.slice().forEach(obs=>{
+            if(obs.type!=='oilBarrel'||obs.exploded)return;
+            const cx=obs.x+obs.w/2,cy=obs.y+obs.h/2,top=(obs.z||0)+(obs.physicsHeight||48);
+            if(cx<x||cx>x+w||cy<y||cy>y+h)return;
+            if(previousZ>=top&&currentZ<=top+14){
+                const reason=cause==='电梯碾压'?'elevatorCrush':'pressCrush';
+                triggerOilBarrelExplosion(obs,null,new Set(),reason);
+            }
+        });
+    };
+    factory.elevators.forEach(elevator=>{
+        crushWithPlate(elevator,elevator.previousPlatformZ,elevator.platformZ,
+            elevator.x+34,elevator.y+34,elevator.w-68,elevator.h-68,'电梯碾压');
+    });
+    const press=factory.press;
+    if(press)crushWithPlate(press,press.previousPlateZ,press.plateZ,press.x,press.y,press.w,press.h,'液压机碾压');
+}
+
+function updateFactoryFans(dt,tanks) {
+    const fans=mapMechanicsState.factory&&mapMechanicsState.factory.fans||[];
+    tanks.forEach(tank=>{
+        if(tank.isFlying)return;
+        let forceX=0,forceY=0;
+        fans.forEach(fan=>{
+            if(Math.abs((tank.z||0)-fan.z)>85)return;
+            const dx=tank.x-fan.x,dy=tank.y-fan.y;
+            const forward=dx*fan.dirX+dy*fan.dirY;
+            const lateral=Math.abs(dx*fan.dirY-dy*fan.dirX);
+            if(forward<=0||forward>fan.range||lateral>fan.width/2)return;
+            const strength=fan.strength*(1-forward/fan.range);
+            forceX+=fan.dirX*strength;forceY+=fan.dirY*strength;
+        });
+        const fanActive=Math.hypot(forceX,forceY)>1;
+        if(tank===player&&fanActive&&!tank.factoryFanCueActive){
+            showFactoryJuiceCue('风 洞 加 速！','工业风扇推力接管车身','#70e7ff',.94,tank.x,tank.y,tank.z,true);
+        }
+        tank.factoryFanCueActive=fanActive;
+        tank.factoryFanVX=((tank.factoryFanVX||0)+forceX*dt)*Math.exp(-dt*2.2);
+        tank.factoryFanVY=((tank.factoryFanVY||0)+forceY*dt)*Math.exp(-dt*2.2);
+        const nx=tank.x+tank.factoryFanVX*dt,ny=tank.y+tank.factoryFanVY*dt;
+        if(typeof checkObstacleCollision!=='function'||!checkObstacleCollision(nx,ny,CONFIG.tankSize,tank)){tank.x=nx;tank.y=ny;}
+    });
+}
+
+function updateFactoryForklift(dt) {
+    const forklift=mapMechanicsState.factory&&mapMechanicsState.factory.forklift;
+    if(!forklift)return;
+    forklift.timer-=dt;
+    const waypoint=forklift.path[forklift.pathIndex%forklift.path.length];
+    const dx=waypoint.x-forklift.x,dy=waypoint.y-forklift.y,distance=Math.hypot(dx,dy);
+    if(distance<45)forklift.pathIndex=(forklift.pathIndex+1)%forklift.path.length;
+    else{
+        forklift.angle=Math.atan2(dy,dx);
+        forklift.x+=Math.cos(forklift.angle)*forklift.speed*dt;
+        forklift.y+=Math.sin(forklift.angle)*forklift.speed*dt;
+    }
+    if(forklift.phase==='seek'&&forklift.timer<=0){
+        const candidates=obstacles.filter(obs=>obs.conveyorMovable&&!obs.exploded&&
+            Math.abs((obs.z||0)-forklift.z)<75&&Math.hypot(obs.x+obs.w/2-forklift.x,obs.y+obs.h/2-forklift.y)<300);
+        forklift.target=candidates.length?candidates.reduce((best,obs)=>
+            Math.hypot(obs.x+obs.w/2-forklift.x,obs.y+obs.h/2-forklift.y)<
+            Math.hypot(best.x+best.w/2-forklift.x,best.y+best.h/2-forklift.y)?obs:best):null;
+        if(forklift.target&&typeof attachFactoryForkliftObject==='function'&&attachFactoryForkliftObject(forklift.target,forklift)){
+            forklift.phase='carry';forklift.timer=4.5;
+            const objectName=getFactoryPhysicsObjectName(forklift.target);
+            showFactoryJuiceCue('叉 走 了！',`铲车已叉起${objectName}`,'#ffd447',.96,
+                forklift.target.x+forklift.target.w/2,forklift.target.y+forklift.target.h/2,forklift.target.z||0);
+        }else{forklift.target=null;forklift.timer=1.5;}
+    }else if(forklift.phase==='carry'){
+        if(!forklift.target||!obstacles.includes(forklift.target)){
+            forklift.phase='seek';forklift.target=null;forklift.timer=1;
+        }else{
+            if(typeof updateFactoryForkliftConstraint==='function')updateFactoryForkliftConstraint(forklift);
+            if(forklift.timer<=0){
+                if(typeof releaseFactoryForkliftObject==='function')releaseFactoryForkliftObject(forklift.target,Math.cos(forklift.angle)*150,Math.sin(forklift.angle)*150,55);
+                forklift.target=null;forklift.phase='seek';forklift.timer=2;
+            }
+        }
+    }
 }
 
 function updateFactoryTankSurfaces(dt,tanks) {
@@ -580,7 +772,11 @@ function applyFactoryFallImpact(tank,fallDistance) {
     if(fallDistance<=180||typeof applyDirectDamage!=='function')return;
     const damage=Math.min(600,Math.round((fallDistance-180)*.42));
     applyDirectDamage(tank,damage,null,'高处坠落');
-    if(tank===player&&typeof showDamageNumber==='function')showDamageNumber(tank.x,tank.y-34,damage);
+    if(tank===player){
+        if(typeof showDamageNumber==='function')showDamageNumber(tank.x,tank.y-34,damage);
+        showFactoryJuiceCue('重 力 暴 击！',`坠落 ${Math.round(fallDistance)} · -${damage} HP`,'#ff4d45',1.12,tank.x,tank.y,tank.z,true);
+        if(typeof playWorldSound==='function')playWorldSound('hit',tank.x,tank.y,1.2);
+    }
 }
 
 function getFactorySupportHeightAt(x,y,currentZ) {
@@ -667,14 +863,19 @@ function updateCrane(dt, tanks) {
     if(!crane) return;
     crane.timer -= dt;
     if(crane.phase === 'idle' && crane.timer <= 0) {
-        const candidates = tanks.filter(tank => !tank.isFlying && Math.abs((tank.z||0)-crane.z)<=75 &&
+        const tankCandidates = tanks.filter(tank => !tank.isFlying && Math.abs((tank.z||0)-crane.z)<=75 &&
             Math.hypot(tank.x - crane.x, tank.y - crane.y) <= crane.range);
+        const objectCandidates=obstacles.filter(obs=>obs.conveyorMovable&&!obs.exploded&&
+            Math.abs((obs.z||0)-crane.z)<=90&&Math.hypot(obs.x+obs.w/2-crane.x,obs.y+obs.h/2-crane.y)<=crane.range);
+        const candidates=[...tankCandidates,...objectCandidates];
         if(!candidates.length) {
             crane.timer = 2;
             return;
         }
         crane.target = candidates[Math.floor(Math.random() * candidates.length)];
-        crane.lockX = crane.target.x; crane.lockY = crane.target.y;
+        crane.targetIsObject=obstacles.includes(crane.target);
+        crane.lockX = crane.target.x+(crane.targetIsObject?crane.target.w/2:0);
+        crane.lockY = crane.target.y+(crane.targetIsObject?crane.target.h/2:0);
         crane.phase = 'telegraph'; crane.timer = 1.45;
         if(crane.target === player) showMessage('⚠ 起重机锁定！立即离开黄色警示圈', '#ffd24a');
     } else if(crane.phase === 'telegraph') {
@@ -683,40 +884,64 @@ function updateCrane(dt, tanks) {
         crane.hookY += (crane.lockY - crane.hookY) * Math.min(1, dt * (3 + progress * 5));
         if(crane.timer <= 0) {
             const target = crane.target;
-            if(!target || target.dead || Math.hypot(target.x - crane.lockX, target.y - crane.lockY) > 105) {
-                if(target === player) showMessage('✓ 已躲开起重机吊钩', '#6dff9a');
+            const targetX=target?(target.x+(crane.targetIsObject?target.w/2:0)):0;
+            const targetY=target?(target.y+(crane.targetIsObject?target.h/2:0)):0;
+            if(!target || target.dead || (crane.targetIsObject&&!obstacles.includes(target)) || Math.hypot(targetX-crane.lockX,targetY-crane.lockY)>105) {
+                if(target === player) {
+                    showMessage('✓ 已躲开起重机吊钩', '#6dff9a');
+                    showFactoryJuiceCue('极 限 闪 避！','起重机吊钩抓空','#63ff9b',1.08,target.x,target.y,target.z,true);
+                }
                 resetCrane(10 + Math.random() * 10);
                 return;
             }
             crane.phase = 'carry'; crane.timer = 3;
-            crane.startX = target.x; crane.startY = target.y;
+            crane.startX = targetX; crane.startY = targetY;
             const angle = Math.random() * Math.PI * 2;
             const distance = 700 + Math.random() * 650;
             crane.destination = findFactoryDropPoint(crane.x + Math.cos(angle) * distance, crane.y + Math.sin(angle) * distance, crane.factoryFloor);
-            target.cranePreviousCanMove = target.canMove;
-            target.canMove = false;
-            target.craneCaptured = true;
+            if(crane.targetIsObject){
+                if(typeof attachFactoryCraneObject!=='function'||!attachFactoryCraneObject(target,crane)){
+                    resetCrane(3);return;
+                }
+            }else{
+                target.cranePreviousCanMove = target.canMove;
+                target.canMove = false;
+                target.craneCaptured = true;
+            }
         }
     } else if(crane.phase === 'carry') {
         const target = crane.target;
-        if(!target || target.dead) {
+        if(!target || target.dead || (crane.targetIsObject&&!obstacles.includes(target))) {
             resetCrane(10 + Math.random() * 10);
             return;
         }
         const progress = Math.max(0, Math.min(1, 1 - crane.timer / 3));
         const eased = progress * progress * (3 - 2 * progress);
-        target.x = crane.startX + (crane.destination.x - crane.startX) * eased;
-        target.y = crane.startY + (crane.destination.y - crane.startY) * eased;
-        target.z = getFactoryFloorZ(crane.factoryFloor) + 70 + Math.sin(progress * Math.PI) * 100;
-        crane.hookX = target.x; crane.hookY = target.y;
+        crane.hookX = crane.startX + (crane.destination.x - crane.startX) * eased;
+        crane.hookY = crane.startY + (crane.destination.y - crane.startY) * eased;
+        crane.hookZ = getFactoryFloorZ(crane.factoryFloor)+120+Math.sin(progress*Math.PI)*150;
+        if(crane.targetIsObject){
+            if(typeof updateFactoryCraneConstraint==='function')updateFactoryCraneConstraint(crane,crane.hookZ);
+        }else{
+            target.x=crane.hookX;target.y=crane.hookY;target.z=crane.hookZ-50;
+        }
         if(crane.timer <= 0) {
-            target.x = crane.destination.x; target.y = crane.destination.y;
-            target.factoryFloor = crane.factoryFloor;
-            target.z = getFactoryFloorZ(crane.factoryFloor);
-            target.canMove = target.cranePreviousCanMove !== false;
-            target.craneCaptured = false;
-            delete target.cranePreviousCanMove;
-            if(target === player) showMessage('起重机已将你重新部署', '#ffb347');
+            if(crane.targetIsObject){
+                const dx=crane.destination.x-crane.startX,dy=crane.destination.y-crane.startY;
+                const length=Math.max(1,Math.hypot(dx,dy));
+                if(typeof releaseFactoryCraneObject==='function')releaseFactoryCraneObject(target,dx/length*340,dy/length*340,135);
+                showFactoryJuiceCue('工 业 投 掷！',`起重机抛出${getFactoryPhysicsObjectName(target)} · 初速 340`,'#ffd24a',1.02,
+                    crane.destination.x,crane.destination.y,crane.z);
+            }else{
+                target.x=crane.destination.x;target.y=crane.destination.y;
+                target.factoryFloor=crane.factoryFloor;target.z=getFactoryFloorZ(crane.factoryFloor);
+                target.canMove=target.cranePreviousCanMove!==false;target.craneCaptured=false;
+                delete target.cranePreviousCanMove;
+                if(target===player){
+                    showMessage('起重机已将你重新部署','#ffb347');
+                    showFactoryJuiceCue('强 制 搬 家！','起重机完成跨区投送','#ffb347',1.02,target.x,target.y,target.z,true);
+                }
+            }
             resetCrane(10 + Math.random() * 10);
         }
     }
@@ -755,12 +980,15 @@ function craneSafeCoordinate(value, max) {
 function resetCrane(delay) {
     const crane = mapMechanicsState.crane;
     if(!crane) return;
+    if(crane.targetIsObject&&typeof releaseFactoryCraneObject==='function')releaseFactoryCraneObject(crane.target,0,0,0);
     crane.phase = 'idle'; crane.timer = delay; crane.target = null; crane.destination = null;
+    crane.targetIsObject=false;crane.hookZ=crane.z+40;
     crane.hookX = crane.x; crane.hookY = crane.y;
 }
 
-function triggerOilBarrelExplosion(barrel, source = null, visited = new Set()) {
+function triggerOilBarrelExplosion(barrel, source = null, visited = new Set(), effectReason = '') {
     if(!barrel || barrel.type !== 'oilBarrel' || barrel.exploded || visited.has(barrel)) return false;
+    const rootExplosion=visited.size===0;
     visited.add(barrel);
     barrel.exploded = true;
     const x = barrel.x + barrel.w / 2, y = barrel.y + barrel.h / 2;
@@ -780,8 +1008,23 @@ function triggerOilBarrelExplosion(barrel, source = null, visited = new Set()) {
     obstacles.slice().forEach(other => {
         if(other.type !== 'oilBarrel' || other.factoryFloor !== factoryFloor || visited.has(other)) return;
         const ox = other.x + other.w / 2, oy = other.y + other.h / 2;
-        if(Math.hypot(ox - x, oy - y) <= 240) triggerOilBarrelExplosion(other, source, visited);
+        if(Math.hypot(ox - x, oy - y) <= 240) triggerOilBarrelExplosion(other, source, visited, effectReason);
     });
+    if(rootExplosion){
+        const chainCount=visited.size;
+        const cueByReason={
+            elevatorCrush:['一 压 就 爆！','电梯压爆油桶','#ff6537',1.16],
+            pressCrush:['工 业 榨 汁！','液压机压爆油桶','#ff3e32',1.2],
+            fallImpact:['高 空 爆 桶！','重力冲击引爆油桶','#ff8a32',1.14]
+        };
+        const reasonCue=cueByReason[effectReason];
+        const playerTriggered=source&&(source===player||source.isPlayer);
+        if(reasonCue||playerTriggered||chainCount>1){
+            const cue=reasonCue||['连 锁 引 爆！','油桶爆炸','#ff8a32',1.08];
+            const chainText=chainCount>1?` · ${chainCount} 桶连锁`:'';
+            showFactoryJuiceCue(cue[0],`${cue[1]}${chainText}`,cue[2],cue[3],x,y,explosionZ);
+        }
+    }
     if(typeof markTerrainStructureChanged === 'function') markTerrainStructureChanged();
     return true;
 }

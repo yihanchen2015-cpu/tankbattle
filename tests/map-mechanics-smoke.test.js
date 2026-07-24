@@ -4,6 +4,7 @@ const vm = require('vm');
 const assert = require('assert');
 
 const root = path.join(__dirname, '..');
+const juiceCues = [];
 const context = {
     console,
     Math,
@@ -17,6 +18,7 @@ const context = {
     terrainZones: [], obstacles: [], mapElements: [],
     player: null, allies: [], enemies: [],
     createParticles() {}, showDamageNumber() {}, showNotification() {}, showMessage() {},
+    showJuiceCue(...args) { juiceCues.push(args); return true; },
     applyDirectDamage(tank, damage) { tank.hp -= damage; return damage; },
     removeTerrainObstacle(obs) { const index = context.obstacles.indexOf(obs); if(index >= 0) context.obstacles.splice(index, 1); },
     markTerrainStructureChanged() {}, spawnTerrainDebris() {}, playWorldSound() {},
@@ -65,7 +67,12 @@ assert.strictEqual(vm.runInContext("mapMechanicsState.factory.elevators.every(e 
 assert.strictEqual(vm.runInContext("mapMechanicsState.factory.ramps.every(r => r.guardrailHeight >= 60 && r.deckThickness >= 18)", context), true, 'factory ramps should have thick decks and protective guardrails');
 assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'factoryBoundary').length", context), 4, 'the building should have four continuous outer walls');
 assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'factoryElevatorShaft').length", context), 10, 'each hollow elevator shaft should have walls and a doorway');
-assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'oilBarrel' && o.factoryFloor === 0).length", context), 24, 'B1 should contain many oil barrels');
+assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'oilBarrel' && o.factoryFloor === 0).length", context), 25, 'B1 should contain many oil barrels including the skateboard rider');
+assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'oilBarrel' && o.factoryFloor > 0).length", context), 3, 'upper floors should contain barrels that can be thrown or dropped into shafts');
+assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'factorySkateboard').length", context), 1, 'B1 should contain a physical oil-barrel skateboard');
+assert.strictEqual(vm.runInContext("mapMechanicsState.factory.fans.length", context), 2, 'factory should contain two industrial force-field fans');
+assert.strictEqual(vm.runInContext("mapMechanicsState.factory.forklift.type", context), 'factoryForklift', 'factory should contain an autonomous forklift');
+assert.strictEqual(vm.runInContext("mapMechanicsState.factory.press.type", context), 'factoryPress', 'factory should contain a cycling hydraulic press');
 assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'factoryFacility' && o.factoryFloor === 1).length", context), 12, '1F should be the main facility area');
 assert.strictEqual(vm.runInContext('getFactoryFloorZ(0)', context), 0, 'B1 floor height should be zero');
 assert.strictEqual(vm.runInContext('getFactoryFloorZ(1)', context), 500, '1F should be 500 units above B1');
@@ -127,6 +134,26 @@ assert(vm.runInContext('player.hp', context) < 1000, 'a 500-unit fall should cau
 assert.strictEqual(vm.runInContext('isFactoryElevatorExitBlocked(player,player.x,player.y+200)', context), false, 'open elevator doors must not create an invisible exit barrier');
 
 vm.runInContext(`(() => {
+    player={id:'flattened-tank',x:1500,y:900,z:500,factoryFloor:1,hp:1000,maxHp:1000,dead:false,isFlying:false,canMove:true};
+    applyFactoryFlatten(player,180,'test press');
+})()`, context);
+assert.strictEqual(vm.runInContext('player.hp', context), 820, 'industrial crushing should deal direct damage');
+assert.strictEqual(vm.runInContext('player.flattenedTimer', context), 5, 'the flattened visual state should last five seconds');
+assert(juiceCues.some(cue => cue[0] === '压 成 铁 饼！'), 'industrial crushing should display a punchy flattening cue');
+
+const barrelCountBeforeElevatorCrush = vm.runInContext("obstacles.filter(o => o.type === 'oilBarrel').length", context);
+vm.runInContext(`(() => {
+    const elevator=mapMechanicsState.factory.elevators[0];
+    const barrel={x:elevator.x+120,y:elevator.y+120,w:48,h:48,z:0,type:'oilBarrel',factoryFloor:0,maxTerrainHp:1,terrainHp:1};
+    player={id:'barrel-witness',x:elevator.x+elevator.w+80,y:elevator.y+elevator.h/2,z:0,factoryFloor:0,hp:1000,maxHp:1000,dead:false,isFlying:false};
+    obstacles.push(barrel);
+    elevator.previousPlatformZ=90;elevator.platformZ=45;
+    updateFactoryCrushHazards([]);
+})()`, context);
+assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'oilBarrel').length", context), barrelCountBeforeElevatorCrush, 'an elevator plate should explode and remove a crushed barrel');
+assert(juiceCues.some(cue => cue[0] === '一 压 就 爆！'), 'an elevator-crushed barrel should display an explosion cue');
+
+vm.runInContext(`(() => {
     const robot = mapElements.find(e => e.type === 'repairRobot');
     handleMapMechanicProjectile({x:robot.x,y:robot.y,z:robot.z+18,damage:75});
 })()`, context);
@@ -137,6 +164,14 @@ vm.runInContext("triggerOilBarrelExplosion(obstacles.find(o => o.type === 'oilBa
 const barrelCountAfter = vm.runInContext("obstacles.filter(o => o.type === 'oilBarrel').length", context);
 assert(barrelCountAfter < barrelCountBefore, 'barrel explosion should remove and chain nearby barrels');
 assert(vm.runInContext('mapMechanicsState.fireZones.length', context) >= 1, 'barrel explosion should leave five-second fire zones');
+
+vm.runInContext(`
+    currentMap='volcano';CONFIG.mapWidth=4800;CONFIG.mapHeight=4200;
+    terrainZones.length=0;obstacles.length=0;mapElements.length=0;player=null;
+    initializeMapMechanics();
+`,context);
+assert(vm.runInContext('mapMechanicsState.lava.points.every(point=>point.x>=0&&point.x<=CONFIG.mapWidth&&point.y>=0&&point.y<=CONFIG.mapHeight)',context),'scaled volcano lava river should remain inside the 60% map');
+assert(vm.runInContext('mapMechanicsState.crystals.every(zone=>zone.x>=0&&zone.y>=0&&zone.x+zone.w<=CONFIG.mapWidth&&zone.y+zone.h<=CONFIG.mapHeight)',context),'scaled volcano crystal zones should remain inside the 60% map');
 
 console.log('Map mechanics smoke test passed:', {
     lavaDamage: 100,

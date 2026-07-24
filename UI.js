@@ -308,7 +308,7 @@ function selectMode(mode) {
     if(mode === 'classic') {
         badge.className = 'mode-badge classic';
         badge.textContent = '🏛 经典模式';
-        subtitle.textContent = '据点争夺战 | 9000×9000 超大地图';
+        subtitle.textContent = '紧凑战场 | 3 据点争夺 | 基地持续增援';
         dayNightRow.style.display = 'flex';
     } else if(mode === 'defense') {
         badge.className = 'mode-badge defense';
@@ -443,7 +443,7 @@ function setupMapSelection() {
         {key: 'desert', name: '🏜 沙漠风暴', desc: '大视野，随机沙尘暴'},
         {key: 'city', name: '🏙 城市巷战', desc: '街区路网与密集楼群'},
         {key: 'snow', name: '❄️ 雪地突袭', desc: '履带留痕，久停冻结'},
-        {key: 'island', name: '🏝 海岛争夺', desc: '7座据点岛、桥网与树林'},
+        {key: 'island', name: '🏝 海岛争夺', desc: '5座据点岛、桥网与树林'},
         {key: 'volcano', name: '🌋 火山熔岩', desc: '动态熔岩河、喷发与结晶护甲'},
         {key: 'factory', name: '🏗 废弃工厂', desc: 'B1传送带、1F维修机器人、2F起重机'}
     ];
@@ -709,6 +709,42 @@ function showMessage(text, color) {
         msg.style.display = oldDisplay;
         msg.innerHTML = oldHTML;
     }, 1500);
+}
+
+let juiceCueTimer = 0;
+let juiceCueLastAt = 0;
+let juiceCueStreak = 0;
+
+function showJuiceCue(title, subtitle = '', color = '#ff9a3d', intensity = 1) {
+    const cue = document.getElementById('juiceCue');
+    if(!cue || (typeof gameState !== 'undefined' && gameState !== 'playing')) return false;
+    const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+    juiceCueStreak = now - juiceCueLastAt <= 2200 ? Math.min(9, juiceCueStreak + 1) : 1;
+    juiceCueLastAt = now;
+    const kicker = document.getElementById('juiceCueKicker');
+    const titleElement = document.getElementById('juiceCueTitle');
+    const subtitleElement = document.getElementById('juiceCueSubtitle');
+    if(kicker) kicker.textContent = juiceCueStreak > 1 ? `物理连击 ×${juiceCueStreak}` : '工厂暴力美学';
+    if(titleElement) titleElement.textContent = title;
+    if(subtitleElement) subtitleElement.textContent = subtitle;
+    cue.style.setProperty('--juice-color', color);
+    cue.style.setProperty('--juice-intensity', String(Math.max(.82, Math.min(1.22, intensity))));
+    cue.classList.remove('active');
+    void cue.offsetWidth;
+    cue.classList.add('active');
+    if(juiceCueTimer) clearTimeout(juiceCueTimer);
+    juiceCueTimer = setTimeout(() => cue.classList.remove('active'), 1200);
+    if(typeof triggerScreenShake === 'function') triggerScreenShake(5.5 * intensity, .24 + intensity * .08);
+    return true;
+}
+
+function resetJuiceCue() {
+    if(juiceCueTimer) clearTimeout(juiceCueTimer);
+    juiceCueTimer = 0;
+    juiceCueLastAt = 0;
+    juiceCueStreak = 0;
+    const cue = document.getElementById('juiceCue');
+    if(cue) cue.classList.remove('active');
 }
 
 function switchWeapon() {

@@ -1,4 +1,14 @@
 // ==================== 子弹系统 ====================
+function getTankFiringAngle(tank, spread = 0) {
+    let angle = tank && Number.isFinite(tank.turretAngle) ? tank.turretAngle : 0;
+    // AI 的普通武器和特殊武器共用本帧瞄准意图，避免目标切换或蓄力结束后
+    // 仍沿着旧炮塔角（常见表现为持续向屏幕右侧）生成弹丸。
+    if(tank && !tank.isPlayer && Number.isFinite(tank.aiAimAngle)) {
+        angle = tank.aiAimAngle;
+    }
+    return normalizeAngle(angle + spread);
+}
+
 function fireBullet(tank, type) {
     const infiniteReserve = !!tank.suddenDeathInfiniteAmmo || (tank.stormActive && tank.tankType === 'duoduo_ifv');
     if ((type === 'shell' || type === 'bomb') && tank.shells <= 0 && !infiniteReserve) return;
@@ -19,7 +29,7 @@ function fireBullet(tank, type) {
     const elevation = elevationDeg * Math.PI / 180;
     const speed = baseSpeed * Math.cos(elevation);
     const spread = (type === 'mg' || type === 'airmg') ? (Math.random() - 0.5) * 0.12 * spreadMult : (type === 'aa' ? (Math.random() - 0.5) * 0.08 : 0);
-    const angle = tank.turretAngle + spread;
+    const angle = getTankFiringAngle(tank, spread);
     const maxLife = type === 'bomb' ? 5.0 : (type === 'shell' ? 4.0 : (type === 'aa' ? 5.0 : 1.2));
     const muzzleDistance = type === 'bomb' ? 0 : tank.turretSize + 12;
     bullets.push({
@@ -460,6 +470,7 @@ function getObstacleWorldHeight(obs) {
     if(Number.isFinite(obs.worldHeight)) return baseZ + obs.worldHeight;
     if(obs.type === 'factoryPlatform') return (obs.platformHeight || 120) + 18;
     if(obs.type === 'oilBarrel') return baseZ + 58;
+    if(obs.type === 'factorySkateboard') return baseZ + 14;
     if(obs.type === 'factoryBoundary' || obs.type === 'factoryElevatorShaft') return baseZ + (typeof FACTORY_FLOOR_HEIGHT!=='undefined'?FACTORY_FLOOR_HEIGHT:500) * 3;
     if(obs.type === 'factoryFacility') return baseZ + 86;
     if(obs.type === 'factoryCrate') return baseZ + 54;
@@ -622,32 +633,35 @@ function updateOutposts(dt) {
     });
 }
 
-function updateOutpostSpawns(dt) {
-    outposts.forEach(op => {
-        if(!op.owner) return;
-        outpostSpawnTimers[op.name] -= dt;
-        if(outpostSpawnTimers[op.name] <= 0) {
-            outpostSpawnTimers[op.name] = CONFIG.outpostSpawnInterval;
-            spawnOutpostTank(op);
-        }
+function updateBaseSpawns(dt) {
+    ['blue','red'].forEach(team=>{
+        const base=bases[team];
+        if(!base||base.hp<=0)return;
+        const interval=typeof getBaseSpawnInterval==='function'?getBaseSpawnInterval(team):(team==='blue'?15:10);
+        baseSpawnTimers[team]=Math.max(0,(baseSpawnTimers[team]??interval)-dt);
+        if(baseSpawnTimers[team]>0)return;
+        baseSpawnTimers[team]=interval;
+        spawnBaseTank(team);
     });
 }
 
-function spawnOutpostTank(outpost) {
-    const team = outpost.owner;
-    const teamCount = team === 'blue' ? allies.filter(t => !t.dead).length : enemies.filter(t => !t.dead).length;
-    if(teamCount >= 30) return;
+function spawnBaseTank(team) {
+    if(team!=='blue'&&team!=='red')return null;
+    const teamCount=team==='blue'
+        ?[player,...allies].filter(t=>t&&!t.dead).length
+        :enemies.filter(t=>t&&!t.dead).length;
+    if(teamCount >= 30) return null;
     const types = Object.keys(TANKS).filter(type => !TANKS[type].isHidden);
     const type = types[Math.floor(Math.random() * types.length)];
     const data = TANKS[type];
-    const angle = Math.random() * Math.PI * 2;
-    const dist = outpost.radius + 40;
-    const x = Math.max(100, Math.min(CONFIG.mapWidth - 100, outpost.x + Math.cos(angle) * dist));
-    const y = Math.max(100, Math.min(CONFIG.mapHeight - 100, outpost.y + Math.sin(angle) * dist));
-    const tank = createTank(data, x, y, team, false);
-    if(currentMap === 'factory' && Number.isInteger(outpost.factoryFloor) && typeof getFactoryFloorZ === 'function') {
-        tank.factoryFloor = outpost.factoryFloor;
-        tank.z = getFactoryFloorZ(outpost.factoryFloor);
+    if(!data)return null;
+    const deployment=typeof findBaseDeploymentPoint==='function'
+        ?findBaseDeploymentPoint(team,teamCount)
+        :{x:bases[team].x+bases[team].w/2,y:bases[team].y+bases[team].h/2};
+    const tank = createTank(data, deployment.x, deployment.y, team, false);
+    if(currentMap === 'factory' && typeof getFactoryFloorZ === 'function') {
+        tank.factoryFloor = 1;
+        tank.z = getFactoryFloorZ(1)+(tank.isFlying?CONFIG.helicopterAltitude:0);
     }
     tank.shells = Math.floor(data.maxShells * 0.5);
     tank.mg = Math.floor(data.maxMG * 0.5);
@@ -662,4 +676,9 @@ function spawnOutpostTank(outpost) {
         enemies.push(tank);
     }
     aiTanks.push(tank);
+    if(typeof addBattleAnnouncement==='function'){
+        const teamName=team==='blue'?'蓝方':'红方';
+        addBattleAnnouncement(team,`🏭 ${teamName}基地部署 ${data.name}`);
+    }
+    return tank;
 }

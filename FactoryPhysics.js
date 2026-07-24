@@ -16,6 +16,8 @@ function createEmptyFactoryPhysicsState() {
         dynamicBodies:new Map(),
         tankBodies:new Map(),
         elevatorBodies:new Map(),
+        mechanismBodies:new Map(),
+        constraints:new Map(),
         tempTransform:null
     };
 }
@@ -51,6 +53,9 @@ function disposeFactoryPhysics() {
     factoryPhysicsGeneration++;
     const state=factoryPhysicsState;
     if(state.world&&state.Ammo){
+        state.constraints.forEach(held=>{
+            try{state.world.removeConstraint(held.constraint);}catch(error){}
+        });
         state.bodies.forEach(entry=>{
             try{state.world.removeRigidBody(entry.body);}catch(error){}
         });
@@ -74,15 +79,22 @@ function buildFactoryPhysicsWorld(A) {
     A.destroy(gravity);
     factoryPhysicsState={
         ready:false,loading:false,world,Ammo:A,bodies:[],dynamicBodies:new Map(),
-        tankBodies:new Map(),elevatorBodies:new Map(),tempTransform:new A.btTransform(),
+        tankBodies:new Map(),elevatorBodies:new Map(),mechanismBodies:new Map(),constraints:new Map(),
+        tempTransform:new A.btTransform(),
         collisionConfiguration,dispatcher,broadphase,solver
     };
     addFactoryPhysicsFloors();
     addFactoryPhysicsRamps();
     addFactoryPhysicsObstacles();
     addFactoryPhysicsElevators();
+    addFactoryPhysicsMechanisms();
     factoryPhysicsState.ready=true;
     console.info('[FACTORY PHYSICS] Ammo.js 物理世界已启用');
+    if(typeof showFactoryJuiceCue==='function'){
+        const cueTank=typeof player!=='undefined'&&player?player:null;
+        showFactoryJuiceCue('物 理 工 厂！','Ammo 动态碰撞系统上线','#ffd447',.9,
+            cueTank?cueTank.x:null,cueTank?cueTank.y:null,cueTank?cueTank.z:null,true);
+    }
 }
 
 function addFactoryRigidBody(shape,mass,x,elevation,mapY,quaternion=null,options={}) {
@@ -207,8 +219,8 @@ function addFactoryPhysicsObstacles() {
 
 function addFactoryPhysicsDynamicObstacle(obs) {
     const A=factoryPhysicsState.Ammo;
-    const height=obs.type==='oilBarrel'?48:54;
-    const mass=obs.type==='oilBarrel'?35:85;
+    const height=obs.type==='oilBarrel'?48:(obs.type==='factorySkateboard'?14:54);
+    const mass=obs.type==='oilBarrel'?35:(obs.type==='factorySkateboard'?22:85);
     let shape;
     if(obs.type==='oilBarrel'){
         const half=new A.btVector3(obs.w*.48*FACTORY_PHYSICS_SCALE,height*.5*FACTORY_PHYSICS_SCALE,obs.h*.48*FACTORY_PHYSICS_SCALE);
@@ -220,7 +232,7 @@ function addFactoryPhysicsDynamicObstacle(obs) {
         A.destroy(half);
     }
     const entry=addFactoryRigidBody(shape,mass,obs.x+obs.w/2,(obs.z||0)+height/2,obs.y+obs.h/2,null,{
-        friction:obs.type==='oilBarrel'?.62:.82,restitution:obs.type==='oilBarrel'?.18:.06,
+        friction:obs.physicsLowFriction?.12:(obs.type==='oilBarrel'?.62:.82),restitution:obs.type==='oilBarrel'?.18:.06,
         linearDamping:.08,angularDamping:.18,rollingFriction:obs.type==='oilBarrel'?.12:.05,
         owner:obs,kind:'dynamic'
     });
@@ -237,6 +249,24 @@ function addFactoryPhysicsElevators() {
         entry.body.setActivationState(4);
         factoryPhysicsState.elevatorBodies.set(elevator,entry);
     });
+}
+
+function addFactoryPhysicsMechanisms() {
+    const factory=mapMechanicsState.factory;
+    if(factory.press){
+        const press=factory.press;
+        const entry=addFactoryPhysicsBox(press.w,16,press.h,press.x+press.w/2,press.plateZ-8,press.y+press.h/2,0,null,{friction:1,owner:press,kind:'press'});
+        entry.body.setCollisionFlags(entry.body.getCollisionFlags()|2);
+        entry.body.setActivationState(4);
+        factoryPhysicsState.mechanismBodies.set(press,entry);
+    }
+    if(factory.forklift){
+        const forklift=factory.forklift;
+        const entry=addFactoryPhysicsBox(92,48,58,forklift.x,forklift.z+24,forklift.y,0,null,{friction:.9,owner:forklift,kind:'forklift'});
+        entry.body.setCollisionFlags(entry.body.getCollisionFlags()|2);
+        entry.body.setActivationState(4);
+        factoryPhysicsState.mechanismBodies.set(forklift,entry);
+    }
 }
 
 function syncFactoryKinematicBody(entry,x,elevation,mapY) {
@@ -323,11 +353,97 @@ function applyFactoryConveyorForces(dt) {
     });
 }
 
+function applyFactoryFanForces(dt) {
+    const A=factoryPhysicsState.Ammo;
+    const fans=mapMechanicsState.factory.fans||[];
+    factoryPhysicsState.dynamicBodies.forEach((entry,obs)=>{
+        const cx=obs.x+obs.w/2,cy=obs.y+obs.h/2;
+        fans.forEach(fan=>{
+            if(Math.abs((obs.z||0)-fan.z)>90)return;
+            const dx=cx-fan.x,dy=cy-fan.y;
+            const forward=dx*fan.dirX+dy*fan.dirY;
+            const lateral=Math.abs(dx*fan.dirY-dy*fan.dirX);
+            if(forward<=0||forward>fan.range||lateral>fan.width/2)return;
+            const strength=fan.strength*(1-forward/fan.range)*entry.mass*.018;
+            const impulse=new A.btVector3(fan.dirX*strength*dt,0,fan.dirY*strength*dt);
+            entry.body.activate();entry.body.applyCentralImpulse(impulse);A.destroy(impulse);
+        });
+    });
+}
+
+function attachFactoryObjectConstraint(key,obs,x,elevation,mapY) {
+    if(!isFactoryPhysicsReady()||!factoryPhysicsState.dynamicBodies.has(obs))return false;
+    releaseFactoryObjectConstraint(key,0,0,0);
+    const A=factoryPhysicsState.Ammo;
+    const target=factoryPhysicsState.dynamicBodies.get(obs);
+    const anchor=addFactoryPhysicsBox(4,4,4,x,elevation,mapY,0,null,{owner:key,kind:'constraint-anchor'});
+    anchor.body.setCollisionFlags(anchor.body.getCollisionFlags()|2|4);
+    anchor.body.setActivationState(4);
+    const pivotA=new A.btVector3(0,0,0),pivotB=new A.btVector3(0,0,0);
+    const constraint=new A.btPoint2PointConstraint(target.body,anchor.body,pivotA,pivotB);
+    factoryPhysicsState.world.addConstraint(constraint,true);
+    factoryPhysicsState.constraints.set(key,{constraint,anchor,target,obs});
+    target.body.activate();
+    A.destroy(pivotA);A.destroy(pivotB);
+    return true;
+}
+
+function updateFactoryObjectConstraint(key,x,elevation,mapY) {
+    const held=factoryPhysicsState.constraints.get(key);
+    if(!held)return false;
+    syncFactoryKinematicBody(held.anchor,x,elevation,mapY);
+    return true;
+}
+
+function releaseFactoryObjectConstraint(key,vx=0,vy=0,vz=0) {
+    const held=factoryPhysicsState.constraints.get(key);
+    if(!held)return false;
+    const A=factoryPhysicsState.Ammo;
+    factoryPhysicsState.world.removeConstraint(held.constraint);
+    factoryPhysicsState.world.removeRigidBody(held.anchor.body);
+    factoryPhysicsState.constraints.delete(key);
+    const velocity=new A.btVector3(vx*FACTORY_PHYSICS_SCALE,vz*FACTORY_PHYSICS_SCALE,vy*FACTORY_PHYSICS_SCALE);
+    held.target.body.setLinearVelocity(velocity);
+    held.target.body.activate();
+    A.destroy(velocity);
+    return true;
+}
+
+function attachFactoryCraneObject(obs,crane) {
+    return attachFactoryObjectConstraint('crane',obs,crane.hookX,(obs.z||crane.z)+90,crane.hookY);
+}
+
+function updateFactoryCraneConstraint(crane,hookZ) {
+    return updateFactoryObjectConstraint('crane',crane.hookX,hookZ,crane.hookY);
+}
+
+function releaseFactoryCraneObject(obs,vx,vy,vz) {
+    return releaseFactoryObjectConstraint('crane',vx,vy,vz);
+}
+
+function attachFactoryForkliftObject(obs,forklift) {
+    const x=forklift.x+Math.cos(forklift.angle)*62,y=forklift.y+Math.sin(forklift.angle)*62;
+    return attachFactoryObjectConstraint('forklift',obs,x,forklift.z+62,y);
+}
+
+function updateFactoryForkliftConstraint(forklift) {
+    const x=forklift.x+Math.cos(forklift.angle)*62,y=forklift.y+Math.sin(forklift.angle)*62;
+    return updateFactoryObjectConstraint('forklift',x,forklift.z+62,y);
+}
+
+function releaseFactoryForkliftObject(obs,vx,vy,vz) {
+    return releaseFactoryObjectConstraint('forklift',vx,vy,vz);
+}
+
 function syncFactoryDynamicObstacles() {
     const A=factoryPhysicsState.Ammo;
     const alive=new Set(obstacles);
+    const impactExplosions=[];
     factoryPhysicsState.dynamicBodies.forEach((entry,obs)=>{
         if(!alive.has(obs)){
+            factoryPhysicsState.constraints.forEach((held,key)=>{
+                if(held.obs===obs)releaseFactoryObjectConstraint(key,0,0,0);
+            });
             factoryPhysicsState.world.removeRigidBody(entry.body);
             factoryPhysicsState.dynamicBodies.delete(obs);
             return;
@@ -340,6 +456,12 @@ function syncFactoryDynamicObstacles() {
         obs.y=centerY-obs.h/2;
         obs.z=origin.y()/FACTORY_PHYSICS_SCALE-(obs.physicsHeight||48)/2;
         obs.physicsQuaternion={x:rotation.x(),y:rotation.y(),z:rotation.z(),w:rotation.w()};
+        const verticalVelocity=entry.body.getLinearVelocity().y()/FACTORY_PHYSICS_SCALE;
+        if(obs.type==='oilBarrel'&&(obs.physicsPreviousVY||0)<-330&&Math.abs(verticalVelocity)<100){
+            const support=typeof getFactorySupportHeightAt==='function'?getFactorySupportHeightAt(centerX,centerY,obs.z+20):0;
+            if(obs.z<=support+22)impactExplosions.push(obs);
+        }
+        obs.physicsPreviousVY=verticalVelocity;
         if(obs.z<-250){
             obs.z=0;
             const reset=new A.btTransform();reset.setIdentity();
@@ -348,6 +470,9 @@ function syncFactoryDynamicObstacles() {
             A.destroy(resetOrigin);A.destroy(reset);
         }
     });
+    impactExplosions.forEach(obs=>{
+        if(obstacles.includes(obs)&&typeof triggerOilBarrelExplosion==='function')triggerOilBarrelExplosion(obs,null,new Set(),'fallImpact');
+    });
 }
 
 function updateFactoryPhysics(dt,tanks) {
@@ -355,9 +480,14 @@ function updateFactoryPhysics(dt,tanks) {
     factoryPhysicsState.elevatorBodies.forEach((entry,elevator)=>{
         syncFactoryKinematicBody(entry,elevator.x+elevator.w/2,elevator.platformZ-5,elevator.y+elevator.h/2);
     });
+    factoryPhysicsState.mechanismBodies.forEach((entry,mechanism)=>{
+        if(mechanism.type==='factoryPress')syncFactoryKinematicBody(entry,mechanism.x+mechanism.w/2,mechanism.plateZ-8,mechanism.y+mechanism.h/2);
+        else if(mechanism.type==='factoryForklift')syncFactoryKinematicBody(entry,mechanism.x,mechanism.z+24,mechanism.y);
+    });
     syncFactoryPhysicsTanks(tanks,dt);
     applyFactoryTankPushes(tanks);
     applyFactoryConveyorForces(dt);
+    applyFactoryFanForces(dt);
     factoryPhysicsState.world.stepSimulation(Math.min(dt,.05),3,1/60);
     syncFactoryDynamicObstacles();
 }

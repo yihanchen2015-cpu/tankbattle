@@ -475,7 +475,7 @@ function createThreeObstacleObject(obs, index) {
     const obstacleColors = {
         tree:0x2f7434, ice:0x9fc7d8, rock:0x8a633a, rubble:0x625b54,
         volcanicRock:0x433936, oilBarrel:0xa43a1c, factoryFacility:0x69737a,
-        factoryCrate:0x8b6542, factoryBoundary:0x303438, factoryElevatorShaft:0x454b4f
+        factoryCrate:0x8b6542, factorySkateboard:0xd8a331, factoryBoundary:0x303438, factoryElevatorShaft:0x454b4f
     };
     const color = obs.type === 'building' ? (index % 2 ? 0x58616a : 0x6b737b) : (obstacleColors[obs.type] || 0x555b5e);
     center.y += height / 2;
@@ -489,6 +489,17 @@ function createThreeObstacleObject(obs, index) {
         [-1.1, 1.1].forEach(y => { const band = new THREE.Mesh(new THREE.TorusGeometry(1.48, .11, 7, 18), bandMaterial); band.rotation.x = Math.PI / 2; band.position.y = y; barrel.add(band); });
         object.add(barrel);
         object.userData.physicsBodyMesh=barrel;
+    } else if(obs.type==='factorySkateboard') {
+        object=new THREE.Group();
+        object.position.copy(center);
+        const deck=new THREE.Mesh(new THREE.BoxGeometry(obs.w*THREE_WORLD_SCALE,.72,obs.h*THREE_WORLD_SCALE),makeStandardMaterial(color,{metalness:.3,roughness:.48}));
+        const wheelMaterial=makeStandardMaterial(0x17191b,{roughness:.78});
+        [[-.38,-.35],[-.38,.35],[.38,-.35],[.38,.35]].forEach(([px,pz])=>{
+            const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.34,.34,.34,10),wheelMaterial);
+            wheel.rotation.x=Math.PI/2;wheel.position.set(obs.w*THREE_WORLD_SCALE*px,-.42,obs.h*THREE_WORLD_SCALE*pz);
+            object.add(wheel);
+        });
+        object.add(deck);object.userData.physicsBodyMesh=object;
     } else if(obs.type === 'factoryPlatform') {
         object = new THREE.Group();
         object.position.copy(threeWorldPosition(obs.x + obs.w / 2, obs.y + obs.h / 2, 0));
@@ -673,6 +684,50 @@ function buildThreeMapMechanics() {
             threeView.dynamicRoot.add(platform);
             threeView.mechanicMeshes.set(`elevator-platform-${elevator.id}`,platform);
         });
+        (mapMechanicsState.factory.fans||[]).forEach(fan=>{
+            const group=new THREE.Group();
+            const housing=new THREE.Mesh(new THREE.CylinderGeometry(5.2,5.2,2.1,20),makeStandardMaterial(0x535b60,{metalness:.62,roughness:.42}));
+            housing.rotation.z=Math.PI/2;
+            const rotor=new THREE.Group();
+            for(let i=0;i<4;i++){
+                const blade=new THREE.Mesh(new THREE.BoxGeometry(.42,5.8,1.1),makeStandardMaterial(0xc0c8ca,{metalness:.55}));
+                blade.position.y=2.9;blade.rotation.x=i*Math.PI/2;rotor.add(blade);
+            }
+            rotor.position.x=1.3;group.add(housing,rotor);group.userData.rotor=rotor;
+            group.position.copy(threeWorldPosition(fan.x,fan.y,(fan.z+70)*THREE_WORLD_SCALE));
+            group.rotation.y=-Math.atan2(fan.dirY,fan.dirX);
+            threeView.worldRoot.add(group);threeView.mechanicMeshes.set(`factory-fan-${fan.id}`,group);
+        });
+        const forklift=mapMechanicsState.factory.forklift;
+        if(forklift){
+            const group=new THREE.Group();
+            const body=new THREE.Mesh(new THREE.BoxGeometry(6.8,3.5,4.5),makeStandardMaterial(0xe2a72d,{metalness:.38,roughness:.5}));
+            body.position.y=2.1;
+            const mast=new THREE.Mesh(new THREE.BoxGeometry(.7,6.5,4.2),makeStandardMaterial(0x33383c,{metalness:.62}));
+            mast.position.set(3.2,3.5,0);
+            const forkMaterial=makeStandardMaterial(0x202427,{metalness:.7});
+            [-1,1].forEach(side=>{
+                const fork=new THREE.Mesh(new THREE.BoxGeometry(4.8,.35,.42),forkMaterial.clone());
+                fork.position.set(5.5,.85,side*1.45);group.add(fork);
+            });
+            group.add(body,mast);threeView.dynamicRoot.add(group);threeView.mechanicMeshes.set('factory-forklift',group);
+        }
+        const press=mapMechanicsState.factory.press;
+        if(press){
+            const frame=new THREE.Group();
+            const steel=makeStandardMaterial(0x6b7478,{metalness:.58,roughness:.45});
+            const frameHeight=(press.maxZ-press.z+90)*THREE_WORLD_SCALE;
+            [-1,1].forEach(side=>{
+                const post=new THREE.Mesh(new THREE.BoxGeometry(1.5,frameHeight,2),steel.clone());
+                post.position.set(side*(press.w*.45*THREE_WORLD_SCALE),frameHeight/2,0);frame.add(post);
+            });
+            const cap=new THREE.Mesh(new THREE.BoxGeometry(press.w*THREE_WORLD_SCALE,2.2,press.h*THREE_WORLD_SCALE),steel);
+            cap.position.y=frameHeight;frame.add(cap);
+            frame.position.copy(threeWorldPosition(press.x+press.w/2,press.y+press.h/2,press.z*THREE_WORLD_SCALE));
+            threeView.worldRoot.add(frame);threeView.mechanicMeshes.set('factory-press-frame',frame);
+            const plate=new THREE.Mesh(new THREE.BoxGeometry(press.w*THREE_WORLD_SCALE,1.3,press.h*THREE_WORLD_SCALE),makeStandardMaterial(0xb8422f,{metalness:.5,roughness:.42}));
+            threeView.dynamicRoot.add(plate);threeView.mechanicMeshes.set('factory-press-plate',plate);
+        }
     }
     if(!mapMechanicsState.crane) return;
     const crane = mapMechanicsState.crane;
@@ -825,6 +880,8 @@ function syncThreeTanks(now) {
         const storedHeight = (tank.z || 0) * THREE_WORLD_SCALE;
         const baseHeight = storedHeight + (flying ? Math.sin(now * 0.003 + tank.x) * 0.55 : (inWater ? 0.15 : 0.08));
         setThreeWorldPosition(mesh, tank.x, tank.y, baseHeight);
+        const flattened=currentMap==='factory'&&!flying&&(tank.flattenedTimer||0)>0;
+        mesh.scale.set(flattened ? 1.16 : 1,flattened ? .28 : 1,flattened ? 1.16 : 1);
         mesh.rotation.y = -tank.angle;
         if(mesh.userData.turretPivot) mesh.userData.turretPivot.rotation.y = -(tank.turretAngle - tank.angle);
         if(mesh.userData.gunPitch) {
@@ -1240,7 +1297,7 @@ function syncThreeMapMechanics(now) {
             threeView.dynamicRoot.add(hook); threeView.mechanicMeshes.set('crane-hook', hook);
         }
         const craneBase = (crane.z || 0) * THREE_WORLD_SCALE;
-        const hookZ = crane.phase === 'carry' && crane.target ? (crane.target.z || 0) * THREE_WORLD_SCALE + 4 : craneBase + 3;
+        const hookZ = crane.phase === 'carry' && Number.isFinite(crane.hookZ) ? crane.hookZ*THREE_WORLD_SCALE : craneBase + 3;
         setThreeWorldPosition(hook, crane.hookX, crane.hookY, hookZ);
         hook.userData.factoryFloor = crane.factoryFloor;
         hook.visible = true;
@@ -1257,6 +1314,26 @@ function syncThreeMapMechanics(now) {
             const mesh=threeView.mechanicMeshes.get(key);
             if(mesh)setThreeWorldPosition(mesh,elevator.x+elevator.w/2,elevator.y+elevator.h/2,elevator.platformZ*THREE_WORLD_SCALE);
         });
+        (mapMechanicsState.factory.fans||[]).forEach(fan=>{
+            const key=`factory-fan-${fan.id}`;aliveKeys.add(key);
+            const mesh=threeView.mechanicMeshes.get(key);
+            if(mesh&&mesh.userData.rotor)mesh.userData.rotor.rotation.x=now*.018;
+        });
+        const forklift=mapMechanicsState.factory.forklift;
+        if(forklift){
+            aliveKeys.add('factory-forklift');
+            const mesh=threeView.mechanicMeshes.get('factory-forklift');
+            if(mesh){
+                setThreeWorldPosition(mesh,forklift.x,forklift.y,(forklift.z||0)*THREE_WORLD_SCALE);
+                mesh.rotation.y=-forklift.angle;
+            }
+        }
+        const press=mapMechanicsState.factory.press;
+        if(press){
+            aliveKeys.add('factory-press-frame');aliveKeys.add('factory-press-plate');
+            const plate=threeView.mechanicMeshes.get('factory-press-plate');
+            if(plate)setThreeWorldPosition(plate,press.x+press.w/2,press.y+press.h/2,press.plateZ*THREE_WORLD_SCALE);
+        }
         obstacles.filter(obs => obs.conveyorMovable).forEach(obs => {
             const mesh = threeView.obstacleMeshes.get(obs.terrainId);
             if(!mesh)return;

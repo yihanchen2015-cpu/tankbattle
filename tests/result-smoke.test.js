@@ -64,7 +64,7 @@ const calls = [];
 sandbox.calls = calls;
 vm.runInContext(`
     resetGame = () => calls.push('reset');
-    selectGameMode = mode => { gameMode = mode; calls.push('mode:' + mode); };
+    selectMode = mode => { gameMode = mode; calls.push('mode:' + mode); };
     startGame = () => calls.push('start');
     lastMatchSetup = {
         selectedTank:'niuniu', currentMap:'island', gameMode:'storm',

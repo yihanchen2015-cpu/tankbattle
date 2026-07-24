@@ -45,10 +45,27 @@ const AmmoFactory = require('../vendor/ammo.wasm.js');
     assert(Math.abs(transform.getOrigin().x()) > 0.1, 'a pushed barrel should move across the floor');
     assert(Math.abs(rotation.x()) + Math.abs(rotation.y()) + Math.abs(rotation.z()) > 0.05, 'a pushed barrel should visibly rotate');
 
+    const anchor = createBody(new Ammo.btBoxShape(new Ammo.btVector3(0.05, 0.05, 0.05)), 0, 3);
+    anchor.body.setCollisionFlags(anchor.body.getCollisionFlags() | 2 | 4);
+    anchor.body.setActivationState(4);
+    const pivotA = new Ammo.btVector3(0, 0, 0);
+    const pivotB = new Ammo.btVector3(0, 0, 0);
+    const constraint = new Ammo.btPoint2PointConstraint(barrel.body, anchor.body, pivotA, pivotB);
+    world.addConstraint(constraint, true);
+    const anchorTransform = new Ammo.btTransform();
+    anchorTransform.setIdentity();
+    anchorTransform.setOrigin(new Ammo.btVector3(2, 3, 0));
+    anchor.body.setWorldTransform(anchorTransform);
+    anchor.motionState.setWorldTransform(anchorTransform);
+    barrel.body.activate();
+    for(let i = 0; i < 45; i++) world.stepSimulation(1 / 60, 3, 1 / 60);
+    barrel.motionState.getWorldTransform(transform);
+    assert(transform.getOrigin().x() > 0.5 && transform.getOrigin().y() > 1.2, 'a point constraint should lift and pull a dynamic object');
+
     console.log('Factory Ammo.js physics smoke test passed:', {
         landedY,
         pushedX: transform.getOrigin().x(),
-        rotationZ: transform.getRotation().z()
+        constrainedY: transform.getOrigin().y()
     });
 })().catch(error => {
     console.error(error);

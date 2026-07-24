@@ -359,12 +359,10 @@ function updateAITank(tank, dt) {
     
     let targetAngle = null;
     if(nearestEnemy) {
-        const predictTime = minEnemyDist / CONFIG.bulletSpeed;
-        const targetVelX = nearestEnemy.x - (nearestEnemy.prevPos ? nearestEnemy.prevPos.x : nearestEnemy.x);
-        const targetVelY = nearestEnemy.y - (nearestEnemy.prevPos ? nearestEnemy.prevPos.y : nearestEnemy.y);
-        const predictedX = nearestEnemy.x + targetVelX * predictTime * 2;
-        const predictedY = nearestEnemy.y + targetVelY * predictTime * 2;
-        targetAngle = Math.atan2(predictedY - tank.y, predictedX - tank.x);
+        const predicted = typeof getPredictedAimPoint === 'function'
+            ? getPredictedAimPoint(tank,nearestEnemy,CONFIG.bulletSpeed,CONFIG.autoAimPredictFactor)
+            : {x:nearestEnemy.x,y:nearestEnemy.y};
+        targetAngle = Math.atan2(predicted.y - tank.y, predicted.x - tank.x);
     } else if(shouldFire) {
         targetAngle = Math.atan2(targetY - tank.y, targetX - tank.x);
     }
@@ -381,6 +379,8 @@ function updateAITank(tank, dt) {
     }
 
     const aimDiff = targetAngle !== null ? Math.abs(normalizeAngle(tank.turretAngle - targetAngle)) : Infinity;
+    tank.aiAimAngle = targetAngle !== null && Number.isFinite(targetAngle) ? normalizeAngle(targetAngle) : null;
+    tank.aiAimTarget = nearestEnemy && !nearestEnemy.dead ? nearestEnemy : null;
 
     if(nearestEnemy && !tank.isFlying) {
         solveAIGunElevation(tank, nearestEnemy, 'shell');
@@ -705,7 +705,7 @@ function updateAIUltimate(tank, dt) {
             tank.ultimateTimer = tank.ultimateData.duration;
             tank.ultimateCooldown = tank.ultimateData.cooldown;
             for(let i = 0; i < tank.ultimateData.droneCount; i++) {
-                const angle = tank.turretAngle + (i - 1) * 0.5;
+                const angle = getTankFiringAngle(tank, (i - 1) * 0.5);
                 bullets.push({
                     x: tank.x + Math.cos(angle) * 30, y: tank.y + Math.sin(angle) * 30,
                     vx: Math.cos(angle) * tank.ultimateData.droneSpeed, vy: Math.sin(angle) * tank.ultimateData.droneSpeed,
@@ -785,7 +785,7 @@ function updateAIUltimate(tank, dt) {
             tank.ultimateActive = true;
             tank.ultimateTimer = tank.ultimateData.duration;
             tank.ultimateCooldown = tank.ultimateData.cooldown;
-            const turretAngle = tank.turretAngle;
+            const turretAngle = getTankFiringAngle(tank);
             const turretX = tank.x + Math.cos(turretAngle) * 60;
             const turretY = tank.y + Math.sin(turretAngle) * 60;
             mapElements.push({
@@ -804,7 +804,7 @@ function updateAIUltimate(tank, dt) {
             tank.ultimateActive = true;
             tank.ultimateTimer = tank.ultimateData.duration;
             tank.ultimateCooldown = tank.ultimateData.cooldown;
-            const targetAngle = tank.turretAngle;
+            const targetAngle = getTankFiringAngle(tank);
             for(let i = 0; i < tank.ultimateData.shellCount; i++) {
                 const spreadAngle = targetAngle + (Math.random() - 0.5) * 0.8;
                 const dist = 200 + Math.random() * 400;

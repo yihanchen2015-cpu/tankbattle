@@ -6,7 +6,7 @@ const CONFIG = {
     gameTime: 300,
     outpostRadius: 240,
     outpostCaptureTime: 5,
-    outpostSpawnInterval: 20,
+    baseSpawnIntervals: { blue: 15, red: 10 },
     baseHp: 50000,
     baseSize: 120,
     tankSize: 35,
@@ -287,7 +287,7 @@ let exhaustTrails = [];
 let outposts = [];
 let bases = { blue: null, red: null };
 let obstacles = [];
-let outpostSpawnTimers = {};
+let baseSpawnTimers = { blue: 15, red: 10 };
 let aiTanks = [];
 let trailEffects = [];
 let damageNumbers = [];

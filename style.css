@@ -99,6 +99,58 @@
         }
         @keyframes battleFeedIn { from { opacity: 0; transform: translateX(-18px); } }
 
+        #juiceCue {
+            --juice-color: #ff9a3d;
+            --juice-intensity: 1;
+            position: fixed; inset: 0; z-index: 70; display: none;
+            overflow: hidden; pointer-events: none;
+        }
+        #juiceCue.active { display: block; }
+        .juice-cue-flash {
+            position: absolute; inset: 0;
+            background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--juice-color) 30%, transparent) 0, transparent 48%);
+            mix-blend-mode: screen; opacity: 0;
+        }
+        #juiceCue.active .juice-cue-flash { animation: juiceCueFlash .58s ease-out both; }
+        .juice-cue-content {
+            position: absolute; top: 24%; left: 50%; width: min(720px, 90vw);
+            transform: translate(-50%, -50%); text-align: center;
+            filter: drop-shadow(0 6px 2px rgba(0,0,0,.72));
+        }
+        #juiceCue.active .juice-cue-content { animation: juiceCuePunch 1.18s cubic-bezier(.16,.9,.18,1) both; }
+        .juice-cue-kicker {
+            display: inline-block; margin-bottom: 4px; padding: 4px 13px;
+            color: #111; background: var(--juice-color); border-radius: 3px;
+            font-size: clamp(11px, 1.35vw, 15px); font-weight: 950; letter-spacing: .18em;
+            box-shadow: 0 0 20px color-mix(in srgb, var(--juice-color) 72%, transparent);
+        }
+        .juice-cue-title {
+            color: #fff; font-size: clamp(32px, 6vw, 74px); font-weight: 1000;
+            line-height: 1.05; letter-spacing: .09em;
+            -webkit-text-stroke: 2px color-mix(in srgb, var(--juice-color) 72%, #000);
+            text-shadow: 0 0 10px var(--juice-color), 0 4px 0 rgba(0,0,0,.88);
+        }
+        .juice-cue-subtitle {
+            margin-top: 8px; color: #fff4dd; font-size: clamp(13px, 2vw, 21px);
+            font-weight: 900; letter-spacing: .08em; text-shadow: 0 2px 4px #000;
+        }
+        @keyframes juiceCuePunch {
+            0% { opacity: 0; transform: translate(-50%,-50%) scale(.28) rotate(-3deg); }
+            18% { opacity: 1; transform: translate(-50%,-50%) scale(1.12) rotate(1.5deg); }
+            36% { transform: translate(-50%,-50%) scale(.96) rotate(0); }
+            72% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%,-68%) scale(1.04); }
+        }
+        @keyframes juiceCueFlash {
+            0% { opacity: .9; transform: scale(.42); }
+            100% { opacity: 0; transform: scale(1.35); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #juiceCue.active .juice-cue-content { animation: juiceCueFade 1.18s ease both; }
+            #juiceCue.active .juice-cue-flash { animation: none; }
+            @keyframes juiceCueFade { 0%,100% { opacity: 0; } 12%,72% { opacity: 1; } }
+        }
+
         #matchResultOverlay {
             position: fixed; inset: 0; z-index: 800; display: none; flex-direction: column;
             align-items: center; justify-content: center; gap: clamp(28px, 6vh, 64px);

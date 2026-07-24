@@ -554,8 +554,10 @@ function drawTank(tank) {
     }
     const groundAltitudeOffset = Math.max(0, tank.z || 0) * ALTITUDE_DRAW_SCALE;
     const tankRenderY = tank.y - groundAltitudeOffset;
+    const flattened=currentMap==='factory'&&(tank.flattenedTimer||0)>0;
     ctx.save();
     ctx.translate(tank.x, tankRenderY);
+    if(flattened)ctx.scale(1.18,.34);
     ctx.rotate(tank.angle);
     const detailed = !mobileDenseCombatMode || tank.isPlayer;
     if(detailed) {
@@ -657,6 +659,7 @@ function drawTank(tank) {
     drawMuzzleFlash(tank);
     ctx.save();
     ctx.translate(tank.x, tankRenderY);
+    if(flattened)ctx.scale(1.18,.34);
     ctx.rotate(tank.turretAngle);
     const barrelLen = tank.turretSize + 20;
     ctx.fillStyle = '#2a2a2a';

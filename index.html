@@ -130,7 +130,8 @@
 
                 <div class="tutorial-step" data-step="5">
                     <h3>🏰 据点、基地与胜利条件</h3>
-                    <p><strong style="color:#ffd700">据点</strong> - 地图上的菱形标记，停留可占领，获得弹药补给和援军。</p>
+                    <p><strong style="color:#ffd700">据点</strong> - 地图上的菱形标记，停留可占领并获得团队积分；据点不再生成援军。</p>
+                    <p><strong style="color:#00d4ff">基地增援</strong> - 蓝方基地每 15 秒部署一辆坦克，红方基地每 10 秒部署一辆坦克；基地被摧毁后停止部署。</p>
                     <p><strong style="color:#ff4444">基地</strong> - 双方各有基地，摧毁敌方基地即可获胜！</p>
                     <p>胜利条件：摧毁敌方基地 / 时间结束时据点更多 / 全歼敌人</p>
                     <div class="tutorial-tip-box">
@@ -164,11 +165,11 @@
                     <h3>🎮 游戏模式</h3>
                     <div class="mode-intro-box classic">
                         <h4>🏛 经典模式</h4>
-                        <p>蓝方10辆坦克 vs 红方10辆坦克，争夺7个据点。占领据点可生成援军，最终目标是摧毁敌方基地，或在时间内尽可能获取团队积分。</p>
+                        <p>蓝方10辆坦克 vs 红方10辆坦克，在缩小后的紧凑地图争夺3个据点（海岛为5个）。据点负责计分，援军改由基地持续部署：蓝方每15秒一辆，红方每10秒一辆。</p>
                     </div>
                     <div class="mode-intro-box defense">
                         <h4>🛡 守点模式</h4>
-                        <p>蓝方仅有一个基地，7个据点全被红方占领。蓝方坦克弹药×3且无视负重惩罚，必须在3分钟内守住基地。蓝方全灭或基地沦陷即失败。</p>
+                        <p>蓝方仅有一个基地，3个据点全被红方占领。蓝方坦克弹药×3且无视负重惩罚，必须在3分钟内守住基地。双方基地仍按各自周期部署增援。</p>
                     </div>
                     <div class="mode-intro-box sneak">
                         <h4>🌙 绝地偷袭</h4>
@@ -207,9 +208,9 @@
                     <div class="mode-intro-box"><h4>🏜 沙漠风暴</h4><p>橙黄色开阔战场，障碍少且视野更大。随机沙尘暴会压缩视野，并让牛牛直升机减速、受侧风吹移。</p></div>
                     <div class="mode-intro-box"><h4>❄️ 雪地突袭</h4><p>白色雪原上会保留履带轨迹。地面载具停驶超过 5 秒后引擎逐渐冻结，会减速并持续掉血；重新移动可逐渐恢复。</p></div>
                     <div class="mode-intro-box"><h4>🏙 城市巷战</h4><p>规则街区、十字路口、道路中线和多层建筑构成密集城市。重火力可炸塌建筑的一部分，形成低矮但仍能挡车、挡弹的废墟掩体。直升机受楼群乱流影响，速度降低 22%。</p></div>
-                    <div class="mode-intro-box"><h4>🏝 海岛争夺</h4><p>整张地图以水域为底，由 7 座独立小岛和有真实高度的拱桥网组成，每座岛都有一个据点。普通坦克可冒险入水，但会大幅减速并因车体进水持续掉血；多多号步战车免疫进水伤害，水中速度为 30%。</p></div>
+                    <div class="mode-intro-box"><h4>🏝 海岛争夺</h4><p>整张地图以水域为底，由 5 座独立小岛和有真实高度的拱桥网组成，每座岛都有一个据点。普通坦克可冒险入水，但会大幅减速并因车体进水持续掉血；多多号步战车免疫进水伤害，水中速度为 30%。</p></div>
                     <div class="mode-intro-box"><h4>🌋 火山熔岩</h4><p>200–400 宽的熔岩河会缓慢流动。地面载具在河中每秒受到 100 伤害，直升机会被热气流自动抬升；每 30–60 秒喷发的熔岩球造成 150 伤害和 3 秒减速。地图边缘的冷却结晶为坦克提供 +0.5 装甲。</p></div>
-                    <div class="mode-intro-box"><h4>🏗 废弃工厂</h4><p>约 3000×3000 的室内厂房分为面积相同的 B1、1F 和 2F，每层净高 500，拥有不透明的实体楼板与天花板，建筑外墙就是战场边界，每层各有一个据点。B1 密布油桶与会推动坦克和物体的地面传送带；1F 是设施主区，300 HP、0 护甲的机器人会自动维修受损建筑；2F 是起重机吊装区。坦克沿连接楼层的实体狭窄斜坡行驶，或驶入空心井道中的升降平台随电梯上下移动；三层处于同一个连续的立体空间，并使用标准战术相机。</p></div>
+                    <div class="mode-intro-box"><h4>🏗 废弃工厂</h4><p>约 3000×3000 的室内厂房分为面积相同的 B1、1F 和 2F，每层净高 500，拥有不透明的实体楼板与天花板，建筑外墙就是战场边界，每层各有一个据点。Ammo.js 物理让油桶滚动、坠井、被电梯压爆，也让传送带与工业风扇真实推动物体；铲车会叉起并抛下货物，2F 起重机能用约束抓取和投掷坦克或油桶。1F 的维修机器人会修复设施，液压机和电梯还能把玩家压伤并“拍扁”5 秒。楼层之间以带护栏的实体斜坡和开放式升降平台连接，三层处于同一个连续的立体空间，并使用标准战术相机。</p></div>
                 </div>
 
                 <div class="intro-section">
@@ -618,7 +619,7 @@
         <!-- ========== 菜单 ========== -->
         <div id="menu">
             <h1>⚔ 坦克大战 ⚔</h1>
-            <div class="subtitle" id="menuSubtitle">据点争夺战 | 9000×9000 超大地图</div>
+            <div class="subtitle" id="menuSubtitle">紧凑战场 | 3 据点争夺 | 基地持续增援</div>
             <div class="mode-badge" id="modeBadge">经典模式</div>
 
             <div class="section">
@@ -727,6 +728,14 @@
             <div class="coord-display" id="coordDisplay">X: 0 | Y: 0</div>
             <div class="outpost-info" id="outpostInfo"></div>
             <div id="message"></div>
+            <div id="juiceCue" aria-live="polite" aria-atomic="true">
+                <div class="juice-cue-flash"></div>
+                <div class="juice-cue-content">
+                    <div class="juice-cue-kicker" id="juiceCueKicker">工厂暴力美学</div>
+                    <div class="juice-cue-title" id="juiceCueTitle">压 成 铁 饼！</div>
+                    <div class="juice-cue-subtitle" id="juiceCueSubtitle">电梯碾压 · 5 秒变扁</div>
+                </div>
+            </div>
             
             <div id="joystick"><div id="joystick-knob"></div></div>
             <div id="fireBtn">射击</div>
@@ -781,7 +790,7 @@
 
     <script src="vendor/three.min.js"></script>
     <script src="vendor/ammo.wasm.js"></script>
-    <script src="Config.js"></script>
+    <script src="Config.js?v=base-spawn-1"></script>
     <script src="Audio.js"></script>
     <script src="Score.js"></script>
     <script src="Replay.js"></script>
@@ -789,13 +798,13 @@
     <script src="TerrainDestruction.js"></script>
     <script src="Achievement.js"></script>
     <script src="Pathfinding.js"></script>
-    <script src="UI.js"></script>
+    <script src="UI.js?v=map-scale-1"></script>
     <script src="Ultimate.js"></script>
-    <script src="GameCore.js"></script>
-    <script src="MapMechanics.js"></script>
+    <script src="GameCore.js?v=ai-aim-2"></script>
+    <script src="MapMechanics.js?v=map-scale-1"></script>
     <script src="FactoryPhysics.js"></script>
-    <script src="AI.js"></script>
-    <script src="Combat.js"></script>
+    <script src="AI.js?v=ai-aim-2"></script>
+    <script src="Combat.js?v=ai-aim-2"></script>
     <script src="Render.js"></script>
     <script src="ThreeRender.js"></script>
 </body>

@@ -47,7 +47,7 @@ function startGame() {
     if(typeof distributeFactoryInitialTanks === 'function') distributeFactoryInitialTanks();
     if(typeof initializeSneakRescueMechanic === 'function') initializeSneakRescueMechanic();
     if(typeof updateWeaponHudMode === 'function') updateWeaponHudMode(player);
-    initOutposts();
+    initBaseSpawns();
     initSpatialGrid();
     camera.zoom = (MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic).cameraZoom || 1;
     setViewMode(viewMode, false);
@@ -126,54 +126,47 @@ function worldToScreen(worldX, worldY) {
 // 地图模板配置
 const MAP_TEMPLATES = {
     classic: {
-        name: '经典战场', width: 9000, height: 9000,
-        obstacles: 150, outposts: [
-            {x: 1500, y: 1500}, {x: 3500, y: 2000}, {x: 5500, y: 3000},
-            {x: 2500, y: 5000}, {x: 4500, y: 4500}, {x: 7000, y: 3500}, {x: 6500, y: 6500}
+        name: '经典战场', width: 5400, height: 5400,
+        obstacles: 54, outposts: [
+            {x: 1350, y: 1500}, {x: 2700, y: 2700}, {x: 4050, y: 3900}
         ],
-        baseOffset: 500, description: '标准据点争夺战'
+        baseOffset: 300, description: '紧凑型三据点争夺战'
     },
     desert: {
-        name: '沙漠风暴', width: 8000, height: 8000,
-        obstacles: 38, cameraZoom: 0.82, groundColor: '#c9923f', obstacleType: 'rock', outposts: [
-            {x: 2000, y: 2000}, {x: 4000, y: 1500}, {x: 6000, y: 2000},
-            {x: 3000, y: 4000}, {x: 5000, y: 4000}
+        name: '沙漠风暴', width: 4800, height: 4800,
+        obstacles: 14, cameraZoom: 0.82, groundColor: '#c9923f', obstacleType: 'rock', outposts: [
+            {x: 1200, y: 1500}, {x: 2400, y: 2400}, {x: 3600, y: 3300}
         ],
-        baseOffset: 400, description: '橙黄沙漠，大视野与随机沙尘暴'
+        baseOffset: 240, description: '紧凑橙黄沙漠，大视野与随机沙尘暴'
     },
     city: {
-        name: '城市巷战', width: 6000, height: 6000,
+        name: '城市巷战', width: 3600, height: 3600,
         obstacles: 0, groundColor: '#30343a', obstacleType: 'building', outposts: [
-            {x: 1500, y: 1500}, {x: 3000, y: 1200}, {x: 4500, y: 1500},
-            {x: 1500, y: 3000}, {x: 4500, y: 3000}, {x: 1500, y: 4500},
-            {x: 3000, y: 4800}, {x: 4500, y: 4500}
+            {x: 900, y: 900}, {x: 1800, y: 1800}, {x: 2700, y: 2700}
         ],
-        baseOffset: 300, description: '街区、十字路口与密集建筑组成的真正城市战'
+        baseOffset: 180, description: '三据点街区、十字路口与密集建筑城市战'
     },
     snow: {
-        name: '雪地突袭', width: 10000, height: 10000,
-        obstacles: 48, groundColor: '#dce8ee', obstacleType: 'ice', outposts: [
-            {x: 2500, y: 2500}, {x: 5000, y: 2000}, {x: 7500, y: 2500},
-            {x: 2500, y: 5000}, {x: 7500, y: 5000}, {x: 5000, y: 7500}
+        name: '雪地突袭', width: 6000, height: 6000,
+        obstacles: 18, groundColor: '#dce8ee', obstacleType: 'ice', outposts: [
+            {x: 1500, y: 1800}, {x: 3000, y: 3000}, {x: 4500, y: 4200}
         ],
-        baseOffset: 600, description: '雪地留痕，久停会冻结引擎'
+        baseOffset: 360, description: '紧凑雪地留痕，久停会冻结引擎'
     },
     island: {
-        name: '海岛争夺', width: 7000, height: 7000,
-        obstacles: 72, groundColor: '#6f9b55', obstacleType: 'tree', outposts: [
-            {x: 900, y: 1000}, {x: 3500, y: 900}, {x: 6100, y: 1100},
-            {x: 900, y: 3500}, {x: 3500, y: 3500}, {x: 6100, y: 3500},
-            {x: 3500, y: 6100}
+        name: '海岛争夺', width: 4200, height: 4200,
+        obstacles: 26, groundColor: '#6f9b55', obstacleType: 'tree', outposts: [
+            {x: 714, y: 2100}, {x: 2100, y: 756}, {x: 2100, y: 2100},
+            {x: 2100, y: 3444}, {x: 3486, y: 2100}
         ],
-        baseOffset: 350, description: '水域分割岛屿，桥梁要道与树林'
+        baseOffset: 210, description: '五座据点岛、桥梁要道与树林'
     },
     volcano: {
-        name: '火山熔岩', width: 8000, height: 7000,
-        obstacles: 62, groundColor: '#292625', obstacleType: 'volcanicRock', outposts: [
-            {x: 1500, y: 1450}, {x: 6500, y: 1450}, {x: 1900, y: 3500},
-            {x: 4000, y: 3500}, {x: 6100, y: 3500}, {x: 1500, y: 5550}, {x: 6500, y: 5550}
+        name: '火山熔岩', width: 4800, height: 4200,
+        obstacles: 22, groundColor: '#292625', obstacleType: 'volcanicRock', outposts: [
+            {x: 1200, y: 1100}, {x: 2400, y: 2100}, {x: 3600, y: 3100}
         ],
-        baseOffset: 420, description: '动态熔岩河、随机喷发与边缘冷却结晶'
+        baseOffset: 252, description: '三据点动态熔岩河、随机喷发与边缘冷却结晶'
     },
     factory: {
         name: '废弃工厂', width: 3000, height: 3000,
@@ -202,13 +195,16 @@ function generateMap() {
     };
     const numObstacles = template.obstacles;
     const outpostPositions = template.outposts;
+    const baseOffset = template.baseOffset || 500;
+    const plannedBlueBase = {x:baseOffset+CONFIG.baseSize/2,y:CONFIG.mapHeight/2};
+    const plannedRedBase = {x:CONFIG.mapWidth-baseOffset-CONFIG.baseSize/2,y:CONFIG.mapHeight/2};
     for(let i=0; i<numObstacles; i++) {
         let w = template.obstacleType === 'tree' ? 55 + Math.random() * 55 : 80 + Math.random() * 200;
         let h = template.obstacleType === 'tree' ? 55 + Math.random() * 55 : 80 + Math.random() * 200;
         let x = 500 + Math.random() * (CONFIG.mapWidth - w - 1000);
         let y = 500 + Math.random() * (CONFIG.mapHeight - h - 1000);
-        const distBlue = Math.hypot(x - 800, y - CONFIG.mapHeight/2);
-        const distRed = Math.hypot(x - (CONFIG.mapWidth - 800), y - CONFIG.mapHeight/2);
+        const distBlue = Math.hypot(x - plannedBlueBase.x, y - plannedBlueBase.y);
+        const distRed = Math.hypot(x - plannedRedBase.x, y - plannedRedBase.y);
         if(distBlue < 600 || distRed < 600) continue;
         let overlapsOutpost = false;
         for(let op of outpostPositions) {
@@ -220,8 +216,7 @@ function generateMap() {
         if(overlapsOutpost) continue;
         obstacles.push({ x, y, w, h, type: template.obstacleType || 'block' });
     }
-    if(currentMap === 'city') generateCityObstacles(outpostPositions);
-    const baseOffset = template.baseOffset || 500;
+    if(currentMap === 'city') generateCityObstacles(outpostPositions, plannedBlueBase, plannedRedBase);
     bases.blue = {
         x: baseOffset, y: CONFIG.mapHeight/2 - CONFIG.baseSize/2,
         w: CONFIG.baseSize, h: CONFIG.baseSize,
@@ -262,16 +257,17 @@ function generateMap() {
 }
 
 function generateIslandTerrain() {
-    // 整张地图以海水为底，七座独立小岛各自承载一个据点。
-    terrainZones.push({ type: 'water', x: 0, y: 0, w: 7000, h: 7000 });
+    // 整张地图以海水为底，五座独立小岛各自承载一个据点。
+    terrainZones.push({ type: 'water', x: 0, y: 0, w: CONFIG.mapWidth, h: CONFIG.mapHeight });
     const islands = [
-        {x: 900, y: 1000, rx: 720, ry: 610}, {x: 3500, y: 900, rx: 760, ry: 580},
-        {x: 6100, y: 1100, rx: 720, ry: 610}, {x: 900, y: 3500, rx: 800, ry: 700},
-        {x: 3500, y: 3500, rx: 850, ry: 720}, {x: 6100, y: 3500, rx: 800, ry: 700},
-        {x: 3500, y: 6100, rx: 820, ry: 650}
+        {x: 714, y: 2100, rx: 650, ry: 650},
+        {x: 2100, y: 756, rx: 590, ry: 540},
+        {x: 2100, y: 2100, rx: 650, ry: 600},
+        {x: 2100, y: 3444, rx: 590, ry: 540},
+        {x: 3486, y: 2100, rx: 650, ry: 650}
     ];
     islands.forEach((island, index) => terrainZones.push({ type: 'land', shape: 'ellipse', island: index + 1, ...island }));
-    const links = [[0,1], [1,2], [0,3], [3,4], [4,5], [1,4], [4,6], [2,5]];
+    const links = [[0,1], [0,2], [1,2], [1,4], [2,3], [2,4], [3,4]];
     links.forEach(([a, b]) => addIslandBridge(islands[a], islands[b]));
     // 避免树生成在水面或桥面上。
     obstacles = obstacles.filter(obs => !rectTouchesBlockingWater(obs.x, obs.y, obs.w, obs.h));
@@ -302,15 +298,15 @@ function getBridgeHeightAt(x, y) {
     return height;
 }
 
-function generateCityObstacles(outpostPositions) {
+function generateCityObstacles(outpostPositions, blueBaseCenter, redBaseCenter) {
     const blockSize = 600, roadWidth = 170;
     for(let gx = 300; gx < CONFIG.mapWidth - 300; gx += blockSize) {
         for(let gy = 300; gy < CONFIG.mapHeight - 300; gy += blockSize) {
             const inset = roadWidth / 2;
             const x = gx + inset, y = gy + inset;
             const w = blockSize - roadWidth - 25, h = blockSize - roadWidth - 25;
-            const nearBase = Math.hypot(x - 500, y - CONFIG.mapHeight / 2) < 650 ||
-                Math.hypot(x - (CONFIG.mapWidth - 500), y - CONFIG.mapHeight / 2) < 650;
+            const nearBase = Math.hypot(x - blueBaseCenter.x, y - blueBaseCenter.y) < 650 ||
+                Math.hypot(x - redBaseCenter.x, y - redBaseCenter.y) < 650;
             const nearOutpost = outpostPositions.some(op => x < op.x + CONFIG.outpostRadius && x + w > op.x - CONFIG.outpostRadius && y < op.y + CONFIG.outpostRadius && y + h > op.y - CONFIG.outpostRadius);
             if(nearBase || nearOutpost) continue;
             obstacles.push({ x, y, w, h, type: 'building', floors: 3 + Math.floor(Math.random() * 8) });
@@ -361,8 +357,12 @@ function isTankInWater(tank) {
 
 function generateMapElements() {
     mapElements = [];
+    const mapAreaScale=currentMap==='factory'?1:.36;
+    const mineCount=Math.max(6,Math.round(20*mapAreaScale));
+    const boostCount=Math.max(4,Math.round(15*mapAreaScale));
+    const bushCount=Math.max(8,Math.round(25*mapAreaScale));
 
-    for(let i=0; i<20; i++) {
+    for(let i=0; i<mineCount; i++) {
         let x = 800 + Math.random() * (CONFIG.mapWidth - 1600);
         let y = 800 + Math.random() * (CONFIG.mapHeight - 1600);
         if(isPositionInWater(x, y, 50)) continue;
@@ -383,7 +383,7 @@ function generateMapElements() {
         });
     }
 
-    for(let i=0; i<15; i++) {
+    for(let i=0; i<boostCount; i++) {
         let x = 600 + Math.random() * (CONFIG.mapWidth - 1200);
         let y = 600 + Math.random() * (CONFIG.mapHeight - 1200);
         if(isPositionInWater(x, y, 80)) continue;
@@ -402,7 +402,7 @@ function generateMapElements() {
         });
     }
 
-    for(let i=0; i<25; i++) {
+    for(let i=0; i<bushCount; i++) {
         let x = 500 + Math.random() * (CONFIG.mapWidth - 1000);
         let y = 500 + Math.random() * (CONFIG.mapHeight - 1000);
         if(isPositionInWater(x, y, 60)) continue;
@@ -421,10 +421,38 @@ function generateMapElements() {
     }
 }
 
+function findBaseDeploymentPoint(team,index=0) {
+    const base=bases[team];
+    if(!base)return {x:team==='blue'?CONFIG.tankSize*3:CONFIG.mapWidth-CONFIG.tankSize*3,y:CONFIG.mapHeight/2};
+    const centerX=base.x+base.w/2,centerY=base.y+base.h/2;
+    const inwardAngle=team==='blue'?0:Math.PI;
+    const fanOffsets=[0,-.48,.48,-.88,.88,-1.22,1.22,-1.48,1.48];
+    for(let ring=0;ring<4;ring++){
+        for(let step=0;step<fanOffsets.length;step++){
+            const offset=fanOffsets[(index+step)%fanOffsets.length];
+            const distance=Math.max(base.w,base.h)/2+95+ring*85;
+            const x=Math.max(CONFIG.tankSize,Math.min(CONFIG.mapWidth-CONFIG.tankSize,centerX+Math.cos(inwardAngle+offset)*distance));
+            const y=Math.max(CONFIG.tankSize,Math.min(CONFIG.mapHeight-CONFIG.tankSize,centerY+Math.sin(inwardAngle+offset)*distance));
+            if(currentMap==='island'&&typeof isPositionInWater==='function'&&isPositionInWater(x,y,CONFIG.tankSize*.72))continue;
+            const floorProbe=currentMap==='factory'?{isFlying:false,z:typeof getFactoryFloorZ==='function'?getFactoryFloorZ(1):500,factoryFloor:1}:null;
+            if(typeof checkObstacleCollision==='function'&&checkObstacleCollision(x,y,CONFIG.tankSize,floorProbe))continue;
+            const occupied=[player,...allies,...enemies].filter(tank=>tank&&!tank.dead).some(tank=>
+                Math.abs((tank.z||0)-(floorProbe?floorProbe.z:0))<70&&Math.hypot(tank.x-x,tank.y-y)<CONFIG.aiTankMinDistance);
+            if(occupied)continue;
+            return {x,y};
+        }
+    }
+    return {
+        x:Math.max(CONFIG.tankSize,Math.min(CONFIG.mapWidth-CONFIG.tankSize,centerX+Math.cos(inwardAngle)*(base.w+110))),
+        y:centerY
+    };
+}
+
 function spawnTanks(tankData, ammo, mg, aa) {
     let blueCount = 10;
     let redCount = gameMode === 'sneak' ? 30 : 10;
-    let blueBaseX = 800, blueBaseY = CONFIG.mapHeight / 2;
+    const blueDeployment=findBaseDeploymentPoint('blue',0);
+    let blueBaseX = blueDeployment.x, blueBaseY = blueDeployment.y;
     if(gameMode === 'sneak') {
         const angle = Math.random() * Math.PI * 2;
         blueBaseX = CONFIG.mapWidth - 500 - CONFIG.baseSize - 1000 + Math.cos(angle) * 300;
@@ -450,7 +478,10 @@ function spawnTanks(tankData, ammo, mg, aa) {
             aAmmo = Math.floor(t.maxShells * 0.6);
             aMG = Math.floor(t.maxMG * 0.6);
         }
-        const tank = createTank(t, blueBaseX + (Math.random()-0.5)*300, blueBaseY + (Math.random()-0.5)*300, 'blue', false);
+        const deployment=gameMode==='sneak'
+            ?{x:blueBaseX+(Math.random()-.5)*300,y:blueBaseY+(Math.random()-.5)*300}
+            :findBaseDeploymentPoint('blue',i+1);
+        const tank = createTank(t, deployment.x, deployment.y, 'blue', false);
         tank.shells = aAmmo; tank.mg = aMG; 
         tank.aa = Math.floor((t.maxAA ?? 15) * 0.5);
         tank.apsCharges = CONFIG.apsCharges;
@@ -471,8 +502,9 @@ function spawnTanks(tankData, ammo, mg, aa) {
     enemies = [];
     const enemyTypes = ['xingchen27a', 'xingchen27b', 'xingchen27c', 'xingchen27d', 'xingchen27e', 'xingchen27s', 'duoduo', 'duoduo_ifv', 'duoduo_spat', 'duoduo_eng', 'duoduo_rocket', 'duoduo_emp', 'zuoyan29', 'zuoyan30', 'zuoyan31', 'zuoyan32', 'zuoyan33', 'zuoyan1', 'zuoyan_x'];
     const diffMult = gameConfig.difficulty === 'easy' ? 0.7 : gameConfig.difficulty === 'hard' ? 1.4 : 1.0;
-    let redBaseX = CONFIG.mapWidth - 800;
-    let redBaseY = CONFIG.mapHeight / 2;
+    const redDeployment=findBaseDeploymentPoint('red',0);
+    let redBaseX = redDeployment.x;
+    let redBaseY = redDeployment.y;
     for(let i=0; i<redCount; i++) {
         const type = enemyTypes[i % enemyTypes.length];
         const t = TANKS[type];
@@ -497,8 +529,9 @@ function spawnTanks(tankData, ammo, mg, aa) {
                 attempts++;
             }
         } else {
-            ex = redBaseX - i*80;
-            ey = redBaseY - 300 + i*200;
+            const deployment=findBaseDeploymentPoint('red',i);
+            ex=deployment.x;
+            ey=deployment.y;
         }
         const tank = createTank(t, ex, ey, 'red', false);
         tank.hp = Math.floor(tank.hp * diffMult);
@@ -599,6 +632,7 @@ function createTank(data, x, y, team, isPlayer) {
         stormActive: false, stormTimer: 0, stormOriginalMgCooldown: 0,
         nailLocking: false, nailLockTimer: 0, nailTarget: null, nailLaserAngle: 0,
         aiDodgeTimer: 0, aiDodgeDir: 0, aiFocusFireTarget: null,
+        aiAimAngle: null, aiAimTarget: null,
         aiAmmoSaveMode: false, aiLastState: '', aiTeamCoord: 0,
         aiReactionDelay: 0.1, aiSkillLevel: 0.85,
         aiBehavior: AI_BEHAVIOR.NONE,
@@ -647,8 +681,16 @@ function createTank(data, x, y, team, isPlayer) {
     };
 }
 
-function initOutposts() {
-    outposts.forEach(op => { outpostSpawnTimers[op.name] = CONFIG.outpostSpawnInterval; });
+function getBaseSpawnInterval(team) {
+    const configured=CONFIG.baseSpawnIntervals&&CONFIG.baseSpawnIntervals[team];
+    return Number.isFinite(configured)?configured:(team==='blue'?15:10);
+}
+
+function initBaseSpawns() {
+    baseSpawnTimers = {
+        blue:getBaseSpawnInterval('blue'),
+        red:getBaseSpawnInterval('red')
+    };
 }
 
 function initSpatialGrid() {
@@ -782,7 +824,7 @@ function update(dt) {
     updateSpatialGrid();
     
     updateOutposts(dt);
-    updateOutpostSpawns(dt);
+    if(gameMode==='classic'||gameMode==='defense')updateBaseSpawns(dt);
     if(!['ctf', 'infection', 'storm'].includes(gameMode)) updateBaseDefense(dt);
     
     updateMinimapJam(dt);
@@ -894,13 +936,8 @@ function findAutoAimTarget(tank) {
 function performAutoAimRotation(tank, dt) {
     if (!tank.autoAimTarget || tank.autoAimTarget.dead) return;
     const target = tank.autoAimTarget;
-    const dist = Math.hypot(target.x - tank.x, target.y - tank.y);
-    const predictTime = dist / CONFIG.bulletSpeed * CONFIG.autoAimPredictFactor;
-    const targetVelX = target.x - (target.prevPos ? target.prevPos.x : target.x);
-    const targetVelY = target.y - (target.prevPos ? target.prevPos.y : target.y);
-    const predictedX = target.x + targetVelX * predictTime;
-    const predictedY = target.y + targetVelY * predictTime;
-    const targetAngle = Math.atan2(predictedY - tank.y, predictedX - tank.x);
+    const predicted = getPredictedAimPoint(tank,target,CONFIG.bulletSpeed,CONFIG.autoAimPredictFactor);
+    const targetAngle = Math.atan2(predicted.y - tank.y, predicted.x - tank.x);
     let angleDiff = targetAngle - tank.turretAngle;
     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
     while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
@@ -930,6 +967,32 @@ function getNearestEnemy(tank) {
 function getMapVisionRange(tank = null) {
     if(currentMap === 'desert') return environmentState.sandstormActive ? 520 : 1800;
     return CONFIG.autoAimRange;
+}
+
+function getPredictedAimPoint(shooter, target, projectileSpeed = CONFIG.bulletSpeed, predictFactor = CONFIG.autoAimPredictFactor) {
+    if(!shooter || !target) return {x:target ? target.x : 0,y:target ? target.y : 0};
+    let stepX = target.x - (target.prevPos ? target.prevPos.x : target.x);
+    let stepY = target.y - (target.prevPos ? target.prevPos.y : target.y);
+    const observedStep = Math.hypot(stepX,stepY);
+    const speedBoost = 1+(target.speedBoost||0)+(target.mapSpeedBoost||0)+(target.speedBuffFromCommander||0)+(target.ricochetSpeedBoost||0);
+    const maxPhysicalStep = Math.max(2,(target.speed||5)*speedBoost*1.5);
+    if(observedStep>maxPhysicalStep){
+        const scale=maxPhysicalStep/observedStep;
+        stepX*=scale;
+        stepY*=scale;
+    }
+    const distance=Math.hypot(target.x-shooter.x,target.y-shooter.y);
+    const travelFrames=Math.min(90,distance/Math.max(.1,projectileSpeed));
+    let leadX=stepX*travelFrames*Math.max(0,predictFactor||0);
+    let leadY=stepY*travelFrames*Math.max(0,predictFactor||0);
+    const leadDistance=Math.hypot(leadX,leadY);
+    const maxLead=Math.min(600,distance*.65+60);
+    if(leadDistance>maxLead){
+        const scale=maxLead/leadDistance;
+        leadX*=scale;
+        leadY*=scale;
+    }
+    return {x:target.x+leadX,y:target.y+leadY};
 }
 
 function updateBaseDefense(dt) {
@@ -975,6 +1038,13 @@ function updateBaseDefense(dt) {
 
 function updateTank(tank, dt) {
     if(tank.dead) return;
+    // 玩家走 updateTank，AI 走 updateAITank；两条路径都必须在移动前保存上一帧坐标。
+    // 否则红方会把玩家从出生点起的累计位移误判成单帧速度。
+    if(!tank.prevPos) tank.prevPos = {x:tank.x,y:tank.y};
+    else {
+        tank.prevPos.x = tank.x;
+        tank.prevPos.y = tank.y;
+    }
     if(tank.isPlayer && (isNaN(tank.x) || isNaN(tank.y))) {
         console.error('[UPDATE_TANK] Player position is NaN at start of updateTank! x:', tank.x, 'y:', tank.y, 'angle:', tank.angle);
     }
@@ -1315,7 +1385,7 @@ function restartLastGame() {
     const setup = { ...lastMatchSetup };
     resetGame();
     currentMap = setup.currentMap;
-    selectGameMode(setup.gameMode);
+    selectMode(setup.gameMode);
     selectedTank = setup.selectedTank;
     const values = { ammoSlider: setup.ammo, mgSlider: setup.mg, aaSlider: setup.aa };
     Object.entries(values).forEach(([id, value]) => { const element = document.getElementById(id); if(element) element.value = value; });
@@ -1332,6 +1402,7 @@ function resetGame() {
     console.log('[RESET] 游戏重置开始');
     // 清理游戏状态
     gameState = 'start';
+    if(typeof resetJuiceCue === 'function') resetJuiceCue();
     helicopterLiftInput = 0;
     if(typeof resetCombatReplay === 'function') resetCombatReplay();
     if(typeof stopEngineAudio === 'function') stopEngineAudio();
@@ -1585,7 +1656,7 @@ function redirectShieldDamage(tank) {
 
 function fireUltimateSalvo(tank) {
     const ult = tank.ultimateData; if(!ult) return;
-    const angle = tank.turretAngle;
+    const angle = typeof getTankFiringAngle === 'function' ? getTankFiringAngle(tank) : tank.turretAngle;
     const halfSpread = ult.spreadAngle / 2;
     for(let i = 0; i < ult.shellCount; i++) {
         const shellAngle = angle - halfSpread + (ult.spreadAngle / (ult.shellCount - 1)) * i;
