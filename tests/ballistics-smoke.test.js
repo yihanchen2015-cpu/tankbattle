@@ -58,4 +58,32 @@ assert.strictEqual(result.altitudeAlias, result.lateZ, 'legacy altitude renderin
 assert.strictEqual(result.shellAtGroundHeight, true, 'a shell at matching XYZ height should hit');
 assert.strictEqual(result.shellAboveTarget, false, 'matching XY must not hit when Z differs');
 assert.strictEqual(result.mgCannotHitAir, false, 'fixed-elevation machine guns must not hit helicopters');
+
+vm.runInContext(`
+    bullets = [];
+    testTank.aa = 2;
+    testTank.aaElevation = 2;
+    obstacles = [{x:1045,y:970,w:12,h:60,type:'building',floors:4}];
+    fireBullet(testTank, 'aa');
+    const blockedProjectile = bullets[0];
+    const ignoresObstacles = blockedProjectile.ignoresObstacles;
+    updateBullets(0.02);
+    const blockedCount = bullets.length;
+
+    bullets = [];
+    testTank.aa = 2;
+    obstacles = [{x:1045,y:970,w:12,h:60,type:'rubble',worldHeight:8}];
+    fireBullet(testTank, 'aa');
+    updateBullets(0.02);
+    globalThis.__aaObstacleCollision = {
+        ignoresObstacles,
+        blockedCount,
+        flyoverCount: bullets.length
+    };
+`, sandbox);
+
+const obstacleResult = sandbox.__aaObstacleCollision;
+assert.strictEqual(obstacleResult.ignoresObstacles, false, 'AA projectiles must participate in obstacle collision');
+assert.strictEqual(obstacleResult.blockedCount, 0, 'a tall obstacle should stop a fast AA projectile even between frame endpoints');
+assert.strictEqual(obstacleResult.flyoverCount, 1, 'an AA projectile above a low obstacle should continue flying');
 console.log('3D ballistics smoke test passed:', result);

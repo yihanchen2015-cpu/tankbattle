@@ -371,5 +371,7 @@ function getActualSpeed(tank) {
         return speed * weightFactor * 1.3 * statusSlow * sandstormSlow * mapFlightPenalty;
     }
 
-    return Math.max(tank.speed * 0.12, speed * weightFactor * statusSlow * freezeSlow * waterSlow);
+    const trackMultiplier = (tank.trackDamageTimer || 0) > 0 ? CONFIG.trackDamageSpeedMultiplier : 1;
+    const upgradeMultiplier = 1 + (tank.damageUpgradeSpeedBoost || 0);
+    return Math.max(tank.speed * 0.12, speed * upgradeMultiplier * weightFactor * statusSlow * freezeSlow * waterSlow * trackMultiplier);
 }

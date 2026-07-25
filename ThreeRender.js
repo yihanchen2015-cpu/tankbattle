@@ -14,6 +14,7 @@ const threeView = {
     turretMeshes: new Map(),
     supplyMeshes: new Map(),
     fireballMeshes: new Map(),
+    smokeMeshes: new Map(),
     obstacleMeshes: new Map(),
     debrisMeshes: new Map(),
     mechanicMeshes: new Map(),
@@ -202,6 +203,7 @@ function rebuildThreeWorld(force = false) {
     threeView.turretMeshes.clear();
     threeView.supplyMeshes.clear();
     threeView.fireballMeshes.clear();
+    threeView.smokeMeshes.clear();
     threeView.obstacleMeshes.clear();
     threeView.debrisMeshes.clear();
     threeView.mechanicMeshes.clear();
@@ -1068,6 +1070,52 @@ function syncThreeBullets() {
     }
 }
 
+function createThreeSmokeCloud(cloud) {
+    const group = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({
+        color:0xaab3b5,
+        roughness:1,
+        transparent:true,
+        opacity:.34,
+        depthWrite:false
+    });
+    for(let i = 0; i < 8; i++) {
+        const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 7), material.clone());
+        const angle = i / 8 * Math.PI * 2;
+        sphere.position.set(Math.cos(angle) * (2.2 + i % 2), 1.5 + (i % 3) * .8, Math.sin(angle) * (2.2 + i % 2));
+        sphere.scale.set(3.2 + i % 3, 2.2 + (i + 1) % 2, 3.2 + (i + 2) % 3);
+        group.add(sphere);
+    }
+    threeView.dynamicRoot.add(group);
+    return group;
+}
+
+function syncThreeSmokeClouds(now) {
+    const clouds = typeof smokeClouds !== 'undefined' ? smokeClouds : [];
+    const active = new Set(clouds);
+    clouds.forEach(cloud => {
+        let group = threeView.smokeMeshes.get(cloud);
+        if(!group) {
+            group = createThreeSmokeCloud(cloud);
+            threeView.smokeMeshes.set(cloud, group);
+        }
+        const expansion = Math.min(1, (cloud.maxLife - cloud.life) * 1.8);
+        const fade = Math.max(0, Math.min(1, cloud.life / Math.min(2.5, cloud.maxLife)));
+        setThreeWorldPosition(group, cloud.x, cloud.y, ((cloud.z || 0) + 12) * THREE_WORLD_SCALE);
+        group.scale.setScalar(Math.max(.05, cloud.radius * THREE_WORLD_SCALE / 10 * expansion));
+        group.rotation.y = now * .00008;
+        group.children.forEach((sphere, index) => {
+            sphere.material.opacity = (.25 + (index % 3) * .035) * fade;
+        });
+    });
+    for(const [cloud, group] of threeView.smokeMeshes) {
+        if(!active.has(cloud)) {
+            disposeThreeObject(group);
+            threeView.smokeMeshes.delete(cloud);
+        }
+    }
+}
+
 function createThreeTurret(element) {
     const group = new THREE.Group();
     const base = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 2.1, 1.1, 10), makeStandardMaterial(0x4c5358, { metalness: 0.35 }));
@@ -1522,6 +1570,7 @@ function renderThreeScene() {
     syncThreeTerrainDestruction();
     syncThreeTanks(now);
     syncThreeBullets();
+    syncThreeSmokeClouds(now);
     syncThreeTurrets();
     syncThreeSupplyDrops(now);
     syncThreeAmmoRackFireballs(now);

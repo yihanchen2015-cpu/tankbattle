@@ -59,6 +59,7 @@ const sandbox = {
     terrainRevision: 0,
     terrainDebris: [],
     damageNumbers: [],
+    smokeClouds: [{ x: 1480, y: 1190, z: 0, radius: 135, life: 9, maxLife: 10 }],
     allies: [],
     enemies: [],
     isTankInWater: () => false
@@ -147,6 +148,7 @@ vm.runInContext(`
         rubbleMesh: threeView.obstacleMeshes.has('rubble-test'),
         preservedObstacleMesh: threeView.obstacleMeshes.get(preservedObstacleId) === preservedObstacleMesh,
         debrisMeshes: threeView.debrisMeshes.size,
+        smokeMeshes: threeView.smokeMeshes.size,
         rescueShieldVisible: threeView.tankMeshes.get('player').userData.rescueShield.visible,
         hiddenOutpostVisible: !!threeView.hiddenOutpostMesh && threeView.hiddenOutpostMesh.visible,
         pointLights,
@@ -181,6 +183,7 @@ assert.strictEqual(result.supplyMeshes, 1, 'air supply should be synchronized in
 assert.strictEqual(result.rubbleMesh, true, 'new rubble cover should be synchronized without rebuilding the whole scene');
 assert.strictEqual(result.preservedObstacleMesh, true, 'unchanged obstacle meshes should be preserved during incremental terrain sync');
 assert.strictEqual(result.debrisMeshes, 1, 'physical terrain debris should be synchronized into the 3D scene');
+assert.strictEqual(result.smokeMeshes, 1, 'smoke grenades should synchronize a volumetric 3D cloud');
 assert.strictEqual(result.rescueShieldVisible, true, 'rescue shield should be visible around the reinforced player');
 assert.strictEqual(result.hiddenOutpostVisible, true, 'discovered sneak outpost should be visible in the 3D world');
 assert.strictEqual(result.pointLights, 0, 'projectiles must not accumulate expensive dynamic lights');

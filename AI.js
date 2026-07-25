@@ -30,6 +30,7 @@ function updateAITank(tank, dt) {
     tank.pathRefreshTimer = (tank.pathRefreshTimer || 0) - dt;
     tank.aiDodgeTimer = (tank.aiDodgeTimer || 0) - dt;
     tank.aiBehaviorTimer = (tank.aiBehaviorTimer || 0) - dt;
+    tank.aiReactionDelay = Math.max(0, (tank.aiReactionDelay || 0) - dt);
 
     updateAutoAim(tank, dt);
 
@@ -67,7 +68,9 @@ function updateAITank(tank, dt) {
     let nearestEnemy = null, minEnemyDist = Infinity;
     let bestTarget = null, bestTargetScore = -Infinity;
     
-    const sensorRange = isRedAI ? 2200 : 1550;
+    const sensorRange = isRedAI
+        ? (gameMode === 'defense' ? CONFIG.defenseRedSensorRange : CONFIG.aiSensorRangeRed)
+        : CONFIG.aiSensorRangeBlue;
     const nearbyEnemies = getNearbyTanks(tank.x, tank.y, sensorRange);
     const filteredEnemies = nearbyEnemies.filter(e => e.team !== tank.team && !e.dead &&
         (typeof areEntitiesOnSameFactoryFloor !== 'function' || areEntitiesOnSameFactoryFloor(tank, e)));
@@ -79,6 +82,17 @@ function updateAITank(tank, dt) {
         if(d < 800) score += 100;
         else if(d < 1500) score += 50;
         if(e.isPlayer) score += 80;
+        const assignedAttackers = myTeamList.filter(other =>
+            other !== tank && !other.dead &&
+            (other.aiAimTarget === e || other.aiFocusFireTarget === e)
+        ).length;
+        if(gameMode === 'defense' && isRedAI && e.isPlayer) {
+            score -= 45;
+            score -= assignedAttackers * 130;
+            if(assignedAttackers >= CONFIG.defenseMaxPlayerAttackers) score -= 1000;
+        } else {
+            score -= assignedAttackers * 20;
+        }
         score += (1 - e.hp / e.maxHp) * 60;
         const nearOutpost = outposts.find(op => Math.hypot(e.x - op.x, e.y - op.y) < op.radius && op.owner === tank.team);
         if(nearOutpost) score += 70;
@@ -104,6 +118,22 @@ function updateAITank(tank, dt) {
     if(bestTarget) {
         nearestEnemy = bestTarget;
         minEnemyDist = Math.hypot(bestTarget.x - tank.x, bestTarget.y - tank.y);
+    }
+
+    if(nearestEnemy && tank.hp < tank.maxHp * .42 && (tank.smoke || 0) > 0 &&
+       (tank.smokeCooldown || 0) <= 0 && Math.random() < dt * .55) {
+        deploySmokeGrenade(tank);
+    }
+
+    // AI 必须持续观察同一个目标一段时间后才能开火。切换目标会重新锁定，
+    // 避免经典、夺旗、感染等模式里出现“刚看到就齐射”的瞬杀。
+    if(tank.aiTrackedTarget !== nearestEnemy) {
+        tank.aiTrackedTarget = nearestEnemy;
+        tank.aiTargetLockTimer = 0;
+    } else if(nearestEnemy) {
+        tank.aiTargetLockTimer = (tank.aiTargetLockTimer || 0) + dt;
+    } else {
+        tank.aiTargetLockTimer = 0;
     }
     
     let nearestOutpost = null, minOutpostDist = Infinity;
@@ -367,7 +397,7 @@ function updateAITank(tank, dt) {
         targetAngle = Math.atan2(targetY - tank.y, targetX - tank.x);
     }
 
-    if (targetAngle !== null) {
+    if (targetAngle !== null && (tank.turretJamTimer || 0) <= 0) {
         let turretDiff = targetAngle - tank.turretAngle;
         while (turretDiff > Math.PI) turretDiff -= Math.PI * 2;
         while (turretDiff < -Math.PI) turretDiff += Math.PI * 2;
@@ -403,8 +433,10 @@ function updateAITank(tank, dt) {
     }
 
     if (validTankTarget && hasAmmo) {
-        const aimThreshold = Math.max(0.18, 0.30 - Math.min(1.8, tank.aiSkillLevel || 0.8) * 0.035);
+        const aimThreshold = Math.max(0.14, 0.23 - Math.min(1.8, tank.aiSkillLevel || 0.8) * 0.03);
         const isAimed = aimDiff < aimThreshold;
+        const targetLocked = (tank.aiTargetLockTimer || 0) >= CONFIG.aiTargetLockTime &&
+            (tank.aiReactionDelay || 0) <= 0;
 
         // 确保有视线才射击（使用缓存或实时计算）
         let hasLOS;
@@ -432,22 +464,26 @@ function updateAITank(tank, dt) {
             tank.aiCachedLOS = nearestEnemy ? lineOfSight(tank.x, tank.y, nearestEnemy.x, nearestEnemy.y, tank.factoryFloor) : false;
         }
         tank.aiLOSCheckTimer -= dt;
-        const aaReadyForTarget = (tank.aa || 0) > 0 && (tank.aaCooldown || 0) <= 0;
-        hasLOS = aaReadyForTarget ? true : tank.aiCachedLOS;
+        hasLOS = !!tank.aiCachedLOS;
         
-        if (isAimed && hasLOS && nearestEnemy && !nearestEnemy.dead) {
-            const canFireShell = (tank.shells > 0 || tank.suddenDeathInfiniteAmmo) && tank.fireCooldown <= 0;
-            const canFireMG = (tank.mg > 0 || tank.suddenDeathInfiniteAmmo) && tank.mgCooldown <= 0 && !nearestEnemy.isFlying;
-            const canFireAA = ((tank.aa || 0) > 0 || tank.suddenDeathInfiniteAmmo) && (tank.aaCooldown || 0) <= 0;
+        if (isAimed && hasLOS && targetLocked && nearestEnemy && !nearestEnemy.dead) {
+            const canFireShell = (tank.shells > 0 || tank.suddenDeathInfiniteAmmo) &&
+                tank.fireCooldown <= 0 && minEnemyDist <= CONFIG.aiShellMaxRange;
+            const canFireMG = (tank.mg > 0 || tank.suddenDeathInfiniteAmmo) &&
+                tank.mgCooldown <= 0 && !nearestEnemy.isFlying && minEnemyDist <= CONFIG.aiMGMaxRange;
+            const canFireAA = ((tank.aa || 0) > 0 || tank.suddenDeathInfiniteAmmo) &&
+                (tank.aaCooldown || 0) <= 0 && nearestEnemy.isFlying && minEnemyDist <= CONFIG.aiAAMaxRange;
             const isStormActive = tank.stormActive && tank.tankType === 'duoduo_ifv';
 
-            if(tank.isFlying && nearestEnemy.isFlying && Math.abs((tank.z || 0) - (nearestEnemy.z || 0)) <= 42 && (tank.mg > 0 || tank.suddenDeathInfiniteAmmo) && tank.mgCooldown <= 0) {
+            if(tank.isFlying && nearestEnemy.isFlying && minEnemyDist <= CONFIG.aiMGMaxRange &&
+                Math.abs((tank.z || 0) - (nearestEnemy.z || 0)) <= 42 &&
+                (tank.mg > 0 || tank.suddenDeathInfiniteAmmo) && tank.mgCooldown <= 0) {
                 fireBullet(tank, 'airmg');
                 tank.mgCooldown = .095 / tank.fireRate;
             } else if(tank.isFlying && !nearestEnemy.isFlying && minEnemyDist < 55 && canFireShell) {
                 fireBullet(tank, 'bomb');
                 tank.fireCooldown = .95 / tank.fireRate;
-            } else if(!tank.isFlying && canFireAA && (nearestEnemy.isFlying || !tank.aiCachedLOS)) {
+            } else if(!tank.isFlying && canFireAA) {
                 fireBullet(tank, 'aa');
                 tank.aaCooldown = CONFIG.aaCooldown / tank.fireRate;
             } else if(!tank.isFlying && nearestEnemy.isFlying) {
@@ -483,10 +519,7 @@ function updateAITank(tank, dt) {
                 if (canFireShell && shellRatio > 0.05) {
                     fireBullet(tank, 'shell');
                     tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
-                } else if(canFireAA) {
-                    fireBullet(tank, 'aa');
-                    tank.aaCooldown = CONFIG.aaCooldown / tank.fireRate;
-                } else if (canFireMG && minEnemyDist < 800 && mgRatio > 0.1) {
+                } else if (canFireMG && mgRatio > 0.1) {
                     fireBullet(tank, 'mg');
                     tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
                 }

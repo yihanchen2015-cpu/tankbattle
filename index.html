@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>坦克大战 - 据点争夺</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=combat-systems-3">
     <base target="_blank">
 </head>
 <body>
@@ -702,7 +702,7 @@
         <div id="gameUI">
             <div id="hud">
                 <div>HP: <div class="hp-bar"><div class="hp-fill" id="playerHp" style="width:100%"></div></div></div>
-                <div>武器: <span id="currentWeapon" style="color:#ffd700">主炮</span> | <span id="shellAmmoLabel">主炮</span>: <span id="shells">0</span> | <span id="mgAmmoLabel">机枪</span>: <span id="mg">0</span> | <span id="aaAmmoGroup">高射炮: <span id="aa">0</span></span></div>
+                <div>武器: <span id="currentWeapon" style="color:#ffd700">主炮</span> | <span id="shellAmmoLabel">主炮</span>: <span id="shells">0</span> | <span id="mgAmmoLabel">机枪</span>: <span id="mg">0</span> | <span id="aaAmmoGroup">高射炮: <span id="aa">0</span></span> | <span id="smokeAmmoGroup">烟雾弹: <span id="smoke">0</span></span></div>
                 <div>APS: <span id="apsDisplay" style="color:#00d4ff">4</span> | 重量: <span id="weightDisplay" style="color:#ffaa00">0t</span></div>
                 <div id="teamScoreDisplay"><span class="score-blue">蓝 0分</span><b>|</b><span class="score-red">红 0分</span></div>
                 <div>蓝方据点: <span style="color:#4488ff" id="blueOutposts">0</span></div>
@@ -711,7 +711,7 @@
                 <div id="environmentInfo" style="color:#bdeaff;font-size:12px;display:none;"></div>
             </div>
             <div id="battleFeed" aria-live="polite"></div>
-            <div id="weaponIndicator">1/2/3 选武器 · T切换 · [ / ] 调仰角</div>
+            <div id="weaponIndicator">1/2/3/4 选武器 · T切换 · [ / ] 调仰角</div>
             <div id="viewModeIndicator" style="position:absolute;top:62px;left:50%;transform:translateX(-50%);color:#8ee8ff;font-size:13px;">🗺 2D俯视 · V切换</div>
             <div id="timer">05:00</div>
             <div id="defenseWaveInfo">🛡 守点模式 - 撑过 03:00</div>
@@ -775,6 +775,15 @@
         <button type="button" id="combatReplaySkip" onclick="skipCombatReplay()">跳过回放</button>
     </div>
 
+    <div id="damageUpgradeOverlay" aria-live="assertive">
+        <div class="damage-upgrade-panel">
+            <div class="damage-upgrade-kicker">载具损毁 · 紧急回收完成</div>
+            <h2>战 损 升 级</h2>
+            <p id="damageUpgradeCount">选择一项强化后从基地复归</p>
+            <div id="damageUpgradeChoices"></div>
+        </div>
+    </div>
+
     <div id="matchResultOverlay" aria-live="polite">
         <div id="matchResultTitle">蓝方胜利</div>
         <div class="match-result-vs">
@@ -790,22 +799,22 @@
 
     <script src="vendor/three.min.js"></script>
     <script src="vendor/ammo.wasm.js"></script>
-    <script src="Config.js?v=base-spawn-1"></script>
+    <script src="Config.js?v=combat-systems-3"></script>
     <script src="Audio.js"></script>
     <script src="Score.js"></script>
     <script src="Replay.js"></script>
     <script src="BattleSystems.js"></script>
     <script src="TerrainDestruction.js"></script>
     <script src="Achievement.js"></script>
-    <script src="Pathfinding.js"></script>
-    <script src="UI.js?v=map-scale-1"></script>
-    <script src="Ultimate.js"></script>
-    <script src="GameCore.js?v=ai-aim-2"></script>
-    <script src="MapMechanics.js?v=map-scale-1"></script>
-    <script src="FactoryPhysics.js"></script>
-    <script src="AI.js?v=ai-aim-2"></script>
-    <script src="Combat.js?v=ai-aim-2"></script>
-    <script src="Render.js"></script>
-    <script src="ThreeRender.js"></script>
+    <script src="Pathfinding.js?v=combat-systems-3"></script>
+    <script src="UI.js?v=combat-systems-3"></script>
+    <script src="Ultimate.js?v=combat-systems-3"></script>
+    <script src="GameCore.js?v=combat-systems-3"></script>
+    <script src="MapMechanics.js?v=combat-systems-3"></script>
+    <script src="FactoryPhysics.js?v=combat-systems-3"></script>
+    <script src="AI.js?v=combat-systems-3"></script>
+    <script src="Combat.js?v=combat-systems-3"></script>
+    <script src="Render.js?v=combat-systems-3"></script>
+    <script src="ThreeRender.js?v=combat-systems-3"></script>
 </body>
 </html>

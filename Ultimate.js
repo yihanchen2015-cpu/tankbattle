@@ -604,6 +604,7 @@ function render() {
     drawTrailEffects();
     drawSnowTracks();
     drawExhaustTrails();
+    if(typeof drawSmokeClouds === 'function') drawSmokeClouds();
     
     const visibleTanks = getNearbyTanks(player.x, player.y,
         Math.max(viewWidth + projectionMargin * 2, viewHeight) / 2 + 260);

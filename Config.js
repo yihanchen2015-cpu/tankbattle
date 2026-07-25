@@ -36,6 +36,18 @@ const CONFIG = {
     aaTrackingDelay: 0.20,
     aaTrackingDuration: 0.85,
     aaTurnRate: 1.65,
+    smokeDuration: 10,
+    smokeRadius: 135,
+    smokeCooldown: 1.2,
+    smokeCharges: 4,
+    turretJamDuration: 2.2,
+    trackDamageDuration: 5,
+    trackDamageSpeedMultiplier: 0.52,
+    fuelFireDuration: 4,
+    fuelFireDamage: 18,
+    armorRicochetMinChance: 0.04,
+    armorRicochetMaxChance: 0.68,
+    goldenShieldInterval: 15,
     shellGravity: 320,
     shellDefaultElevation: 6,
     aaDefaultElevation: 12,
@@ -69,6 +81,18 @@ const CONFIG = {
     aiFlankAngle: Math.PI / 3,
     aiFocusFireRange: 600,
     aiGroupUpRange: 400,
+    aiSensorRangeBlue: 1400,
+    aiSensorRangeRed: 1700,
+    aiTargetLockTime: 0.45,
+    aiFireRateMultiplier: 0.75,
+    aiShellMaxRange: 1300,
+    aiMGMaxRange: 650,
+    aiAAMaxRange: 1450,
+    defenseRedSensorRange: 1600,
+    defenseMaxPlayerAttackers: 3,
+    defensePlayerDamageTakenMultiplier: 0.62,
+    defenseAIVsAIDamageMultiplier: 0.60,
+    defensePlayerDamageDealtMultiplier: 1.15,
     autoAimInterval: 2.0,
     autoAimRange: 1200,
     autoAimSmoothSpeed: 0.12,
@@ -300,6 +324,8 @@ let environmentState = {
     windAngle: 0,
     windStrength: 0
 };
+let smokeClouds = [];
+let damageUpgradeState = { active: false, deaths: 0, offered: [], chosen: [] };
 
 // 新模式状态变量
 let ctfFlags = { blue: null, red: null };

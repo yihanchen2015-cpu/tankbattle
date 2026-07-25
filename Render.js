@@ -1,5 +1,22 @@
 // ==================== 绘制函数 ====================
 const ALTITUDE_DRAW_SCALE = 0.18;
+function drawSmokeClouds() {
+    const clouds = typeof smokeClouds !== 'undefined' ? smokeClouds : [];
+    clouds.forEach(cloud => {
+        if(currentMap === 'factory' && typeof isFactoryEntityOnVisibleFloor === 'function' && !isFactoryEntityOnVisibleFloor(cloud)) return;
+        const progress = Math.max(0, Math.min(1, cloud.life / cloud.maxLife));
+        const radius = cloud.radius * Math.min(1, (cloud.maxLife - cloud.life) * 2.2);
+        const gradient = ctx.createRadialGradient(cloud.x, cloud.y, radius * .18, cloud.x, cloud.y, radius);
+        gradient.addColorStop(0, `rgba(205,214,216,${.58 * progress})`);
+        gradient.addColorStop(.62, `rgba(135,148,151,${.42 * progress})`);
+        gradient.addColorStop(1, 'rgba(90,100,102,0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(cloud.x, cloud.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
 function drawTerrainZones() {
     terrainZones.filter(z => z.type === 'water').forEach(z => {
         const water = ctx.createLinearGradient(z.x, z.y, z.x + z.w, z.y + z.h);
@@ -1609,10 +1626,14 @@ function updateHUD() {
         document.getElementById('shells').textContent = '∞';
         document.getElementById('mg').textContent = '∞';
         document.getElementById('aa').textContent = player.aa || 0;
+        const smoke = document.getElementById('smoke');
+        if(smoke) smoke.textContent = player.smoke || 0;
     } else {
         document.getElementById('shells').textContent = player.shells;
         document.getElementById('mg').textContent = player.mg;
         document.getElementById('aa').textContent = player.aa || 0;
+        const smoke = document.getElementById('smoke');
+        if(smoke) smoke.textContent = player.smoke || 0;
     }
     const blueCount = outposts.filter(o => o.owner === 'blue').length;
     const redCount = outposts.filter(o => o.owner === 'red').length;

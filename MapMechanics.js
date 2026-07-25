@@ -20,6 +20,7 @@ function initializeMapMechanics() {
     mapMechanicsState = createEmptyMapMechanicsState();
     if(currentMap === 'volcano') generateVolcanoMechanics();
     else if(currentMap === 'factory') generateFactoryMechanics();
+    if(typeof initializeFactoryPhysics === 'function') initializeFactoryPhysics();
 }
 
 function generateVolcanoMechanics() {
@@ -204,7 +205,6 @@ function generateFactoryMechanics() {
         lockY: 0,
         destination: null
     };
-    if(typeof initializeFactoryPhysics === 'function') initializeFactoryPhysics();
 }
 
 function finalizeMapMechanicsElements() {
@@ -478,7 +478,6 @@ function updateFactoryMechanics(dt, tanks) {
     updateFactoryFans(dt,tanks);
     updateFactoryForklift(dt);
     updateCrane(dt, tanks);
-    if(typeof updateFactoryPhysics === 'function') updateFactoryPhysics(dt,tanks);
     updateFactoryRepairRobots(dt);
     updateFactoryFire(dt, tanks);
 }

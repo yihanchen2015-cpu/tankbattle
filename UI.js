@@ -553,6 +553,7 @@ function setupControls() {
         if(e.code === 'Digit1' && !e.repeat) selectWeaponSlot(0);
         if(e.code === 'Digit2' && !e.repeat) selectWeaponSlot(1);
         if(e.code === 'Digit3' && !e.repeat) selectWeaponSlot(2);
+        if(e.code === 'Digit4' && !e.repeat) selectWeaponSlot(3);
         if(e.code === 'BracketLeft' && !e.repeat) adjustGunElevation(-CONFIG.gunElevationStep);
         if(e.code === 'BracketRight' && !e.repeat) adjustGunElevation(CONFIG.gunElevationStep);
         if(e.code === 'KeyG') activateUltimate();
@@ -630,7 +631,11 @@ function setupControls() {
     }
     
     const fireBtn = document.getElementById('fireBtn');
-    const fireTouchStart = (e) => { e.preventDefault(); mouse.down = true; };
+    const fireTouchStart = (e) => {
+        e.preventDefault();
+        mouse.down = true;
+        if(currentWeapon === 'smoke' && typeof deploySmokeGrenade === 'function') deploySmokeGrenade(player);
+    };
     const fireTouchEnd = (e) => { e.preventDefault(); mouse.down = false; };
     fireBtn.addEventListener('touchstart', fireTouchStart, {passive: false});
     fireBtn.addEventListener('touchend', fireTouchEnd, {passive: false});
@@ -659,7 +664,11 @@ function setupControls() {
 
     
     const pcFireBtn = document.getElementById('pcFireBtn');
-    const pcFireDown = () => { mouse.down = true; pcFireBtn.classList.add('active'); };
+    const pcFireDown = () => {
+        mouse.down = true;
+        pcFireBtn.classList.add('active');
+        if(currentWeapon === 'smoke' && typeof deploySmokeGrenade === 'function') deploySmokeGrenade(player);
+    };
     const pcFireUp = () => { mouse.down = false; pcFireBtn.classList.remove('active'); };
     const pcFireLeave = () => { mouse.down = false; pcFireBtn.classList.remove('active'); };
     pcFireBtn.addEventListener('mousedown', pcFireDown);
@@ -750,9 +759,9 @@ function resetJuiceCue() {
 function switchWeapon() {
     console.log('[WEAPON] Switching weapon, current:', currentWeapon);
     const helicopter = !!(player && player.isFlying);
-    const weapons = helicopter ? ['bomb', 'airmg'] : ['shell', 'mg', 'aa'];
-    const weaponNames = { shell: '主炮', mg: '机枪', aa: '高射炮', bomb: '垂直炸药包', airmg: '空对空机枪' };
-    const weaponColors = { shell: '#ff8800', mg: '#ffff00', aa: '#ff44ff', bomb: '#ff6b35', airmg: '#7df4ff' };
+    const weapons = helicopter ? ['bomb', 'airmg'] : ['shell', 'mg', 'aa', 'smoke'];
+    const weaponNames = { shell: '主炮', mg: '机枪', aa: '高射炮', smoke: '烟雾弹', bomb: '垂直炸药包', airmg: '空对空机枪' };
+    const weaponColors = { shell: '#ff8800', mg: '#ffff00', aa: '#ff44ff', smoke: '#d3dcde', bomb: '#ff6b35', airmg: '#7df4ff' };
 
     const idx = weapons.indexOf(currentWeapon);
     currentWeapon = weapons[(Math.max(-1, idx) + 1) % weapons.length];
@@ -773,11 +782,11 @@ function switchWeapon() {
 
 function selectWeaponSlot(index) {
     if(!player) return;
-    const weapons = player.isFlying ? ['bomb', 'airmg'] : ['shell', 'mg', 'aa'];
+    const weapons = player.isFlying ? ['bomb', 'airmg'] : ['shell', 'mg', 'aa', 'smoke'];
     if(index < 0 || index >= weapons.length) return;
     currentWeapon = weapons[index];
     updateWeaponHudMode(player);
-    const names = { shell: '主炮', mg: '机枪', aa: '高射炮', bomb: '垂直炸药包', airmg: '空对空机枪' };
+    const names = { shell: '主炮', mg: '机枪', aa: '高射炮', smoke: '烟雾弹', bomb: '垂直炸药包', airmg: '空对空机枪' };
     showMessage(`武器 ${index + 1}：${names[currentWeapon]}`, '#8ee8ff');
 }
 
@@ -795,15 +804,17 @@ function adjustGunElevation(delta) {
 function updateWeaponHudMode(tank) {
     if(!tank) return;
     const helicopter = !!tank.isFlying;
-    const names = { shell: '主炮', mg: '机枪', aa: '高射炮', bomb: '垂直炸药包', airmg: '空对空机枪' };
+    const names = { shell: '主炮', mg: '机枪', aa: '高射炮', smoke: '烟雾弹', bomb: '垂直炸药包', airmg: '空对空机枪' };
     const current = document.getElementById('currentWeapon');
     const shellLabel = document.getElementById('shellAmmoLabel');
     const mgLabel = document.getElementById('mgAmmoLabel');
     const aaGroup = document.getElementById('aaAmmoGroup');
+    const smokeGroup = document.getElementById('smokeAmmoGroup');
     if(current) current.textContent = names[currentWeapon] || names.shell;
     if(shellLabel) shellLabel.textContent = helicopter ? '炸药包' : '主炮';
     if(mgLabel) mgLabel.textContent = helicopter ? '空对空机枪' : '机枪';
     if(aaGroup) aaGroup.style.display = helicopter ? 'none' : 'inline';
+    if(smokeGroup) smokeGroup.style.display = helicopter ? 'none' : 'inline';
     const switchLabel = document.querySelector('#mobileSwitchBtn span:last-child');
     if(switchLabel) switchLabel.textContent = names[currentWeapon] || '切换武器';
 }

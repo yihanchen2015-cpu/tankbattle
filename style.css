@@ -1724,3 +1724,81 @@
             border-radius: 2px;
             transition: width 0.5s;
         }
+/* 战损升级：玩家阵亡时暂停战斗，并用纯黑画面承接复活选择。 */
+#damageUpgradeOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    box-sizing: border-box;
+    background: #000;
+    color: #fff;
+}
+#damageUpgradeOverlay.active {
+    display: flex;
+    animation: damage-blackout .35s ease-out;
+}
+.damage-upgrade-panel {
+    width: min(920px, 94vw);
+    text-align: center;
+}
+.damage-upgrade-kicker {
+    color: #9a9a9a;
+    letter-spacing: .32em;
+    font-size: 13px;
+}
+.damage-upgrade-panel h2 {
+    margin: 12px 0 8px;
+    color: #ffd84a;
+    font-size: clamp(38px, 7vw, 72px);
+    letter-spacing: .24em;
+    text-shadow: 0 0 28px rgba(255, 199, 45, .36);
+}
+.damage-upgrade-panel p {
+    color: #c8c8c8;
+    margin-bottom: 28px;
+}
+#damageUpgradeChoices {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+}
+.damage-upgrade-card {
+    min-height: 170px;
+    padding: 24px 18px;
+    border: 1px solid #675921;
+    border-radius: 14px;
+    color: #fff;
+    background: linear-gradient(155deg, #181818, #090909);
+    cursor: pointer;
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.damage-upgrade-card:hover,
+.damage-upgrade-card:focus-visible {
+    transform: translateY(-5px);
+    border-color: #ffd84a;
+    box-shadow: 0 12px 36px rgba(255, 208, 56, .18);
+    outline: none;
+}
+.damage-upgrade-card strong {
+    display: block;
+    margin-bottom: 14px;
+    color: #ffd84a;
+    font-size: 21px;
+}
+.damage-upgrade-card span {
+    display: block;
+    color: #d3d3d3;
+    line-height: 1.6;
+}
+@keyframes damage-blackout {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@media (max-width: 720px) {
+    #damageUpgradeChoices { grid-template-columns: 1fr; }
+    .damage-upgrade-card { min-height: 105px; }
+}

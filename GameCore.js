@@ -6,6 +6,8 @@ function startGame() {
         return;
     }
     resetMatchStats();
+    smokeClouds = [];
+    damageUpgradeState = { active: false, deaths: 0, offered: [], chosen: [] };
     if(typeof resetTeamScores === 'function') resetTeamScores();
     if(typeof resetCombatReplay === 'function') resetCombatReplay();
     if(typeof resetBattleSystems === 'function') resetBattleSystems();
@@ -28,6 +30,8 @@ function startGame() {
     document.getElementById('gameUI').classList.add('active');
     document.getElementById('gameUI').style.display = 'block';
     document.getElementById('ultimateBar').style.display = 'block';
+    const damageUpgradeOverlay = document.getElementById('damageUpgradeOverlay');
+    if(damageUpgradeOverlay) damageUpgradeOverlay.classList.remove('active');
     document.getElementById('defenseWaveInfo').style.display = gameMode === 'defense' ? 'block' : 'none';
     document.getElementById('sneakModeInfo').style.display = gameMode === 'sneak' ? 'block' : 'none';
     const specialModeInfo = document.getElementById('specialModeInfo');
@@ -550,13 +554,13 @@ function spawnTanks(tankData, ammo, mg, aa) {
         const baseSkill = gameConfig.difficulty === 'easy' ? 0.6 : gameConfig.difficulty === 'hard' ? 1.5 : 1.0;
         let redSkillMult = 1.4;
         if (gameMode === 'sneak') redSkillMult = 1.6;
-        else if (gameMode === 'defense') redSkillMult = 1.5;
+        else if (gameMode === 'defense') redSkillMult = 1.10;
         else if (gameMode === 'ctf') redSkillMult = 1.3;
         else if (gameMode === 'infection') redSkillMult = 1.8;
         else if (gameMode === 'storm') redSkillMult = 1.2;
         tank.aiSkillLevel = baseSkill * redSkillMult;
-        tank.aiDamageMult = gameConfig.difficulty === 'easy' ? 1.03 : gameConfig.difficulty === 'hard' ? 1.16 : 1.10;
-        tank.hp = Math.floor(tank.hp * 1.25);
+        tank.aiDamageMult = gameMode === 'defense' ? 1.0 : (gameConfig.difficulty === 'easy' ? 1.03 : gameConfig.difficulty === 'hard' ? 1.16 : 1.10);
+        tank.hp = Math.floor(tank.hp * (gameMode === 'defense' ? 1.05 : 1.25));
         tank.maxHp = tank.hp;
         tank.aiBehavior = AI_BEHAVIOR.NONE;
         tank.aiBehaviorTimer = 0;
@@ -585,7 +589,7 @@ function createTank(data, x, y, team, isPlayer) {
         muzzleFlashType: null,
         hp: data.hp, maxHp: data.maxHp,
         speed: data.speed, turnSpeed: data.turnSpeed,
-        armor: data.armor, fireRate: data.fireRate,
+        armor: data.armor, fireRate: data.fireRate * (isPlayer ? 1 : CONFIG.aiFireRateMultiplier),
         color: data.color, accent: data.accent, shape: data.shape,
         weight: data.weight || 1.0,
         isFlying: !!data.isFlying,
@@ -600,6 +604,9 @@ function createTank(data, x, y, team, isPlayer) {
         maxShells: data.maxShells, maxMG: data.maxMG, maxAA: data.maxAA ?? 15,
         apsCharges: CONFIG.apsCharges, apsCooldown: 0,
         aaCooldown: 0,
+        smoke: data.isFlying ? 0 : CONFIG.smokeCharges,
+        maxSmoke: data.isFlying ? 0 : CONFIG.smokeCharges,
+        smokeCooldown: 0,
         fireCooldown: 0, mgCooldown: 0,
         repairCooldown: 0,
         ammoRackExploded: false,
@@ -635,6 +642,15 @@ function createTank(data, x, y, team, isPlayer) {
         aiAimAngle: null, aiAimTarget: null,
         aiAmmoSaveMode: false, aiLastState: '', aiTeamCoord: 0,
         aiReactionDelay: 0.1, aiSkillLevel: 0.85,
+        aiTrackedTarget: null, aiTargetLockTimer: 0,
+        turretJamTimer: 0,
+        trackDamageTimer: 0,
+        trackRepairMultiplier: 1,
+        fuelFireTimer: 0,
+        goldenShieldEnabled: false,
+        goldenShieldReady: false,
+        goldenShieldTimer: CONFIG.goldenShieldInterval,
+        damageUpgradeSpeedBoost: 0,
         aiBehavior: AI_BEHAVIOR.NONE,
         aiBehaviorTimer: 0,
         aiFlankTarget: null,
@@ -836,7 +852,11 @@ function update(dt) {
     allies.forEach(t => { if(!t.dead) updateAITank(t, dt); });
     enemies.forEach(t => { if(!t.dead) updateAITank(t, dt); });
     updateEnvironment(dt);
+    updateSmokeClouds(dt);
     if(typeof updateMapMechanics === 'function') updateMapMechanics(dt);
+    if(typeof updateFactoryPhysics === 'function') {
+        updateFactoryPhysics(dt, [player, ...allies, ...enemies].filter(tank => tank && !tank.dead));
+    }
     if(typeof updateBattleSystems === 'function') updateBattleSystems(dt);
     if(typeof updateTerrainDestruction === 'function') updateTerrainDestruction(dt);
     updateBullets(dt);
@@ -935,6 +955,7 @@ function findAutoAimTarget(tank) {
 
 function performAutoAimRotation(tank, dt) {
     if (!tank.autoAimTarget || tank.autoAimTarget.dead) return;
+    if((tank.turretJamTimer || 0) > 0) return;
     const target = tank.autoAimTarget;
     const predicted = getPredictedAimPoint(tank,target,CONFIG.bulletSpeed,CONFIG.autoAimPredictFactor);
     const targetAngle = Math.atan2(predicted.y - tank.y, predicted.x - tank.x);
@@ -1070,7 +1091,9 @@ function updateTank(tank, dt) {
         const worldMouse = screenToWorld(mouse.x, mouse.y);
         const worldMouseX = worldMouse.x;
         const worldMouseY = worldMouse.y;
-        tank.turretAngle = Math.atan2(worldMouseY - tank.y, worldMouseX - tank.x);
+        if((tank.turretJamTimer || 0) <= 0) {
+            tank.turretAngle = Math.atan2(worldMouseY - tank.y, worldMouseX - tank.x);
+        }
         if(mouse.down) {
             if(currentWeapon === 'shell') {
                 if(tank.fireCooldown <= 0 && (tank.shells > 0 || tank.suddenDeathInfiniteAmmo)) {
@@ -1100,6 +1123,8 @@ function updateTank(tank, dt) {
                     fireBullet(tank, 'airmg');
                     tank.mgCooldown = 0.095 / tank.fireRate;
                 }
+            } else if(currentWeapon === 'smoke') {
+                deploySmokeGrenade(tank);
             }
         }
     }
@@ -1239,6 +1264,17 @@ function updateStatusEffects(tank, dt) {
     if(!tank || tank.dead) return;
     if(tank.muzzleFlashTimer > 0) tank.muzzleFlashTimer = Math.max(0, tank.muzzleFlashTimer - dt);
     if(tank.apsCooldown > 0) tank.apsCooldown -= dt;
+    if(tank.smokeCooldown > 0) tank.smokeCooldown = Math.max(0, tank.smokeCooldown - dt);
+    if(tank.turretJamTimer > 0) tank.turretJamTimer = Math.max(0, tank.turretJamTimer - dt);
+    if(tank.trackDamageTimer > 0) tank.trackDamageTimer = Math.max(0, tank.trackDamageTimer - dt);
+    if(tank.fuelFireTimer > 0) tank.fuelFireTimer = Math.max(0, tank.fuelFireTimer - dt);
+    if(tank.goldenShieldEnabled && !tank.goldenShieldReady) {
+        tank.goldenShieldTimer = Math.max(0, (tank.goldenShieldTimer ?? CONFIG.goldenShieldInterval) - dt);
+        if(tank.goldenShieldTimer <= 0) {
+            tank.goldenShieldReady = true;
+            if(tank === player && typeof showMessage === 'function') showMessage('✦ 金色护盾已生成', '#ffe45c');
+        }
+    }
     if(tank.ricochetSpeedBoostTimer > 0) {
         tank.ricochetSpeedBoostTimer -= dt;
         if(tank.ricochetSpeedBoostTimer <= 0) tank.ricochetSpeedBoost = 0;
@@ -1266,9 +1302,146 @@ function updateStatusEffects(tank, dt) {
     }
 }
 
+function updateSmokeClouds(dt) {
+    for(let i = smokeClouds.length - 1; i >= 0; i--) {
+        const cloud = smokeClouds[i];
+        cloud.life -= dt;
+        if(cloud.life <= 0) {
+            smokeClouds.splice(i, 1);
+            continue;
+        }
+        if(Math.random() < Math.min(1, dt * 18)) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = Math.sqrt(Math.random()) * cloud.radius * .72;
+            createParticles(cloud.x + Math.cos(angle) * radius, cloud.y + Math.sin(angle) * radius,
+                1, Math.random() < .5 ? '#aeb8ba' : '#d3d9da', 2.4);
+        }
+    }
+}
+
+const DAMAGE_UPGRADE_POOL = [
+    {
+        id:'trackRepair',
+        title:'快速履带抢修',
+        description:'履带受损持续时间减少 50%',
+        apply:tank=>{ tank.trackRepairMultiplier = Math.max(.2, (tank.trackRepairMultiplier || 1) * .5); }
+    },
+    {
+        id:'goldenShield',
+        title:'金色反爆护盾',
+        description:'每 15 秒生成护盾，抵挡下一次攻击并产生小型爆炸',
+        apply:tank=>{ tank.goldenShieldEnabled = true; tank.goldenShieldReady = false; tank.goldenShieldTimer = CONFIG.goldenShieldInterval; }
+    },
+    {
+        id:'speed',
+        title:'超频传动',
+        description:'最大速度永久提升 15%',
+        apply:tank=>{ tank.damageUpgradeSpeedBoost = (tank.damageUpgradeSpeedBoost || 0) + .15; }
+    },
+    {
+        id:'armor',
+        title:'附加装甲板',
+        description:'基础装甲永久增加 0.25',
+        apply:tank=>{ tank.armor += .25; }
+    },
+    {
+        id:'reload',
+        title:'自动装填优化',
+        description:'射速永久提升 10%',
+        apply:tank=>{ tank.fireRate *= 1.1; }
+    },
+    {
+        id:'vitality',
+        title:'战场翻修',
+        description:'最大生命永久提升 12%，并立即恢复',
+        apply:tank=>{ tank.maxHp = Math.round(tank.maxHp * 1.12); tank.hp = tank.maxHp; }
+    }
+];
+
+function beginDamageUpgrade() {
+    if(!player || !player.dead || damageUpgradeState.active) return false;
+    damageUpgradeState.active = true;
+    damageUpgradeState.deaths++;
+    const shuffled = DAMAGE_UPGRADE_POOL.slice().sort(() => Math.random() - .5);
+    damageUpgradeState.offered = shuffled.slice(0, 3).map(upgrade => upgrade.id);
+    gameState = 'damageUpgrade';
+    mouse.down = false;
+    if(typeof stopEngineAudio === 'function') stopEngineAudio();
+    const overlay = document.getElementById('damageUpgradeOverlay');
+    const choices = document.getElementById('damageUpgradeChoices');
+    const count = document.getElementById('damageUpgradeCount');
+    if(count) count.textContent = `第 ${damageUpgradeState.deaths} 次战损 · 选择一项后从基地复归`;
+    if(choices) {
+        choices.innerHTML = '';
+        damageUpgradeState.offered.forEach(id => {
+            const upgrade = DAMAGE_UPGRADE_POOL.find(entry => entry.id === id);
+            if(!upgrade) return;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'damage-upgrade-card';
+            button.innerHTML = `<strong>${upgrade.title}</strong><span>${upgrade.description}</span>`;
+            button.addEventListener('click', () => chooseDamageUpgrade(id));
+            choices.appendChild(button);
+        });
+    }
+    if(overlay) overlay.classList.add('active');
+    return true;
+}
+
+function chooseDamageUpgrade(id) {
+    if(!damageUpgradeState.active || !damageUpgradeState.offered.includes(id) || !player) return false;
+    const upgrade = DAMAGE_UPGRADE_POOL.find(entry => entry.id === id);
+    if(!upgrade) return false;
+    upgrade.apply(player);
+    damageUpgradeState.chosen.push(id);
+    damageUpgradeState.active = false;
+    damageUpgradeState.offered = [];
+    respawnPlayerNearBase();
+    return true;
+}
+
+function respawnPlayerNearBase() {
+    if(!player) return false;
+    const deployment = typeof findBaseDeploymentPoint === 'function' && bases.blue
+        ? findBaseDeploymentPoint('blue', 0)
+        : bases.blue
+        ? {x:bases.blue.x + bases.blue.w / 2 + 100, y:bases.blue.y + bases.blue.h / 2}
+        : {x:Math.min(CONFIG.mapWidth - 120, 260), y:CONFIG.mapHeight / 2};
+    player.x = deployment.x;
+    player.y = deployment.y;
+    if(currentMap === 'factory' && bases.blue) {
+        player.factoryFloor = Number.isInteger(bases.blue.factoryFloor) ? bases.blue.factoryFloor : 1;
+        player.z = Number.isFinite(bases.blue.z) ? bases.blue.z : getFactoryFloorZ(player.factoryFloor);
+    } else if(!player.isFlying) player.z = 0;
+    player.dead = false;
+    player.hp = player.maxHp;
+    player.invincible = 4;
+    player.canMove = true;
+    player.turretJamTimer = 0;
+    player.trackDamageTimer = 0;
+    player.fuelFireTimer = 0;
+    player.burnTimer = 0;
+    player.fireCooldown = 0;
+    player.mgCooldown = 0;
+    player.aaCooldown = 0;
+    player.apsCharges = Math.max(2, player.apsCharges || 0);
+    player.shells = Math.max(player.shells || 0, Math.ceil(player.maxShells * .3));
+    player.mg = Math.max(player.mg || 0, Math.ceil(player.maxMG * .3));
+    player.aa = Math.max(player.aa || 0, Math.ceil(player.maxAA * .25));
+    player.smoke = Math.max(player.smoke || 0, 2);
+    player.prevPos = {x:player.x,y:player.y};
+    const overlay = document.getElementById('damageUpgradeOverlay');
+    if(overlay) overlay.classList.remove('active');
+    gameState = 'playing';
+    lastTime = performance.now();
+    if(typeof showMessage === 'function') showMessage('⚙ 战损升级完成，已从基地复归', '#ffd84a');
+    return true;
+}
+
 
 // ==================== 检查胜利条件 ====================
 function checkWinCondition() {
+    if(damageUpgradeState.active || gameState === 'damageUpgrade') return;
     if(gameMode === 'defense') {
         const blueAlive = !player.dead || allies.some(a => !a.dead);
         if(!blueAlive) { endGame('defenseFailAllDead'); return; }
@@ -1408,6 +1581,8 @@ function resetGame() {
     if(typeof stopEngineAudio === 'function') stopEngineAudio();
     if(typeof resetBattleSystems === 'function') resetBattleSystems();
     selectedTank = null;
+    smokeClouds = [];
+    damageUpgradeState = { active: false, deaths: 0, offered: [], chosen: [] };
     allies = []; enemies = []; bullets = []; particles = []; exhaustTrails = [];
     trailEffects = []; damageNumbers = []; outposts = []; aiTanks = []; player = null;
 
@@ -1426,6 +1601,8 @@ function resetGame() {
     document.getElementById('message').style.display = 'none';
     const resultOverlay = document.getElementById('matchResultOverlay');
     if(resultOverlay) resultOverlay.classList.remove('active');
+    const damageUpgradeOverlay = document.getElementById('damageUpgradeOverlay');
+    if(damageUpgradeOverlay) damageUpgradeOverlay.classList.remove('active');
     document.getElementById('startBtn').disabled = true;
     const threeHudLayer = document.getElementById('threeHudLayer');
     const threeThreatBorder = document.getElementById('threeThreatBorder');

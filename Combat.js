@@ -45,10 +45,12 @@ function fireBullet(tank, type) {
         trackingRange: type === 'aa' ? CONFIG.aaTrackingRange : 0,
         trackingTarget: null,
         trackingLocked: false,
+        maxFlightAngle: type === 'aa' ? elevation : null,
         canRicochet: type === 'shell',
         ricocheted: false,
         maxTargetHits: 1,
-        ignoresObstacles: type === 'aa' || type === 'airmg' || !!tank.isFlying,
+        // 高射炮不再拥有穿墙特权；它仍可凭真实 Z 高度从低矮障碍上方飞过。
+        ignoresObstacles: type === 'airmg' || (!!tank.isFlying && type !== 'aa'),
         hitTanks: new Set(),
         armorIgnore: tank.tankType === 'duoduo_spat',
         elevation: elevationDeg,
@@ -76,6 +78,27 @@ function fireBullet(tank, type) {
         type === 'bomb' ? '#ff6840' : (type === 'shell' ? '#ffaa00' : (type === 'aa' ? '#ff44ff' : '#ffff88')),
         type === 'shell' || type === 'bomb' ? 1.5 : (type === 'aa' ? 1.2 : 0.5));
     if(typeof playWorldSound === 'function') playWorldSound(type === 'airmg' ? 'mg' : type, tank.x, tank.y, tank.isPlayer ? 1 : 0.72);
+}
+
+function deploySmokeGrenade(tank) {
+    if(!tank || tank.dead || tank.isFlying || (tank.smoke || 0) <= 0 || (tank.smokeCooldown || 0) > 0) return false;
+    const angle = typeof getTankFiringAngle === 'function' ? getTankFiringAngle(tank) : tank.turretAngle;
+    const distance = 95;
+    smokeClouds.push({
+        x: tank.x + Math.cos(angle) * distance,
+        y: tank.y + Math.sin(angle) * distance,
+        z: tank.z || 0,
+        radius: CONFIG.smokeRadius,
+        life: CONFIG.smokeDuration,
+        maxLife: CONFIG.smokeDuration,
+        team: tank.team
+    });
+    tank.smoke--;
+    tank.smokeCooldown = CONFIG.smokeCooldown;
+    createParticles(tank.x + Math.cos(angle) * 40, tank.y + Math.sin(angle) * 40, 12, '#c8ced0', 1.3);
+    if(typeof playWorldSound === 'function') playWorldSound('capture', tank.x, tank.y, tank.isPlayer ? .55 : .35);
+    if(tank === player && typeof showMessage === 'function') showMessage('💨 烟雾弹展开：遮断敌方视线', '#d7e1e4');
+    return true;
 }
 
 function updateBullets(dt) {
@@ -124,8 +147,11 @@ function updateBullets(dt) {
             b.vx = Math.cos(currentAngle) * speed;
             b.vy = Math.sin(currentAngle) * speed;
             const targetZ = (target.z || 0) + (target.isFlying ? 8 : 22);
-            const desiredVz = Math.max(-650, Math.min(650, (targetZ - b.z) * 1.4));
+            const horizontalWorldSpeed = Math.hypot(b.vx, b.vy) * 60;
+            const maxTrackingVz = Math.max(0, horizontalWorldSpeed * Math.tan(b.maxFlightAngle || 0));
+            const desiredVz = Math.max(-650, Math.min(maxTrackingVz, (targetZ - b.z) * 1.4));
             b.vz += (desiredVz - b.vz) * Math.min(1, dt * 1.4);
+            b.vz = Math.min(b.vz, maxTrackingVz);
         }
         if(b.type === 'bomb') {
             b.z += b.vz * dt;
@@ -162,10 +188,14 @@ function updateBullets(dt) {
         if(typeof handleMapMechanicProjectile === 'function' && handleMapMechanicProjectile(b)) { bullets.splice(i, 1); continue; }
         if(b.ignoresObstacles) continue;
         for(let obs of obstacles) {
-            if(b.x > obs.x && b.x < obs.x + obs.w && b.y > obs.y && b.y < obs.y + obs.h) {
-                if(typeof factoryObstacleMatchesProjectile === 'function' && !factoryObstacleMatchesProjectile(obs, b)) continue;
-                if(obs.type === 'factoryPlatform' && typeof factoryPlatformMatchesProjectile === 'function' && !factoryPlatformMatchesProjectile(obs, b)) continue;
-                if(obs.type !== 'factoryPlatform' && (b.z || 0) > getObstacleWorldHeight(obs)) continue;
+            if(typeof factoryObstacleMatchesProjectile === 'function' && !factoryObstacleMatchesProjectile(obs, b)) continue;
+            if(obs.type === 'factoryPlatform' && typeof factoryPlatformMatchesProjectile === 'function' && !factoryPlatformMatchesProjectile(obs, b)) continue;
+            const contact = getProjectileObstacleContact(b, obs);
+            if(contact) {
+                if(obs.type !== 'factoryPlatform' && contact.z > getObstacleWorldHeight(obs)) continue;
+                b.x = contact.x;
+                b.y = contact.y;
+                b.z = contact.z;
                 if(typeof tryRicochetBullet === 'function' && tryRicochetBullet(b, obs)) {
                     createParticles(b.x, b.y, 12, '#9ffaff', 1.45);
                     if(typeof playWorldSound === 'function') playWorldSound('aa', b.x, b.y, b.owner && b.owner.isPlayer ? 0.9 : 0.55);
@@ -179,6 +209,36 @@ function updateBullets(dt) {
             }
         }
     }
+}
+
+// 用连续线段而不是仅检查本帧终点，避免高速高射炮穿过较薄的墙体。
+function getProjectileObstacleContact(bullet, obs) {
+    const x0 = Number.isFinite(bullet.prevX) ? bullet.prevX : bullet.x;
+    const y0 = Number.isFinite(bullet.prevY) ? bullet.prevY : bullet.y;
+    const z0 = Number.isFinite(bullet.prevZ) ? bullet.prevZ : bullet.z;
+    const dx = bullet.x - x0;
+    const dy = bullet.y - y0;
+    let tMin = 0;
+    let tMax = 1;
+    const clipAxis = (start, delta, min, max) => {
+        if(Math.abs(delta) < 1e-9) return start >= min && start <= max;
+        let near = (min - start) / delta;
+        let far = (max - start) / delta;
+        if(near > far) [near, far] = [far, near];
+        tMin = Math.max(tMin, near);
+        tMax = Math.min(tMax, far);
+        return tMin <= tMax;
+    };
+    if(!clipAxis(x0, dx, obs.x, obs.x + obs.w) ||
+       !clipAxis(y0, dy, obs.y, obs.y + obs.h) ||
+       tMax < 0 || tMin > 1) return null;
+    const t = Math.max(0, tMin);
+    return {
+        t,
+        x: x0 + dx * t,
+        y: y0 + dy * t,
+        z: z0 + (bullet.z - z0) * t
+    };
 }
 
 function getBulletObstacleImpact(bullet, obs) {
@@ -229,10 +289,113 @@ function tryRicochetBullet(bullet, obs) {
     return true;
 }
 
+function getTankArmorRicochetChance(tank, bullet, actualArmor) {
+    if(!tank || !bullet || bullet.type !== 'shell' || bullet.ricocheted || bullet.armorIgnore) return 0;
+    const speed = Math.hypot(bullet.vx, bullet.vy);
+    if(speed < .001 || actualArmor < .65) return 0;
+    const nx = (bullet.x - tank.x) / Math.max(1, Math.hypot(bullet.x - tank.x, bullet.y - tank.y));
+    const ny = (bullet.y - tank.y) / Math.max(1, Math.hypot(bullet.x - tank.x, bullet.y - tank.y));
+    const incidence = Math.abs((bullet.vx / speed) * nx + (bullet.vy / speed) * ny);
+    const obliquity = 1 - Math.min(1, incidence);
+    const armorFactor = Math.max(0, Math.min(.34, (actualArmor - .65) * .12));
+    return Math.max(CONFIG.armorRicochetMinChance,
+        Math.min(CONFIG.armorRicochetMaxChance, CONFIG.armorRicochetMinChance + armorFactor + obliquity * .48));
+}
+
+function tryTankArmorRicochet(tank, bullet, actualArmor) {
+    const chance = getTankArmorRicochetChance(tank, bullet, actualArmor);
+    if(chance <= 0 || Math.random() >= chance) return false;
+    const distance = Math.max(1, Math.hypot(bullet.x - tank.x, bullet.y - tank.y));
+    const nx = (bullet.x - tank.x) / distance;
+    const ny = (bullet.y - tank.y) / distance;
+    const dot = bullet.vx * nx + bullet.vy * ny;
+    bullet.vx -= 2 * dot * nx;
+    bullet.vy -= 2 * dot * ny;
+    bullet.x = tank.x + nx * (CONFIG.tankSize + 5);
+    bullet.y = tank.y + ny * (CONFIG.tankSize + 5);
+    bullet.prevX = bullet.x;
+    bullet.prevY = bullet.y;
+    bullet.damage *= CONFIG.ricochetDamageMultiplier;
+    bullet.ricocheted = true;
+    bullet.maxTargetHits = Math.max(2, bullet.maxTargetHits || 1);
+    if(bullet.hitTanks) bullet.hitTanks.add(tank.id);
+    createParticles(bullet.x, bullet.y, 16, '#b7f7ff', 1.4);
+    if(typeof showDamageNumber === 'function') {
+        damageNumbers.push({x:tank.x,y:tank.y-30,z:48,text:'跳弹！',life:1,maxLife:1,vy:-34,vz:45,color:'#b7f7ff'});
+    }
+    if(tank === player && typeof showMessage === 'function') showMessage('◇ 装甲跳弹！', '#b7f7ff');
+    if(typeof playWorldSound === 'function') playWorldSound('aa', bullet.x, bullet.y, tank === player ? .9 : .55);
+    return true;
+}
+
+function getTankHitZone(tank, projectile) {
+    if(!tank || !projectile) return 'hull';
+    const relativeZ = (projectile.z || 0) - (tank.z || 0);
+    if(relativeZ >= 29) return 'turret';
+    if(relativeZ <= 15) return 'track';
+    const dx = projectile.x - tank.x;
+    const dy = projectile.y - tank.y;
+    const sideOffset = -Math.sin(tank.angle || 0) * dx + Math.cos(tank.angle || 0) * dy;
+    const forwardOffset = Math.cos(tank.angle || 0) * dx + Math.sin(tank.angle || 0) * dy;
+    if(Math.abs(sideOffset) > Math.max(10, Math.abs(forwardOffset) * .72)) return 'fuel';
+    return 'hull';
+}
+
+function applyTankHitReaction(tank, projectile) {
+    if(!tank || tank.dead || !projectile || !['shell','aa','rocket'].includes(projectile.type)) return 'hull';
+    const zone = getTankHitZone(tank, projectile);
+    if(zone === 'turret') {
+        tank.turretJamTimer = Math.max(tank.turretJamTimer || 0, CONFIG.turretJamDuration);
+        createParticles(tank.x, tank.y, 10, '#e8c26b', 1);
+        if(tank === player && typeof showMessage === 'function') showMessage('⚙ 炮塔卡壳：暂时无法转动', '#ffc867');
+    } else if(zone === 'track') {
+        const duration = CONFIG.trackDamageDuration * Math.max(.2, tank.trackRepairMultiplier || 1);
+        tank.trackDamageTimer = Math.max(tank.trackDamageTimer || 0, duration);
+        createParticles(tank.x, tank.y + 15, 12, '#806f5c', 1.2);
+        if(tank === player && typeof showMessage === 'function') showMessage('⛓ 履带受损：速度下降', '#e1b278');
+    } else if(zone === 'fuel') {
+        tank.fuelFireTimer = Math.max(tank.fuelFireTimer || 0, CONFIG.fuelFireDuration);
+        tank.burnTimer = Math.max(tank.burnTimer || 0, CONFIG.fuelFireDuration);
+        tank.burnTickTimer = Math.min(tank.burnTickTimer || 1, .5);
+        tank.burnDamage = Math.max(tank.burnDamage || 0, CONFIG.fuelFireDamage);
+        createParticles(tank.x, tank.y, 15, '#ff681f', 1.5);
+        if(tank === player && typeof showMessage === 'function') showMessage('🔥 侧面油箱起火！', '#ff6f32');
+    }
+    return zone;
+}
+
+function consumeGoldenShield(tank, source, projectile) {
+    if(!tank || !tank.goldenShieldReady || (!source && !projectile)) return false;
+    tank.goldenShieldReady = false;
+    tank.goldenShieldTimer = CONFIG.goldenShieldInterval;
+    createParticles(tank.x, tank.y, 30, '#ffd84a', 2.1);
+    if(typeof getNearbyTanks === 'function') {
+        getNearbyTanks(tank.x, tank.y, 115).forEach(other => {
+            if(!other || other === tank || other.dead || other.team === tank.team) return;
+            const falloff = Math.max(.25, 1 - Math.hypot(other.x - tank.x, other.y - tank.y) / 115);
+            applyDirectDamage(other, 80 * falloff, tank, '金色护盾爆炸');
+        });
+    }
+    if(tank === player && typeof showMessage === 'function') showMessage('✦ 金色护盾抵挡攻击并反爆！', '#ffe45c');
+    if(typeof playWorldSound === 'function') playWorldSound('capture', tank.x, tank.y, tank === player ? 1 : .65);
+    return true;
+}
+
 function applyDirectDamage(tank, damage, source, cause = null, projectile = null) {
     if(!tank || tank.dead || damage <= 0) return 0;
+    if(consumeGoldenShield(tank, source, projectile)) return 0;
     const preHitHp = tank.hp;
-    let remaining = damage * Math.max(0, 1 - (tank.damageReduction || 0));
+    let modeMultiplier = 1;
+    if(gameMode === 'defense' && source) {
+        if(tank === player && !source.isPlayer && source.team === 'red') {
+            modeMultiplier = CONFIG.defensePlayerDamageTakenMultiplier;
+        } else if(!tank.isPlayer && !source.isPlayer) {
+            modeMultiplier = CONFIG.defenseAIVsAIDamageMultiplier;
+        } else if(source === player && tank.team === 'red') {
+            modeMultiplier = CONFIG.defensePlayerDamageDealtMultiplier;
+        }
+    }
+    let remaining = damage * modeMultiplier * Math.max(0, 1 - (tank.damageReduction || 0));
     if(tank.shieldActive && tank.shieldHp > 0) {
         const absorbed = Math.min(tank.shieldHp, remaining);
         tank.shieldHp -= absorbed;
@@ -251,6 +414,7 @@ function applyDirectDamage(tank, damage, source, cause = null, projectile = null
         if(tank === player && typeof captureCombatReplayFrame === 'function') captureCombatReplayFrame(true);
         if(typeof playWorldSound === 'function') playWorldSound(tank === player ? 'death' : 'kill', tank.x, tank.y, tank === player ? 1.25 : 1);
         if(typeof shouldAmmoRackExplode === 'function' && shouldAmmoRackExplode(tank)) triggerAmmoRackExplosion(tank);
+        if(tank === player && typeof beginDamageUpgrade === 'function') beginDamageUpgrade();
     }
     return remaining;
 }
@@ -374,6 +538,10 @@ function checkCollisions() {
                 }
                 let actualArmor = tank.armor * (1 + (tank.armorBoost || 0)) + (tank.mapArmorBonus || 0);
                 if(tank.fortressActive && tank.ultimateData) actualArmor = tank.armor * (tank.ultimateData.armorMult || 5.0);
+                if(tryTankArmorRicochet(tank, b, actualArmor)) {
+                    hitCount++;
+                    continue;
+                }
                 let damage = b.damage;
                 if(tank.isFlying && b.type === 'shell') damage *= 0.4;
                 if(tank.isFlying && b.type === 'aa') {
@@ -393,12 +561,14 @@ function checkCollisions() {
                     applyDirectDamage(b.owner, reflectDmg, tank, '反射伤害'); showDamageNumber(b.owner.x, b.owner.y - 30, Math.floor(reflectDmg));
                     createParticles(b.owner.x, b.owner.y, 5, '#ff0000', 1);
                 }
+                let dealtToTank = 0;
                 if(tank.shieldProtected && tank.shieldOwner && !tank.shieldOwner.dead) {
                     const redirect = tank.shieldOwner.ultimateData.damageRedirect || 0.4;
                     const redirectDamage = damage * redirect;
-                    applyDirectDamage(tank, damage - redirectDamage, b.owner, getWeaponCause(b.type), b);
+                    dealtToTank = applyDirectDamage(tank, damage - redirectDamage, b.owner, getWeaponCause(b.type), b);
                     applyDirectDamage(tank.shieldOwner, redirectDamage, b.owner, getWeaponCause(b.type), b);
-                } else applyDirectDamage(tank, damage, b.owner, getWeaponCause(b.type), b);
+                } else dealtToTank = applyDirectDamage(tank, damage, b.owner, getWeaponCause(b.type), b);
+                if(dealtToTank > 0 && !tank.dead) applyTankHitReaction(tank, b);
                 if(b.toxinData && Math.random() < (b.toxinData.chance || 1)) {
                     tank.toxinDebuffTimer = Math.max(tank.toxinDebuffTimer || 0, b.toxinData.duration || 0);
                     tank.toxinTickTimer = b.toxinData.interval || 1;
@@ -452,6 +622,11 @@ function lineOfSight(x1, y1, x2, y2, factoryFloor = null) {
         const t = i / steps;
         const cx = x1 + (x2 - x1) * t;
         const cy = y1 + (y2 - y1) * t;
+        for(const cloud of smokeClouds) {
+            if(cloud.life <= 0) continue;
+            if(factoryFloor !== null && Math.abs((cloud.z || 0) - (typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(factoryFloor) : 0)) > 90) continue;
+            if(Math.hypot(cx - cloud.x, cy - cloud.y) < cloud.radius) return false;
+        }
         for(let obs of obstacles) {
             if(factoryFloor !== null && typeof factoryObstacleMatchesFloor === 'function' && !factoryObstacleMatchesFloor(obs, factoryFloor)) continue;
             if(obs.type === 'factoryPlatform') continue;
@@ -562,6 +737,8 @@ function checkObstacleCollision(x, y, radius, tank = null) {
 }
 
 function resolveTankCollisions() {
+    // 工厂内的坦克与轻物体已经全部交给 Ammo.js 动态刚体处理。
+    if(typeof isFactoryPhysicsReady === 'function' && isFactoryPhysicsReady()) return;
     const allTanks = [player, ...allies, ...enemies].filter(t => t && !t.dead);
     
     for(let tank of allTanks) {
@@ -671,8 +848,10 @@ function spawnBaseTank(team) {
         tank.aiSkillLevel = gameConfig.difficulty === 'hard' ? 1.0 : 0.78;
         allies.push(tank);
     } else {
-        tank.aiSkillLevel = gameConfig.difficulty === 'easy' ? 0.9 : gameConfig.difficulty === 'hard' ? 1.65 : 1.35;
-        tank.aiDamageMult = gameConfig.difficulty === 'easy' ? 1.03 : gameConfig.difficulty === 'hard' ? 1.16 : 1.10;
+        tank.aiSkillLevel = gameMode === 'defense'
+            ? (gameConfig.difficulty === 'easy' ? 0.8 : gameConfig.difficulty === 'hard' ? 1.3 : 1.0)
+            : (gameConfig.difficulty === 'easy' ? 0.9 : gameConfig.difficulty === 'hard' ? 1.65 : 1.35);
+        tank.aiDamageMult = gameMode === 'defense' ? 1.0 : (gameConfig.difficulty === 'easy' ? 1.03 : gameConfig.difficulty === 'hard' ? 1.16 : 1.10);
         enemies.push(tank);
     }
     aiTanks.push(tank);

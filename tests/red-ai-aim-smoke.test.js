@@ -38,6 +38,9 @@ vm.runInContext(`
     red.mg=red.maxMG;
     red.aa=red.maxAA;
     red.invincible=0;
+    red.aiTrackedTarget=player;
+    red.aiTargetLockTimer=CONFIG.aiTargetLockTime;
+    red.aiReactionDelay=0;
     enemies=[red];
     aiTanks=[red];
     bullets=[];
