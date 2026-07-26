@@ -398,6 +398,26 @@ function updateTrailEffects(dt) {
         t.life -= dt;
         if(t.life <= 0) trailEffects.splice(i, 1);
     }
+    const hotTrails = trailEffects.filter(effect => effect.kind === 'mastery' && effect.life > 0);
+    if(hotTrails.length === 0 || typeof applyDirectDamage !== 'function') return;
+    const livingTanks = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead);
+    livingTanks.forEach(tank => {
+        const hotTrail = hotTrails.find(effect => {
+            if(!effect.owner || effect.owner.dead || effect.team === tank.team || tank.invincible > 0) return false;
+            if(typeof areEntitiesOnSameFactoryFloor === 'function' &&
+               !areEntitiesOnSameFactoryFloor(effect, tank)) return false;
+            return Math.hypot(tank.x - effect.x, tank.y - effect.y) <= effect.radius + CONFIG.tankSize * .45;
+        });
+        if(!hotTrail) return;
+        const damage = (hotTrail.damagePerSecond || 55) * dt;
+        applyDirectDamage(tank, damage, hotTrail.owner, '灼热尾焰');
+        tank.masteryTrailDamageCue = (tank.masteryTrailDamageCue || 0) - dt;
+        if(tank.masteryTrailDamageCue <= 0) {
+            if(typeof showDamageNumber === 'function') showDamageNumber(tank.x, tank.y - 30, Math.round(hotTrail.damagePerSecond || 55));
+            if(typeof createParticles === 'function') createParticles(tank.x, tank.y, 4, hotTrail.color || '#ffb11b', .5);
+            tank.masteryTrailDamageCue = .5;
+        }
+    });
 }
 
 function showDamageNumber(x, y, damage) {

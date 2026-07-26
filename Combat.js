@@ -16,6 +16,8 @@ function fireBullet(tank, type) {
     if (type === 'aa' && (tank.aa || 0) <= 0 && !infiniteReserve) return;
     if(tank.isPlayer) recordShot(type);
     tank.lastFiredWeapon = type;
+    tank.recoilTimer = type === 'shell' || type === 'bomb' ? .24 : type === 'aa' ? .15 : .08;
+    tank.recoilStrength = type === 'shell' || type === 'bomb' ? 11 : type === 'aa' ? 6 : 2.5;
     
     if(tank.ghostActive && tank.ultimateData && tank.ultimateData.revealOnFire) tank.ghostRevealed = true;
     let speedMult = 1, spreadMult = 1, damageMult = 1, infiniteAmmo = !!tank.suddenDeathInfiniteAmmo;
@@ -30,6 +32,10 @@ function fireBullet(tank, type) {
     const speed = baseSpeed * Math.cos(elevation);
     const spread = (type === 'mg' || type === 'airmg') ? (Math.random() - 0.5) * 0.12 * spreadMult : (type === 'aa' ? (Math.random() - 0.5) * 0.08 : 0);
     const angle = getTankFiringAngle(tank, spread);
+    const masteryGolden = type === 'shell' && !!tank.masteryGoldenProjectiles;
+    const masteryDamageMult = masteryGolden
+        ? (typeof MASTERY_GOLDEN_SHELL_DAMAGE_MULT !== 'undefined' ? MASTERY_GOLDEN_SHELL_DAMAGE_MULT : 1.2)
+        : 1;
     const maxLife = type === 'bomb' ? 5.0 : (type === 'shell' ? 4.0 : (type === 'aa' ? 5.0 : 1.2));
     const muzzleDistance = type === 'bomb' ? 0 : tank.turretSize + 12;
     bullets.push({
@@ -38,8 +44,10 @@ function fireBullet(tank, type) {
         z: type === 'bomb' ? Math.max(28, (tank.z || CONFIG.helicopterAltitude) - 8) : (tank.z || 0) + (type === 'aa' ? 18 : 24),
         vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
         vz: type === 'bomb' ? -35 : ((type === 'shell' || type === 'aa') ? baseSpeed * 60 * Math.sin(elevation) : 0),
-        damage: (type === 'bomb' ? 340 : (type === 'shell' ? CONFIG.bulletDamage : (type === 'aa' ? CONFIG.aaDamage : (type === 'airmg' ? 18 : CONFIG.mgDamage)))) * damageMult * (tank.aiDamageMult || 1),
+        damage: (type === 'bomb' ? 340 : (type === 'shell' ? CONFIG.bulletDamage : (type === 'aa' ? CONFIG.aaDamage : (type === 'airmg' ? 18 : CONFIG.mgDamage)))) *
+            damageMult * masteryDamageMult * (tank.aiDamageMult || 1) * (tank.masteryAuraDamageMult || 1),
         team: tank.team, type, owner: tank,
+        masteryGolden,
         life: maxLife, maxLife, age: 0,
         altitude: (tank.z || 0) + (type === 'aa' ? 18 : 24),
         trackingRange: type === 'aa' ? CONFIG.aaTrackingRange : 0,
@@ -75,7 +83,7 @@ function fireBullet(tank, type) {
     }
     createParticles(tank.x + Math.cos(angle) * tank.turretSize, tank.y + Math.sin(angle) * tank.turretSize,
         type === 'shell' || type === 'bomb' ? 5 : (type === 'aa' ? 4 : 2),
-        type === 'bomb' ? '#ff6840' : (type === 'shell' ? '#ffaa00' : (type === 'aa' ? '#ff44ff' : '#ffff88')),
+        type === 'bomb' ? '#ff6840' : (masteryGolden ? '#ffe36a' : (type === 'shell' ? '#ffaa00' : (type === 'aa' ? '#ff44ff' : '#ffff88'))),
         type === 'shell' || type === 'bomb' ? 1.5 : (type === 'aa' ? 1.2 : 0.5));
     if(typeof playWorldSound === 'function') playWorldSound(type === 'airmg' ? 'mg' : type, tank.x, tank.y, tank.isPlayer ? 1 : 0.72);
 }
@@ -395,7 +403,7 @@ function applyDirectDamage(tank, damage, source, cause = null, projectile = null
             modeMultiplier = CONFIG.defensePlayerDamageDealtMultiplier;
         }
     }
-    let remaining = damage * modeMultiplier * Math.max(0, 1 - (tank.damageReduction || 0));
+    let remaining = damage * modeMultiplier * (tank.masteryAuraDefenseMult || 1) * Math.max(0, 1 - (tank.damageReduction || 0));
     if(tank.shieldActive && tank.shieldHp > 0) {
         const absorbed = Math.min(tank.shieldHp, remaining);
         tank.shieldHp -= absorbed;
@@ -404,6 +412,8 @@ function applyDirectDamage(tank, damage, source, cause = null, projectile = null
     }
     if(remaining > 0) {
         tank.hp -= remaining;
+        tank.hitFlashTimer = Math.max(tank.hitFlashTimer || 0, .18);
+        if(source) tank.hitDirection = Math.atan2(source.y - tank.y, source.x - tank.x);
         if(tank === player && typeof recordPlayerDamageSource === 'function') recordPlayerDamageSource(remaining, source, cause, projectile);
     }
     if(tank.hp <= 0 && !tank.dead) {
@@ -449,7 +459,7 @@ function explodeBomb(bomb) {
         if(dealt > 0) showDamageNumber(tank.x, tank.y - 34, Math.round(dealt));
     });
     const enemyBase = bomb.team === 'blue' ? bases.red : bases.blue;
-    if(enemyBase && enemyBase.hp > 0) {
+    if(enemyBase && enemyBase.hp > 0 && !enemyBase.invulnerable) {
         const cx = enemyBase.x + enemyBase.w / 2, cy = enemyBase.y + enemyBase.h / 2;
         if(Math.abs(cx - bomb.x) <= halfW + enemyBase.w * .5 && Math.abs(cy - bomb.y) <= halfH + enemyBase.h * .5) {
             const wasAlive = enemyBase.hp > 0;
@@ -605,6 +615,11 @@ function checkCollisions() {
                 const baseZ = base.z || 0;
                 if((b.z || 0) < baseZ || (b.z || 0) > baseZ + 78) return;
                 if(base.team !== b.team) {
+                    if(base.invulnerable) {
+                        createParticles(b.x, b.y, 8, '#9be9ff', 1.1);
+                        hitBase = true;
+                        return;
+                    }
                     const wasAlive = base.hp > 0;
                     base.hp -= b.damage;
                     if(wasAlive && base.hp <= 0) recordBaseDestroy(b.team);
@@ -828,7 +843,8 @@ function spawnBaseTank(team) {
         ?[player,...allies].filter(t=>t&&!t.dead).length
         :enemies.filter(t=>t&&!t.dead).length;
     if(teamCount >= 30) return null;
-    const types = Object.keys(TANKS).filter(type => !TANKS[type].isHidden);
+    const customTypes = gameMode === 'custom' && typeof getCustomTankPool === 'function' ? getCustomTankPool() : null;
+    const types = customTypes && customTypes.length ? customTypes : Object.keys(TANKS).filter(type => !TANKS[type].isHidden);
     const type = types[Math.floor(Math.random() * types.length)];
     const data = TANKS[type];
     if(!data)return null;
@@ -840,9 +856,12 @@ function spawnBaseTank(team) {
         tank.factoryFloor = 1;
         tank.z = getFactoryFloorZ(1)+(tank.isFlying?CONFIG.helicopterAltitude:0);
     }
-    tank.shells = Math.floor(data.maxShells * 0.5);
-    tank.mg = Math.floor(data.maxMG * 0.5);
-    tank.aa = Math.floor((data.maxAA ?? 15) * 0.45);
+    const customAmmoRatio = gameMode === 'custom' && typeof customRoomConfig !== 'undefined'
+        ? customRoomConfig.aiAmmoPercent / 100
+        : null;
+    tank.shells = Math.floor(data.maxShells * (customAmmoRatio ?? 0.5));
+    tank.mg = Math.floor(data.maxMG * (customAmmoRatio ?? 0.5));
+    tank.aa = Math.floor((data.maxAA ?? 15) * (customAmmoRatio ?? 0.45));
     tank.apsCharges = CONFIG.apsCharges;
     if(team === 'blue') {
         tank.aiSkillLevel = gameConfig.difficulty === 'hard' ? 1.0 : 0.78;

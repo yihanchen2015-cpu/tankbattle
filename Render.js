@@ -376,14 +376,31 @@ function drawTrailEffects() {
     trailEffects.forEach(t => {
         const alpha = Math.max(0, t.life / t.maxLife);
         ctx.save();
-        ctx.globalAlpha = alpha * 0.3;
-        ctx.strokeStyle = t.team === 'blue' ? '#4488ff' : '#ff4444';
-        ctx.lineWidth = 3;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        if(t.kind === 'mastery') {
+            const color = t.color || '#ffb11b';
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = alpha * .5;
+            ctx.fillStyle = color;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 16;
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, t.radius * (.72 + alpha * .28), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = alpha * .75;
+            ctx.fillStyle = '#fff1a1';
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, Math.max(3, t.radius * .28), 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.globalAlpha = alpha * 0.3;
+            ctx.strokeStyle = t.team === 'blue' ? '#4488ff' : '#ff4444';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
         ctx.restore();
     });
     ctx.globalAlpha = 1;
@@ -429,6 +446,7 @@ function drawHelicopter(tank) {
     ctx.beginPath();
     ctx.ellipse(0, 0, 22, 12, 0, 0, Math.PI*2);
     ctx.fill();
+    drawCamouflagePattern(ctx, tank, 22, true);
     ctx.shadowBlur = 0;
 
     // 驾驶舱
@@ -567,13 +585,17 @@ function drawTank(tank) {
     if(tank.shape === 'helicopter') {
         drawHelicopter(tank);
         drawMuzzleFlash(tank);
+        drawTankAnimationEffects(tank, tank.y - Math.max(0, tank.z || 0) * ALTITUDE_DRAW_SCALE);
         return;
     }
     const groundAltitudeOffset = Math.max(0, tank.z || 0) * ALTITUDE_DRAW_SCALE;
     const tankRenderY = tank.y - groundAltitudeOffset;
     const flattened=currentMap==='factory'&&(tank.flattenedTimer||0)>0;
+    const animation = getTankVisualAnimation(tank);
     ctx.save();
-    ctx.translate(tank.x, tankRenderY);
+    ctx.translate(tank.x + animation.recoilX, tankRenderY + animation.recoilY);
+    ctx.scale(animation.spawnScale, animation.spawnScale);
+    if(animation.hitFlash) ctx.filter = `brightness(${1.35 + animation.hitFlash * 1.8}) saturate(1.35)`;
     if(flattened)ctx.scale(1.18,.34);
     ctx.rotate(tank.angle);
     const detailed = !mobileDenseCombatMode || tank.isPlayer;
@@ -592,7 +614,8 @@ function drawTank(tank) {
     ctx.fillRect(-trackW/2 + 5, trackOffset - trackH + 3, trackW - 10, trackH - 6);
     if(detailed) {
         ctx.fillStyle = '#0b0d0e';
-        for(let i = -trackW/2 + 8; i < trackW/2 - 3; i += 12) {
+        const trackShift = (tank.trackAnimationPhase || 0) % 12;
+        for(let i = -trackW/2 + 8 - trackShift; i < trackW/2 - 3; i += 12) {
             ctx.fillRect(i, -trackOffset + 2, 3, trackH - 4);
             ctx.fillRect(i, trackOffset - trackH + 2, 3, trackH - 4);
         }
@@ -672,10 +695,13 @@ function drawTank(tank) {
             ctx.fill();
         }
     }
+    drawCamouflagePattern(ctx, tank, CONFIG.tankSize, detailed);
     ctx.restore();
     drawMuzzleFlash(tank);
     ctx.save();
-    ctx.translate(tank.x, tankRenderY);
+    ctx.translate(tank.x + animation.recoilX, tankRenderY + animation.recoilY);
+    ctx.scale(animation.spawnScale, animation.spawnScale);
+    if(animation.hitFlash) ctx.filter = `brightness(${1.35 + animation.hitFlash * 1.8}) saturate(1.35)`;
     if(flattened)ctx.scale(1.18,.34);
     ctx.rotate(tank.turretAngle);
     const barrelLen = tank.turretSize + 20;
@@ -737,6 +763,7 @@ function drawTank(tank) {
     if(tank.ultimateActive || tank.ghostActive || tank.fortressActive || tank.stormActive || tank.nailLocking) {
         drawUltimateEffect(tank);
     }
+    drawTankAnimationEffects(tank, tankRenderY);
     
     const hpRatio = Math.max(0, tank.hp / tank.maxHp);
     const barW = 55, barH = 7, barY = tankRenderY - CONFIG.tankSize - 15;
@@ -780,6 +807,76 @@ function drawTank(tank) {
     ctx.arc(tank.x, tankRenderY - CONFIG.tankSize - 22, 4, 0, Math.PI*2);
     ctx.fill();
     ctx.shadowBlur = 0;
+}
+
+function getTankVisualAnimation(tank) {
+    const spawnDuration = 1.15;
+    const spawnRemaining = Math.max(0, tank.spawnAnimationTimer || 0);
+    const spawnElapsed = spawnDuration - Math.min(spawnDuration, spawnRemaining);
+    const spawnScale = spawnRemaining > 0
+        ? 1 - Math.exp(-spawnElapsed * 5.4) * .34 * Math.cos(spawnElapsed * 12)
+        : 1;
+    const recoilDuration = tank.muzzleFlashType === 'mg' ? .08 : tank.muzzleFlashType === 'aa' ? .15 : .24;
+    const recoilRatio = Math.min(1, Math.max(0, (tank.recoilTimer || 0) / recoilDuration));
+    const recoilDistance = (tank.recoilStrength || 0) * recoilRatio * recoilRatio;
+    return {
+        spawnScale,
+        recoilX: -Math.cos(tank.turretAngle || tank.angle || 0) * recoilDistance,
+        recoilY: -Math.sin(tank.turretAngle || tank.angle || 0) * recoilDistance,
+        hitFlash: Math.min(1, (tank.hitFlashTimer || 0) / .18)
+    };
+}
+
+function drawTankAnimationEffects(tank, renderY) {
+    const now = performance.now() * .001;
+    if((tank.spawnAnimationTimer || 0) > 0) {
+        const progress = 1 - Math.min(1, tank.spawnAnimationTimer / 1.15);
+        ctx.save();
+        ctx.globalAlpha = (1 - progress) * .78;
+        ctx.strokeStyle = tank.team === 'blue' ? '#66d7ff' : '#ff7d63';
+        ctx.lineWidth = 4 - progress * 2;
+        ctx.beginPath();
+        ctx.arc(tank.x, renderY, CONFIG.tankSize + 12 + progress * 70, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+    if((tank.hitFlashTimer || 0) > 0) {
+        const strength = Math.min(1, tank.hitFlashTimer / .18);
+        ctx.save();
+        ctx.globalAlpha = strength * .75;
+        ctx.strokeStyle = '#fff5c2';
+        ctx.lineWidth = 2 + strength * 4;
+        const direction = tank.hitDirection || 0;
+        ctx.beginPath();
+        ctx.arc(tank.x, renderY, CONFIG.tankSize + 5, direction - .7, direction + .7);
+        ctx.stroke();
+        ctx.restore();
+    }
+    if(tank.masteryAura) {
+        ctx.save();
+        ctx.translate(tank.x, renderY);
+        ctx.strokeStyle = tank.masteryTrailColor || '#ffd85a';
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = .22 + Math.sin(now * 4) * .06;
+        ctx.setLineDash([18, 15]);
+        ctx.beginPath();
+        ctx.arc(0, 0, tank.masteryAuraRadius || 300, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.rotate(now * .65);
+        ctx.globalAlpha = .45;
+        ctx.setLineDash([9, 12]);
+        ctx.beginPath();
+        ctx.arc(0, 0, CONFIG.tankSize + 17 + Math.sin(now * 3) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+        for(let i = 0; i < 4; i++) {
+            const angle = now * 1.8 + i * Math.PI / 2;
+            ctx.fillStyle = '#ffe68b';
+            ctx.beginPath();
+            ctx.arc(Math.cos(angle) * (CONFIG.tankSize + 19), Math.sin(angle) * (CONFIG.tankSize + 19), 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
 }
 
 function drawMuzzleFlash(tank) {
@@ -1153,12 +1250,81 @@ function drawTankShape(pctx, tank, x, y, angle, scale) {
     } else {
         pctx.fillRect(-10, -10, 22, 20);
     }
+    drawCamouflagePattern(pctx, tank, 12, true);
     pctx.fillStyle = tank.accent;
     pctx.beginPath();
     pctx.arc(0, 0, 7, 0, Math.PI*2);
     pctx.fill();
     pctx.fillStyle = '#444';
     pctx.fillRect(0, -2, 18, 4);
+    pctx.restore();
+}
+
+function getCamouflageSeed(tank) {
+    const text = String(tank && (tank.tankType || tank.name || tank.color) || 'tank');
+    let seed = 2166136261;
+    for(let i = 0; i < text.length; i++) {
+        seed ^= text.charCodeAt(i);
+        seed = Math.imul(seed, 16777619);
+    }
+    return seed >>> 0;
+}
+
+function drawCamouflagePattern(pctx, tank, size, detailed = true) {
+    if(!tank || !tank.masteryCamouflage || !detailed) return;
+    pctx.save();
+    pctx.beginPath();
+    if(tank.shape === 'helicopter') {
+        pctx.ellipse(0, 0, size, size * .55, 0, 0, Math.PI * 2);
+    } else if(tank.shape === 'light') {
+        pctx.moveTo(size, 0);
+        pctx.lineTo(-size * .3, -size * .65);
+        pctx.lineTo(-size * .65, -size * .25);
+        pctx.lineTo(-size * .78, 0);
+        pctx.lineTo(-size * .65, size * .25);
+        pctx.lineTo(-size * .3, size * .65);
+        pctx.closePath();
+    } else if(tank.shape === 'medium') {
+        pctx.ellipse(0, 0, size, size * .66, 0, 0, Math.PI * 2);
+    } else {
+        pctx.rect(-size * .82, -size * .72, size * 1.84, size * 1.44);
+    }
+    pctx.clip();
+    const palette = ['#263820', '#737047', '#a28b5b', '#18241a'];
+    let seed = getCamouflageSeed(tank);
+    const random = () => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return seed / 4294967296;
+    };
+    pctx.globalAlpha = .88;
+    for(let patch = 0; patch < 11; patch++) {
+        const cx = (random() * 1.8 - .8) * size;
+        const cy = (random() * 1.3 - .65) * size;
+        const radiusX = size * (.18 + random() * .28);
+        const radiusY = size * (.12 + random() * .2);
+        const points = 7;
+        pctx.fillStyle = palette[patch % palette.length];
+        pctx.beginPath();
+        for(let point = 0; point < points; point++) {
+            const angle = point / points * Math.PI * 2;
+            const wobble = .68 + random() * .55;
+            const px = cx + Math.cos(angle) * radiusX * wobble;
+            const py = cy + Math.sin(angle) * radiusY * wobble;
+            if(point === 0) pctx.moveTo(px, py);
+            else pctx.lineTo(px, py);
+        }
+        pctx.closePath();
+        pctx.fill();
+    }
+    pctx.globalAlpha = .32;
+    pctx.strokeStyle = '#c0b27a';
+    pctx.lineWidth = Math.max(.65, size * .025);
+    for(let line = -size; line < size; line += size * .42) {
+        pctx.beginPath();
+        pctx.moveTo(line, -size);
+        pctx.lineTo(line + size * .7, size);
+        pctx.stroke();
+    }
     pctx.restore();
 }
 
@@ -1418,19 +1584,20 @@ function drawBullet(b) {
         ctx.beginPath(); ctx.arc(b.x, b.y - altitude * ALTITUDE_DRAW_SCALE, 12, 0, Math.PI * 2); ctx.fill();
     } else if(b.type === 'shell') {
         const drawY = b.y - visualAltitude * ALTITUDE_DRAW_SCALE;
-        ctx.shadowColor = b.ricocheted ? '#72f6ff' : '#ff8800';
-        /*shadow*/ctx.shadowBlur = 0;
-        ctx.fillStyle = b.ricocheted ? '#a8fbff' : '#ff8800';
+        const golden = !!b.masteryGolden;
+        ctx.shadowColor = b.ricocheted ? '#72f6ff' : (golden ? '#ffd700' : '#ff8800');
+        ctx.shadowBlur = golden ? 14 : 0;
+        ctx.fillStyle = b.ricocheted ? '#a8fbff' : (golden ? '#fff4a3' : '#ff8800');
         ctx.beginPath();
-        ctx.arc(b.x, drawY, 7, 0, Math.PI*2);
+        ctx.arc(b.x, drawY, golden ? 8 : 7, 0, Math.PI*2);
         ctx.fill();
-        /*shadow*/ctx.shadowBlur = 0;
-        ctx.fillStyle = b.ricocheted ? '#35cde8' : '#ff4400';
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = b.ricocheted ? '#35cde8' : (golden ? '#e4a900' : '#ff4400');
         ctx.beginPath();
         ctx.arc(b.x, drawY, 4, 0, Math.PI*2);
         ctx.fill();
         ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(255,150,0,0.2)';
+        ctx.fillStyle = golden ? 'rgba(255,220,50,.28)' : 'rgba(255,150,0,0.2)';
         ctx.beginPath();
         ctx.arc(b.x, drawY, 15, 0, Math.PI*2);
         ctx.fill();

@@ -290,9 +290,10 @@ let playerStats = {
     ctfWins: 0, stormSurvived: 0, infectionSurvivorWins: 0, defenseWins: 0, sneakWins: 0,
     totalWins: 0, comebackWins: 0, maxSpeedReached: 0, ghostKills: 0,
     perfectGames: 0, modesWon: [], tanksUsed: [], seriesUsed: [], oneShotKills: 0,
-    unlockedAchievements: [], unlockedTanks: [], matchStartTime: 0,
+    unlockedAchievements: [], unlockedTanks: [], tankMastery: {}, matchStartTime: 0,
     currentLowHpTime: 0, currentMatchLowHpAwarded: false
 };
+let currentMatchMasterySettled = false;
 
 function loadStats() {
     try {
@@ -305,6 +306,9 @@ function loadStats() {
     ['modesWon', 'tanksUsed', 'seriesUsed', 'unlockedAchievements', 'unlockedTanks'].forEach(key => {
         if(!Array.isArray(playerStats[key])) playerStats[key] = [];
     });
+    if(!playerStats.tankMastery || typeof playerStats.tankMastery !== 'object' || Array.isArray(playerStats.tankMastery)) {
+        playerStats.tankMastery = {};
+    }
 }
 
 function saveStats() {
@@ -419,6 +423,7 @@ function resetMatchStats() {
     playerStats.matchStartTime = Date.now();
     playerStats.currentLowHpTime = 0;
     playerStats.currentMatchLowHpAwarded = false;
+    currentMatchMasterySettled = false;
 }
 
 function endMatchStats(result) {
@@ -446,6 +451,15 @@ function endMatchStats(result) {
         }
     }
 
+    // 熟练度只在一局真正进入结算时记账。开始战斗后刷新不会增加场次，
+    // 同一局即使结算回调被重复触发也只会记录一次。
+    if(!currentMatchMasterySettled && typeof selectedTank === 'string') {
+        currentMatchMasterySettled = true;
+        if(typeof recordTankMasteryMatch === 'function') recordTankMasteryMatch(selectedTank);
+        if(typeof recordTankMasteryResult === 'function') {
+            recordTankMasteryResult(selectedTank, result === 'victory');
+        }
+    }
     checkAchievements();
     saveStats();
 }
@@ -471,6 +485,7 @@ function recordKill(tank, target, hitInfo = null) {
             playerStats.ghostKills = (playerStats.ghostKills || 0) + 1;
         }
 
+        if(typeof recordTankMasteryKill === 'function') recordTankMasteryKill(tank.tankType);
         checkAchievements();
     }
 }

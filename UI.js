@@ -41,9 +41,11 @@ function closeInfoPanels(exceptId = '') {
     const intro = document.getElementById('introModal');
     const tutorial = document.getElementById('tutorialOverlay');
     const achievements = document.getElementById('achievementPanel');
+    const mastery = document.getElementById('masteryPanel');
     if(intro && exceptId !== 'introModal') intro.classList.remove('active');
     if(tutorial && exceptId !== 'tutorialOverlay') tutorial.classList.remove('active');
     if(achievements && exceptId !== 'achievementPanel') achievements.style.display = 'none';
+    if(mastery && exceptId !== 'masteryPanel') mastery.style.display = 'none';
 }
 
 function init() {
@@ -305,6 +307,8 @@ function selectMode(mode) {
     const badge = document.getElementById('modeBadge');
     const subtitle = document.getElementById('menuSubtitle');
     const dayNightRow = document.getElementById('dayNightRow');
+    const customPanel = document.getElementById('customRoomPanel');
+    if(customPanel) customPanel.style.display = mode === 'custom' ? 'block' : 'none';
     if(mode === 'classic') {
         badge.className = 'mode-badge classic';
         badge.textContent = '🏛 经典模式';
@@ -335,7 +339,15 @@ function selectMode(mode) {
         badge.textContent = '🌪 风暴模式';
         subtitle.textContent = '安全区持续缩小 | 活到最后';
         dayNightRow.style.display = 'none';
+    } else if(mode === 'custom') {
+        badge.className = 'mode-badge custom';
+        badge.textContent = '🧰 自定义房间';
+        subtitle.textContent = '自由调整地图、规则、队伍、坦克池、弹药与增援';
+        dayNightRow.style.display = 'flex';
+        if(typeof setupCustomRoomControls === 'function') setupCustomRoomControls();
+        if(typeof applyCustomRoomConfigToUI === 'function') applyCustomRoomConfigToUI(customRoomConfig);
     }
+    renderTankList();
 }
 
 function setupIntroModal() {
@@ -383,6 +395,7 @@ function renderTankList() {
     }).forEach(([key, tank]) => {
         // 跳过未解锁的隐藏坦克
         if (tank.isHidden && !isTankUnlocked(key)) return;
+        if(gameMode === 'custom' && typeof getCustomTankPool === 'function' && !getCustomTankPool().includes(key)) return;
 
         // 根据系列筛选
         const series = getTankSeries(key);
@@ -399,10 +412,16 @@ function renderTankList() {
         else if(key.startsWith('duoduo')) seriesTag = '🟠 多多系';
         else if(key.startsWith('niuniu')) seriesTag = '🩵 牛牛系';
         else if(key.startsWith('kimi')) seriesTag = '🟣 AI系';
+        const mastery = typeof getTankMasteryProfile === 'function'
+            ? getTankMasteryProfile(key)
+            : {level:1,levelName:'新兵',matches:0};
+        card.classList.add(`mastery-level-${mastery.level}`);
+        if(mastery.level > 1) card.classList.add('mastery-unlocked');
         card.innerHTML = `
             <div class="tank-preview" id="preview-${key}"></div>
             <h4>${tank.name}</h4>
             <div style="font-size:11px;color:#888;margin-bottom:4px;">${seriesTag} | ${tank.desc.split(' - ')[0]}</div>
+            <div class="tank-mastery-badge">★${mastery.level} ${mastery.levelName} · ${mastery.matches}场</div>
             <div class="tank-stats">
                 生命: <span>${tank.hp}</span> | 速度: <span>${tank.speed}</span><br>
                 装甲: <span>${tank.armor}x</span> | 射速: <span>${(tank.fireRate*100).toFixed(0)}%</span><br>
@@ -424,6 +443,7 @@ function setupMenu() {
 
     // 初始化地图选择
     setupMapSelection();
+    if(typeof setupCustomRoomControls === 'function') setupCustomRoomControls();
 
     renderTankList();
 
@@ -469,10 +489,14 @@ function drawTankPreview(key, tank) {
     c.width = 220; c.height = 90;
     const pctx = c.getContext('2d');
     pctx.translate(110, 45);
-    if(tank.shape === 'helicopter') {
-        drawHelicopterPreview(pctx, tank);
+    const masteryVisual = typeof getTankMasteryVisual === 'function'
+        ? getTankMasteryVisual(key)
+        : null;
+    const previewTank = masteryVisual ? { ...tank, ...masteryVisual, tankType: key } : tank;
+    if(previewTank.shape === 'helicopter') {
+        drawHelicopterPreview(pctx, previewTank);
     } else {
-        drawTankShape(pctx, tank, 0, 0, 0, 2.2);
+        drawTankShape(pctx, previewTank, 0, 0, 0, 2.2);
     }
     preview.appendChild(c);
 }
@@ -485,6 +509,7 @@ function drawHelicopterPreview(pctx, tank) {
     pctx.beginPath();
     pctx.ellipse(0, 0, 10, 5, 0, 0, Math.PI*2);
     pctx.fill();
+    if(typeof drawCamouflagePattern === 'function') drawCamouflagePattern(pctx, tank, 10, true);
     // 驾驶舱
     pctx.fillStyle = tank.accent;
     pctx.beginPath();
@@ -523,6 +548,7 @@ function selectTank(key, card) {
     const aaSlider = document.getElementById('aaSlider');
     let ammoMult = 1;
     if(gameMode === 'defense') ammoMult = 3;
+    else if(gameMode === 'custom') ammoMult = 3;
     ammoSlider.max = Math.floor(tank.maxShells * ammoMult);
     mgSlider.max = Math.floor(tank.maxMG * ammoMult);
     aaSlider.max = Math.floor((tank.maxAA ?? 15) * ammoMult);

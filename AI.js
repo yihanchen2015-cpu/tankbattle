@@ -41,8 +41,11 @@ function updateAITank(tank, dt) {
     else tank.stuckTimer = 0;
     tank.lastPos.x = tank.x; tank.lastPos.y = tank.y;
     
+    const canAcquireMasteryTarget = target => typeof shouldAIAcquireMasteryTarget !== 'function' ||
+        shouldAIAcquireMasteryTarget(tank, target);
     const enemyList = (tank.team === 'blue' ? enemies.filter(e => !e.dead) : [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])])
         .filter(e => e !== tank && e.team !== tank.team)
+        .filter(canAcquireMasteryTarget)
         .filter(e => typeof areEntitiesOnSameFactoryFloor !== 'function' || areEntitiesOnSameFactoryFloor(tank, e));
     const rawEnemyBase = tank.team === 'blue' ? bases.red : bases.blue;
     const rawMyBase = tank.team === 'blue' ? bases.blue : bases.red;
@@ -73,6 +76,7 @@ function updateAITank(tank, dt) {
         : CONFIG.aiSensorRangeBlue;
     const nearbyEnemies = getNearbyTanks(tank.x, tank.y, sensorRange);
     const filteredEnemies = nearbyEnemies.filter(e => e.team !== tank.team && !e.dead &&
+        canAcquireMasteryTarget(e) &&
         (typeof areEntitiesOnSameFactoryFloor !== 'function' || areEntitiesOnSameFactoryFloor(tank, e)));
     
     filteredEnemies.forEach(e => {

@@ -1,6 +1,7 @@
 // ==================== 游戏初始化 ====================
 function startGame() {
     console.log('[START_GAME] Starting game, selectedTank:', selectedTank, 'gameMode:', gameMode);
+    if(gameMode === 'custom' && typeof readCustomRoomConfig === 'function') readCustomRoomConfig();
     if(!selectedTank) {
         console.error('[START_GAME] No tank selected!');
         return;
@@ -22,8 +23,11 @@ function startGame() {
     else dayNight = document.getElementById('dayNight').value;
     const difficulty = document.getElementById('difficulty').value;
     const viewMode = document.getElementById('viewMode') ? document.getElementById('viewMode').value : '2d';
-    gameConfig = { dayNight, difficulty, ammo, mg, aa, mode: gameMode, viewMode };
-    lastMatchSetup = { selectedTank, currentMap, gameMode, ammo, mg, aa, dayNight, difficulty, viewMode };
+    const customConfig = gameMode === 'custom' && typeof customRoomConfig !== 'undefined'
+        ? JSON.parse(JSON.stringify(customRoomConfig))
+        : null;
+    gameConfig = { dayNight, difficulty, ammo, mg, aa, mode: gameMode, viewMode, custom: customConfig };
+    lastMatchSetup = { selectedTank, currentMap, gameMode, ammo, mg, aa, dayNight, difficulty, viewMode, customRoom: customConfig };
     currentWeapon = selectedTank === 'niuniu_heli' ? 'bomb' : 'shell';
     document.getElementById('menu').classList.remove('active');
     document.getElementById('menu').style.display = 'none';
@@ -39,13 +43,15 @@ function startGame() {
         const labels = {
             ctf: '🏴 夺旗模式 - 率先获得 3 分',
             infection: '🧟 感染模式 - 生存或感染所有敌人',
-            storm: '🌪 风暴模式 - 留在安全区并活到最后'
+            storm: '🌪 风暴模式 - 留在安全区并活到最后',
+            custom: '🧰 自定义房间 - 规则、队伍与坦克池由房主定义'
         };
         specialModeInfo.textContent = labels[gameMode] || '';
         specialModeInfo.style.display = labels[gameMode] ? 'block' : 'none';
     }
     resizeCanvas();
     generateMap();
+    if(gameMode === 'custom' && typeof applyCustomRoomMapRules === 'function') applyCustomRoomMapRules();
     initPathGrid();
     spawnTanks(tankData, ammo, mg, aa);
     if(typeof distributeFactoryInitialTanks === 'function') distributeFactoryInitialTanks();
@@ -64,7 +70,8 @@ function startGame() {
     else if(gameMode === 'storm') initStormMode();
 
     gameState = 'playing';
-    if(gameMode === 'defense') gameTime = 180;
+    if(gameMode === 'custom' && customConfig) gameTime = customConfig.durationMinutes * 60;
+    else if(gameMode === 'defense') gameTime = 180;
     else if(['ctf', 'infection', 'storm'].includes(gameMode)) gameTime = 300;
     else gameTime = CONFIG.gameTime;
     lastTime = performance.now();
@@ -453,8 +460,9 @@ function findBaseDeploymentPoint(team,index=0) {
 }
 
 function spawnTanks(tankData, ammo, mg, aa) {
-    let blueCount = 10;
-    let redCount = gameMode === 'sneak' ? 30 : 10;
+    const customConfig = gameMode === 'custom' && typeof customRoomConfig !== 'undefined' ? customRoomConfig : null;
+    let blueCount = customConfig ? customConfig.blueCount : 10;
+    let redCount = customConfig ? customConfig.redCount : (gameMode === 'sneak' ? 30 : 10);
     const blueDeployment=findBaseDeploymentPoint('blue',0);
     let blueBaseX = blueDeployment.x, blueBaseY = blueDeployment.y;
     if(gameMode === 'sneak') {
@@ -469,7 +477,8 @@ function spawnTanks(tankData, ammo, mg, aa) {
     player.maxShells = ammo; player.maxMG = mg; player.maxAA = aa;
     player.apsCharges = CONFIG.apsCharges;
     allies = [];
-    const allyTypes = ['zuoyan29', 'zuoyan30', 'zuoyan31', 'zuoyan32', 'zuoyan33', 'zuoyan1', 'zuoyan_x', 'xingchen27a', 'xingchen27b', 'xingchen27c', 'xingchen27d', 'xingchen27e', 'xingchen27s', 'duoduo', 'duoduo_ifv', 'duoduo_spat', 'duoduo_eng', 'duoduo_rocket', 'duoduo_emp'];
+    const defaultAllyTypes = ['zuoyan29', 'zuoyan30', 'zuoyan31', 'zuoyan32', 'zuoyan33', 'zuoyan1', 'zuoyan_x', 'xingchen27a', 'xingchen27b', 'xingchen27c', 'xingchen27d', 'xingchen27e', 'xingchen27s', 'duoduo', 'duoduo_ifv', 'duoduo_spat', 'duoduo_eng', 'duoduo_rocket', 'duoduo_emp'];
+    const allyTypes = customConfig && customConfig.tankPool.length ? customConfig.tankPool : defaultAllyTypes;
     const allyCount = blueCount - 1;
     for(let i=0; i<allyCount; i++) {
         const type = allyTypes[i % allyTypes.length];
@@ -479,15 +488,16 @@ function spawnTanks(tankData, ammo, mg, aa) {
             aAmmo = Math.floor(t.maxShells * 3 * 0.6);
             aMG = Math.floor(t.maxMG * 3 * 0.6);
         } else {
-            aAmmo = Math.floor(t.maxShells * 0.6);
-            aMG = Math.floor(t.maxMG * 0.6);
+            const ammoRatio = customConfig ? customConfig.aiAmmoPercent / 100 : 0.6;
+            aAmmo = Math.floor(t.maxShells * ammoRatio);
+            aMG = Math.floor(t.maxMG * ammoRatio);
         }
         const deployment=gameMode==='sneak'
             ?{x:blueBaseX+(Math.random()-.5)*300,y:blueBaseY+(Math.random()-.5)*300}
             :findBaseDeploymentPoint('blue',i+1);
         const tank = createTank(t, deployment.x, deployment.y, 'blue', false);
         tank.shells = aAmmo; tank.mg = aMG; 
-        tank.aa = Math.floor((t.maxAA ?? 15) * 0.5);
+        tank.aa = Math.floor((t.maxAA ?? 15) * (customConfig ? customConfig.aiAmmoPercent / 100 : 0.5));
         tank.apsCharges = CONFIG.apsCharges;
         tank.aiAggro = 0.4 + Math.random() * 0.4;
         tank.aiDodgeTimer = 0;
@@ -504,7 +514,8 @@ function spawnTanks(tankData, ammo, mg, aa) {
         allies.push(tank);
     }
     enemies = [];
-    const enemyTypes = ['xingchen27a', 'xingchen27b', 'xingchen27c', 'xingchen27d', 'xingchen27e', 'xingchen27s', 'duoduo', 'duoduo_ifv', 'duoduo_spat', 'duoduo_eng', 'duoduo_rocket', 'duoduo_emp', 'zuoyan29', 'zuoyan30', 'zuoyan31', 'zuoyan32', 'zuoyan33', 'zuoyan1', 'zuoyan_x'];
+    const defaultEnemyTypes = ['xingchen27a', 'xingchen27b', 'xingchen27c', 'xingchen27d', 'xingchen27e', 'xingchen27s', 'duoduo', 'duoduo_ifv', 'duoduo_spat', 'duoduo_eng', 'duoduo_rocket', 'duoduo_emp', 'zuoyan29', 'zuoyan30', 'zuoyan31', 'zuoyan32', 'zuoyan33', 'zuoyan1', 'zuoyan_x'];
+    const enemyTypes = customConfig && customConfig.tankPool.length ? customConfig.tankPool : defaultEnemyTypes;
     const diffMult = gameConfig.difficulty === 'easy' ? 0.7 : gameConfig.difficulty === 'hard' ? 1.4 : 1.0;
     const redDeployment=findBaseDeploymentPoint('red',0);
     let redBaseX = redDeployment.x;
@@ -512,8 +523,9 @@ function spawnTanks(tankData, ammo, mg, aa) {
     for(let i=0; i<redCount; i++) {
         const type = enemyTypes[i % enemyTypes.length];
         const t = TANKS[type];
-        const eAmmo = Math.floor(t.maxShells * 0.95);
-        const eMG = Math.floor(t.maxMG * 0.95);
+        const enemyAmmoRatio = customConfig ? customConfig.aiAmmoPercent / 100 : 0.95;
+        const eAmmo = Math.floor(t.maxShells * enemyAmmoRatio);
+        const eMG = Math.floor(t.maxMG * enemyAmmoRatio);
         let ex, ey;
         if(gameMode === 'sneak') {
             const layer = Math.floor(i / 10);
@@ -541,7 +553,7 @@ function spawnTanks(tankData, ammo, mg, aa) {
         tank.hp = Math.floor(tank.hp * diffMult);
         tank.maxHp = tank.hp;
         tank.shells = eAmmo; tank.mg = eMG; 
-        tank.aa = Math.floor((t.maxAA ?? 15) * 0.85);
+        tank.aa = Math.floor((t.maxAA ?? 15) * (customConfig ? customConfig.aiAmmoPercent / 100 : 0.85));
         tank.apsCharges = CONFIG.apsCharges;
         tank.aiAggro = 0.8 + Math.random() * 0.4;
         tank.aiDodgeTimer = 0;
@@ -576,6 +588,8 @@ function createTank(data, x, y, team, isPlayer) {
         console.error('[CREATE_TANK] Invalid position! x:', x, 'y:', y);
     }
     const id = Math.random().toString(36).substr(2, 9);
+    const tankType = Object.keys(TANKS).find(key => TANKS[key].name === data.name) || 'xingchen27a';
+    const masteryVisual = isPlayer && typeof getTankMasteryVisual === 'function' ? getTankMasteryVisual(tankType) : null;
     return {
         x, y, z: data.isFlying ? CONFIG.helicopterAltitude : (currentMap === 'factory' && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(1) : 0),
         factoryFloor: currentMap === 'factory' ? 1 : null,
@@ -587,10 +601,29 @@ function createTank(data, x, y, team, isPlayer) {
         aaElevation: CONFIG.aaDefaultElevation,
         muzzleFlashTimer: 0,
         muzzleFlashType: null,
+        recoilTimer: 0,
+        recoilStrength: 0,
+        hitFlashTimer: 0,
+        hitDirection: 0,
+        spawnAnimationTimer: 1.15,
+        trackAnimationPhase: 0,
+        visualLastX: x,
+        visualLastY: y,
+        masteryParticleTimer: 0,
         hp: data.hp, maxHp: data.maxHp,
         speed: data.speed, turnSpeed: data.turnSpeed,
         armor: data.armor, fireRate: data.fireRate * (isPlayer ? 1 : CONFIG.aiFireRateMultiplier),
-        color: data.color, accent: data.accent, shape: data.shape,
+        color: masteryVisual ? masteryVisual.color : data.color,
+        accent: masteryVisual ? masteryVisual.accent : data.accent,
+        baseColor: data.color, baseAccent: data.accent, shape: data.shape,
+        masteryLevel: masteryVisual ? masteryVisual.level : 0,
+        masteryLevelName: masteryVisual ? masteryVisual.levelName : '',
+        masteryCamouflage: masteryVisual ? masteryVisual.camouflage : false,
+        masteryGoldenProjectiles: masteryVisual ? masteryVisual.goldenProjectiles : false,
+        masteryTrailColor: masteryVisual ? masteryVisual.trailColor : null,
+        masteryAura: masteryVisual ? masteryVisual.aura : false,
+        masteryAuraRadius: masteryVisual ? masteryVisual.auraRadius : 0,
+        masteryTrailZoneTimer: 0,
         weight: data.weight || 1.0,
         isFlying: !!data.isFlying,
         canPassObstacles: !!data.canPassObstacles,
@@ -622,7 +655,7 @@ function createTank(data, x, y, team, isPlayer) {
         path: null, 
         pathRefreshTimer: 0,
         stuckTimer: 0, lastPos: {x, y}, patrolCenter: null,
-        tankType: Object.keys(TANKS).find(key => TANKS[key].name === data.name) || 'xingchen27a',
+        tankType,
         ultimateData: data.ultimate,
         ultimateCooldown: isPlayer ? 0 : (data.ultimate ? data.ultimate.cooldown : 0),
         ultimateActive: false, ultimateTimer: 0,
@@ -642,6 +675,10 @@ function createTank(data, x, y, team, isPlayer) {
         aiAimAngle: null, aiAimTarget: null,
         aiAmmoSaveMode: false, aiLastState: '', aiTeamCoord: 0,
         aiReactionDelay: 0.1, aiSkillLevel: 0.85,
+        masteryCamouflageChecks: {},
+        masteryAuraDamageMult: 1,
+        masteryAuraDefenseMult: 1,
+        masteryAuraInspired: false,
         aiTrackedTarget: null, aiTargetLockTimer: 0,
         turretJamTimer: 0,
         trackDamageTimer: 0,
@@ -698,6 +735,9 @@ function createTank(data, x, y, team, isPlayer) {
 }
 
 function getBaseSpawnInterval(team) {
+    if(gameMode === 'custom' && typeof customRoomConfig !== 'undefined') {
+        return team === 'blue' ? customRoomConfig.blueSpawnInterval : customRoomConfig.redSpawnInterval;
+    }
     const configured=CONFIG.baseSpawnIntervals&&CONFIG.baseSpawnIntervals[team];
     return Number.isFinite(configured)?configured:(team==='blue'?15:10);
 }
@@ -833,6 +873,10 @@ function update(dt) {
             const survivors = [player, ...allies].filter(t => t && !t.dead && !t.isInfected).length;
             endGame(survivors > 0 || (player && player.isInfected && !player.dead) ? 'victory' : 'playerDead');
         }
+        else if(gameMode === 'custom') {
+            const scoreWinner = typeof getWinningScoreTeam === 'function' ? getWinningScoreTeam() : 'draw';
+            endGame(scoreWinner === 'blue' ? 'victory' : scoreWinner === 'red' ? 'baseDestroyed' : 'time');
+        }
         else endGame('time');
         return;
     }
@@ -840,12 +884,14 @@ function update(dt) {
     updateSpatialGrid();
     
     updateOutposts(dt);
-    if(gameMode==='classic'||gameMode==='defense')updateBaseSpawns(dt);
+    if(gameMode==='classic'||gameMode==='defense'||
+       (gameMode==='custom'&&typeof customRoomConfig!=='undefined'&&customRoomConfig.reinforcements)) updateBaseSpawns(dt);
     if(!['ctf', 'infection', 'storm'].includes(gameMode)) updateBaseDefense(dt);
     
     updateMinimapJam(dt);
 
     updateTank(player, dt);
+    if(typeof updateMasteryBattleEffects === 'function') updateMasteryBattleEffects();
     if(typeof updateEngineAudio === 'function') updateEngineAudio(player);
     if(typeof updateScreenShake === 'function') updateScreenShake(dt);
     recordSurvivalState(player, dt);
@@ -1263,6 +1309,45 @@ function addSnowTrack(tank) {
 function updateStatusEffects(tank, dt) {
     if(!tank || tank.dead) return;
     if(tank.muzzleFlashTimer > 0) tank.muzzleFlashTimer = Math.max(0, tank.muzzleFlashTimer - dt);
+    if(tank.recoilTimer > 0) tank.recoilTimer = Math.max(0, tank.recoilTimer - dt);
+    if(tank.hitFlashTimer > 0) tank.hitFlashTimer = Math.max(0, tank.hitFlashTimer - dt);
+    if(tank.spawnAnimationTimer > 0) tank.spawnAnimationTimer = Math.max(0, tank.spawnAnimationTimer - dt);
+    const visualMove = Math.hypot(tank.x - (tank.visualLastX ?? tank.x), tank.y - (tank.visualLastY ?? tank.y));
+    tank.trackAnimationPhase = (tank.trackAnimationPhase || 0) + visualMove;
+    tank.visualLastX = tank.x;
+    tank.visualLastY = tank.y;
+    if(tank.masteryTrailColor && visualMove > 1.2) {
+        tank.masteryParticleTimer = Math.max(0, (tank.masteryParticleTimer || 0) - dt);
+        tank.masteryTrailZoneTimer = Math.max(0, (tank.masteryTrailZoneTimer || 0) - dt);
+        if(tank.masteryParticleTimer <= 0) {
+            const rearX = tank.x - Math.cos(tank.angle) * CONFIG.tankSize;
+            const rearY = tank.y - Math.sin(tank.angle) * CONFIG.tankSize;
+            createParticles(rearX, rearY, 2, tank.masteryTrailColor, .8);
+            tank.masteryParticleTimer = .08;
+        }
+        if(tank.masteryTrailZoneTimer <= 0 && typeof trailEffects !== 'undefined') {
+            const rearX = tank.x - Math.cos(tank.angle) * CONFIG.tankSize;
+            const rearY = tank.y - Math.sin(tank.angle) * CONFIG.tankSize;
+            trailEffects.push({
+                kind: 'mastery',
+                x: rearX,
+                y: rearY,
+                z: tank.z || 0,
+                factoryFloor: tank.factoryFloor,
+                life: 1.4,
+                maxLife: 1.4,
+                team: tank.team,
+                owner: tank,
+                radius: 24,
+                color: tank.masteryTrailColor,
+                damagePerSecond: typeof MASTERY_TRAIL_DAMAGE_PER_SECOND !== 'undefined'
+                    ? MASTERY_TRAIL_DAMAGE_PER_SECOND
+                    : 55
+            });
+            if(trailEffects.length > 180) trailEffects.splice(0, trailEffects.length - 180);
+            tank.masteryTrailZoneTimer = .13;
+        }
+    }
     if(tank.apsCooldown > 0) tank.apsCooldown -= dt;
     if(tank.smokeCooldown > 0) tank.smokeCooldown = Math.max(0, tank.smokeCooldown - dt);
     if(tank.turretJamTimer > 0) tank.turretJamTimer = Math.max(0, tank.turretJamTimer - dt);
@@ -1442,6 +1527,16 @@ function respawnPlayerNearBase() {
 // ==================== 检查胜利条件 ====================
 function checkWinCondition() {
     if(damageUpgradeState.active || gameState === 'damageUpgrade') return;
+    if(gameMode === 'custom' && typeof customRoomConfig !== 'undefined') {
+        if(customRoomConfig.rule === 'base') {
+            if(bases.blue && bases.blue.hp <= 0) { endGame('baseDestroyed'); return; }
+            if(bases.red && bases.red.hp <= 0) { endGame('victory'); return; }
+        } else if(customRoomConfig.rule === 'score' && typeof teamScores !== 'undefined') {
+            if(teamScores.blue >= customRoomConfig.scoreTarget) { endGame('victory'); return; }
+            if(teamScores.red >= customRoomConfig.scoreTarget) { endGame('baseDestroyed'); return; }
+        }
+        return;
+    }
     if(gameMode === 'defense') {
         const blueAlive = !player.dead || allies.some(a => !a.dead);
         if(!blueAlive) { endGame('defenseFailAllDead'); return; }
@@ -1529,7 +1624,12 @@ function endGame(reason) {
 
 function finishEndGame(reason) {
     if(gameState === 'ended') return;
-    const winner = typeof getWinningScoreTeam === 'function' ? getWinningScoreTeam() : (reason === 'victory' ? 'blue' : 'red');
+    const customBaseResult = gameMode === 'custom' && typeof customRoomConfig !== 'undefined' && customRoomConfig.rule === 'base';
+    const winner = customBaseResult && (reason === 'victory' || reason === 'baseDestroyed')
+        ? (reason === 'victory' ? 'blue' : 'red')
+        : typeof getWinningScoreTeam === 'function'
+        ? getWinningScoreTeam()
+        : (reason === 'victory' ? 'blue' : 'red');
     gameState = 'ended';
     if(typeof stopEngineAudio === 'function') stopEngineAudio();
     const overlay = document.getElementById('matchResultOverlay');
@@ -1558,7 +1658,11 @@ function restartLastGame() {
     const setup = { ...lastMatchSetup };
     resetGame();
     currentMap = setup.currentMap;
+    if(setup.customRoom && typeof applyCustomRoomConfigToUI === 'function') {
+        customRoomConfig = sanitizeCustomRoomConfig(setup.customRoom);
+    }
     selectMode(setup.gameMode);
+    if(setup.customRoom && typeof applyCustomRoomConfigToUI === 'function') applyCustomRoomConfigToUI(setup.customRoom);
     selectedTank = setup.selectedTank;
     const values = { ammoSlider: setup.ammo, mgSlider: setup.mg, aaSlider: setup.aa };
     Object.entries(values).forEach(([id, value]) => { const element = document.getElementById(id); if(element) element.value = value; });

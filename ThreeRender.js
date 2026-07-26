@@ -15,6 +15,7 @@ const threeView = {
     supplyMeshes: new Map(),
     fireballMeshes: new Map(),
     smokeMeshes: new Map(),
+    trailEffectMeshes: new Map(),
     obstacleMeshes: new Map(),
     debrisMeshes: new Map(),
     mechanicMeshes: new Map(),
@@ -204,6 +205,7 @@ function rebuildThreeWorld(force = false) {
     threeView.supplyMeshes.clear();
     threeView.fireballMeshes.clear();
     threeView.smokeMeshes.clear();
+    threeView.trailEffectMeshes.clear();
     threeView.obstacleMeshes.clear();
     threeView.debrisMeshes.clear();
     threeView.mechanicMeshes.clear();
@@ -843,11 +845,70 @@ function createThreeTank(tank) {
         group.add(wash);
         group.userData.waterWash = wash;
     }
+    if(tank.masteryCamouflage && tank.shape !== 'helicopter') {
+        const camouflage = new THREE.Group();
+        const patchColors = [0x263820, 0x737047, 0xa28b5b, 0x18241a];
+        const patchLayout = [
+            [-1.8, -.85, 1.5, .68, .2], [-.6, 1.05, 1.2, .62, -.35],
+            [.8, -.95, 1.45, .58, .4], [1.95, .65, 1.1, .55, -.15],
+            [-2.1, .95, .9, .48, .55], [.25, .15, 1.25, .5, -.5]
+        ];
+        patchLayout.forEach((patch, index) => {
+            const mesh = new THREE.Mesh(
+                new THREE.CircleGeometry(1, 7),
+                makeStandardMaterial(patchColors[index % patchColors.length], { roughness: .88, metalness: .05 })
+            );
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.rotation.z = patch[4];
+            mesh.position.set(patch[0], 2.47 + index * .004, patch[1]);
+            mesh.scale.set(patch[2], patch[3], 1);
+            camouflage.add(mesh);
+        });
+        group.add(camouflage);
+        group.userData.camouflage = camouflage;
+    }
+    if(tank.masteryTrailColor) {
+        const flameColor = new THREE.Color(tank.masteryTrailColor);
+        const masteryExhaust = new THREE.Group();
+        const outer = new THREE.Mesh(
+            new THREE.ConeGeometry(.85, 3.4, 9),
+            new THREE.MeshBasicMaterial({ color: flameColor, transparent: true, opacity: .72, depthWrite: false })
+        );
+        const inner = new THREE.Mesh(
+            new THREE.ConeGeometry(.4, 2.25, 8),
+            new THREE.MeshBasicMaterial({ color: 0xfff0a3, transparent: true, opacity: .9, depthWrite: false })
+        );
+        outer.rotation.z = -Math.PI / 2;
+        inner.rotation.z = -Math.PI / 2;
+        inner.position.x = -.45;
+        masteryExhaust.position.set(tank.shape === 'helicopter' ? -7.15 : -4.45, tank.shape === 'helicopter' ? .2 : 1.45, 0);
+        masteryExhaust.add(outer, inner);
+        group.add(masteryExhaust);
+        group.userData.masteryExhaust = masteryExhaust;
+    }
+    if(tank.masteryAura) {
+        const auraRadius = (tank.masteryAuraRadius || 300) * THREE_WORLD_SCALE;
+        const auraRing = new THREE.Mesh(
+            new THREE.RingGeometry(auraRadius - .35, auraRadius, 96),
+            new THREE.MeshBasicMaterial({
+                color: tank.masteryTrailColor || 0xffd85a,
+                transparent: true,
+                opacity: .23,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            })
+        );
+        auraRing.rotation.x = -Math.PI / 2;
+        auraRing.position.y = .12;
+        group.add(auraRing);
+        group.userData.masteryAuraRing = auraRing;
+    }
     const markerMaterial = new THREE.MeshBasicMaterial({ color: tank.isPlayer ? 0xffffff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838), transparent: true, opacity: tank.isPlayer ? 0.85 : 0.35, side: THREE.DoubleSide });
     const marker = new THREE.Mesh(new THREE.RingGeometry(3.9, 4.35, 32), markerMaterial);
     marker.rotation.x = -Math.PI / 2;
     marker.position.y = 0.08;
     group.add(marker);
+    group.userData.marker = marker;
     const rescueShield = new THREE.Mesh(
         new THREE.SphereGeometry(tank.shape === 'helicopter' ? 5.8 : 4.8, 18, 12),
         new THREE.MeshBasicMaterial({ color: 0x5ee8ff, transparent: true, opacity: 0.18, wireframe: true, depthWrite: false })
@@ -881,9 +942,29 @@ function syncThreeTanks(now) {
         const inWater = !flying && typeof isTankInWater === 'function' && isTankInWater(tank);
         const storedHeight = (tank.z || 0) * THREE_WORLD_SCALE;
         const baseHeight = storedHeight + (flying ? Math.sin(now * 0.003 + tank.x) * 0.55 : (inWater ? 0.15 : 0.08));
-        setThreeWorldPosition(mesh, tank.x, tank.y, baseHeight);
+        const spawnRemaining = Math.max(0, tank.spawnAnimationTimer || 0);
+        const spawnElapsed = 1.15 - Math.min(1.15, spawnRemaining);
+        const spawnScale = spawnRemaining > 0
+            ? 1 - Math.exp(-spawnElapsed * 5.4) * .34 * Math.cos(spawnElapsed * 12)
+            : 1;
+        const recoilDuration = tank.muzzleFlashType === 'mg' ? .08 : tank.muzzleFlashType === 'aa' ? .15 : .24;
+        const recoilRatio = Math.min(1, Math.max(0, (tank.recoilTimer || 0) / recoilDuration));
+        const recoilDistance = (tank.recoilStrength || 0) * recoilRatio * recoilRatio;
+        const recoilX = -Math.cos(tank.turretAngle || tank.angle || 0) * recoilDistance;
+        const recoilY = -Math.sin(tank.turretAngle || tank.angle || 0) * recoilDistance;
+        const threeVisualMove = Math.hypot(
+            tank.x - (mesh.userData.lastTankX ?? tank.x),
+            tank.y - (mesh.userData.lastTankY ?? tank.y)
+        );
+        mesh.userData.lastTankX = tank.x;
+        mesh.userData.lastTankY = tank.y;
+        setThreeWorldPosition(mesh, tank.x + recoilX, tank.y + recoilY, baseHeight);
         const flattened=currentMap==='factory'&&!flying&&(tank.flattenedTimer||0)>0;
-        mesh.scale.set(flattened ? 1.16 : 1,flattened ? .28 : 1,flattened ? 1.16 : 1);
+        mesh.scale.set(
+            (flattened ? 1.16 : 1) * spawnScale,
+            (flattened ? .28 : 1) * spawnScale,
+            (flattened ? 1.16 : 1) * spawnScale
+        );
         mesh.rotation.y = -tank.angle;
         if(mesh.userData.turretPivot) mesh.userData.turretPivot.rotation.y = -(tank.turretAngle - tank.angle);
         if(mesh.userData.gunPitch) {
@@ -909,9 +990,32 @@ function syncThreeTanks(now) {
             }
         }
         if(mesh.userData.waterWash) mesh.userData.waterWash.visible = inWater;
+        if(mesh.userData.masteryExhaust) {
+            const active = threeVisualMove > .35;
+            mesh.userData.masteryExhaust.visible = active;
+            if(active) {
+                const pulse = .82 + Math.sin(now * .025 + tank.x) * .18;
+                mesh.userData.masteryExhaust.scale.set(1 + pulse * .18, pulse, 1 + pulse * .18);
+                mesh.userData.masteryExhaust.rotation.x = Math.sin(now * .018) * .08;
+            }
+        }
+        if(mesh.userData.masteryAuraRing) {
+            mesh.userData.masteryAuraRing.material.opacity = .18 + Math.sin(now * .004) * .07;
+            mesh.userData.masteryAuraRing.rotation.z = now * .00022;
+        }
         if(mesh.userData.rescueShield) {
             mesh.userData.rescueShield.visible = !!(tank.rescueShieldActive && tank.shieldActive && tank.shieldHp > 0);
             mesh.userData.rescueShield.material.opacity = 0.14 + Math.sin(now * 0.012 + tank.x) * 0.05;
+        }
+        if(mesh.userData.marker) {
+            const masteryPulse = tank.masteryAura ? 1 + Math.sin(now * .004) * .12 : 1;
+            const spawnPulse = spawnRemaining > 0 ? 1 + (spawnRemaining / 1.15) * 1.8 : 1;
+            mesh.userData.marker.scale.setScalar(masteryPulse * spawnPulse);
+            mesh.userData.marker.material.color.setHex(tank.masteryAura ? 0xffd85a : (tank.isPlayer ? 0xffffff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838)));
+            mesh.userData.marker.material.opacity = (tank.hitFlashTimer || 0) > 0
+                ? .95
+                : tank.masteryAura ? .62 : tank.isPlayer ? .85 : .35;
+            mesh.userData.marker.rotation.z = tank.masteryAura ? now * .001 : 0;
         }
         const opacity = tank.ghostActive && !tank.ghostRevealed ? 0.28 : 1;
         if(mesh.userData.lastOpacity !== opacity) {
@@ -933,11 +1037,21 @@ function syncThreeTanks(now) {
 }
 
 function createThreeBullet(bullet) {
-    const color = bullet.type === 'bomb' ? 0xff6136 : (bullet.type === 'airmg' ? 0x73f2ff : (bullet.type === 'aa' ? 0xff45ff : (bullet.type === 'shell' ? 0xff9a20 : 0xffef65)));
+    const color = bullet.masteryGolden
+        ? 0xffd629
+        : bullet.type === 'bomb' ? 0xff6136 : (bullet.type === 'airmg' ? 0x73f2ff : (bullet.type === 'aa' ? 0xff45ff : (bullet.type === 'shell' ? 0xff9a20 : 0xffef65)));
     const radius = bullet.type === 'bomb' ? .72 : (bullet.type === 'aa' ? 0.62 : (bullet.type === 'shell' ? 0.48 : 0.22));
     const material = makeStandardMaterial(color, { emissive: color, emissiveIntensity: bullet.type === 'mg' || bullet.type === 'airmg' ? 1.2 : 2.4, roughness: 0.25 });
     const group = new THREE.Group();
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(radius, 10, 8), material);
+    if(bullet.masteryGolden) {
+        projectile.scale.set(1.22, 1.22, 1.22);
+        const glow = new THREE.Mesh(
+            new THREE.SphereGeometry(radius * 1.8, 10, 8),
+            new THREE.MeshBasicMaterial({ color: 0xffdf55, transparent: true, opacity: .22, depthWrite: false })
+        );
+        group.add(glow);
+    }
     if(bullet.type === 'bomb') projectile.scale.set(.72, 1.7, .72);
     group.add(projectile);
     group.userData.projectile = projectile;
@@ -1112,6 +1226,78 @@ function syncThreeSmokeClouds(now) {
         if(!active.has(cloud)) {
             disposeThreeObject(group);
             threeView.smokeMeshes.delete(cloud);
+        }
+    }
+}
+
+function createThreeTrailEffect(effect) {
+    const group = new THREE.Group();
+    if(effect.kind === 'mastery') {
+        const color = new THREE.Color(effect.color || 0xffa629);
+        const radius = Math.max(1, effect.radius * THREE_WORLD_SCALE);
+        const ember = new THREE.Mesh(
+            new THREE.CylinderGeometry(radius, radius * .72, .28, 18),
+            new THREE.MeshBasicMaterial({
+                color,
+                transparent: true,
+                opacity: .5,
+                depthWrite: false
+            })
+        );
+        const core = new THREE.Mesh(
+            new THREE.CylinderGeometry(radius * .32, radius * .48, .52, 12),
+            new THREE.MeshBasicMaterial({
+                color: 0xffef9a,
+                transparent: true,
+                opacity: .72,
+                depthWrite: false
+            })
+        );
+        core.position.y = .22;
+        group.add(ember, core);
+        group.userData.ember = ember;
+        group.userData.core = core;
+    } else {
+        const radius = Math.max(1, effect.radius * THREE_WORLD_SCALE);
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(radius - .2, radius, 36),
+            new THREE.MeshBasicMaterial({
+                color: effect.team === 'blue' ? 0x4488ff : 0xff4444,
+                transparent: true,
+                opacity: .3,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            })
+        );
+        ring.rotation.x = -Math.PI / 2;
+        group.add(ring);
+        group.userData.ember = ring;
+    }
+    threeView.dynamicRoot.add(group);
+    return group;
+}
+
+function syncThreeTrailEffects(now) {
+    if(typeof trailEffects === 'undefined') return;
+    const active = new Set(trailEffects);
+    trailEffects.forEach(effect => {
+        let mesh = threeView.trailEffectMeshes.get(effect);
+        if(!mesh) {
+            mesh = createThreeTrailEffect(effect);
+            threeView.trailEffectMeshes.set(effect, mesh);
+        }
+        setThreeWorldPosition(mesh, effect.x, effect.y, ((effect.z || 0) * THREE_WORLD_SCALE) + .12);
+        const alpha = Math.max(0, effect.life / Math.max(.01, effect.maxLife));
+        if(mesh.userData.ember) mesh.userData.ember.material.opacity = alpha * (effect.kind === 'mastery' ? .5 : .3);
+        if(mesh.userData.core) {
+            mesh.userData.core.material.opacity = alpha * .72;
+            mesh.userData.core.scale.setScalar(.78 + Math.sin(now * .018 + effect.x) * .18);
+        }
+    });
+    for(const [effect, mesh] of threeView.trailEffectMeshes) {
+        if(!active.has(effect)) {
+            disposeThreeObject(mesh);
+            threeView.trailEffectMeshes.delete(effect);
         }
     }
 }
@@ -1571,6 +1757,7 @@ function renderThreeScene() {
     syncThreeTanks(now);
     syncThreeBullets();
     syncThreeSmokeClouds(now);
+    syncThreeTrailEffects(now);
     syncThreeTurrets();
     syncThreeSupplyDrops(now);
     syncThreeAmmoRackFireballs(now);

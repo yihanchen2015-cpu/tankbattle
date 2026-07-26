@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>坦克大战 - 据点争夺</title>
-    <link rel="stylesheet" href="style.css?v=combat-systems-3">
+    <link rel="stylesheet" href="style.css?v=mastery-effects-8">
     <base target="_blank">
 </head>
 <body>
@@ -39,6 +39,10 @@
                     <span class="mode-name">🌪 风暴模式</span>
                     <span class="mode-desc">安全区持续缩小 | 淘汰所有敌人 | 活到最后</span>
                 </button>
+                <button class="mode-btn mode-custom" id="btnModeCustom" onclick="selectMode('custom')">
+                    <span class="mode-name">🧰 自定义房间</span>
+                    <span class="mode-desc">自由设置地图、胜利规则、队伍规模、坦克池、弹药与增援</span>
+                </button>
                 <button class="mode-btn mode-pvp" id="btnModePVP" disabled>
                     <span class="mode-name">🌐 PvP联机（开发中）</span>
                     <span class="mode-desc">当前版本不包含网络服务器，不作为可用模式展示</span>
@@ -51,6 +55,7 @@
             <button class="start-btn-secondary" id="btnGameIntro" onclick="showIntroPanel()">📖 游戏介绍</button>
             <button class="start-btn-secondary" id="btnTutorial" style="margin-top:8px;" onclick="startTutorial()">🎓 新手教程</button>
             <button class="start-btn-secondary" id="btnAchievements" style="margin-top:8px;" onclick="showAchievementPanel()">🏆 成就系统</button>
+            <button class="start-btn-secondary" id="btnMastery" style="margin-top:8px;" onclick="showMasteryPanel()">★ 坦克熟练度</button>
         </div>
 
         <!-- ========== 新手教程弹窗 ========== -->
@@ -679,6 +684,76 @@
                         <option value="hard">困难</option>
                     </select>
                 </div>
+                <div id="customRoomPanel">
+                    <h4>🧰 房间规则编辑器</h4>
+                    <div class="custom-room-grid">
+                        <div class="config-row">
+                            <label>胜利规则</label>
+                            <select id="customRule">
+                                <option value="base">摧毁敌方基地</option>
+                                <option value="score">率先达到目标分数</option>
+                                <option value="timed">时间结束按总分</option>
+                            </select>
+                        </div>
+                        <div class="config-row" id="customScoreTargetRow">
+                            <label>目标分数</label>
+                            <input type="range" id="customScoreTarget" min="500" max="20000" step="500" value="5000">
+                            <span class="value-display" id="customScoreTargetValue">5000</span>
+                        </div>
+                        <div class="config-row">
+                            <label>蓝方初始数量</label>
+                            <input type="range" id="customBlueCount" min="1" max="20" value="6">
+                            <span class="value-display" id="customBlueCountValue">6</span>
+                        </div>
+                        <div class="config-row">
+                            <label>红方初始数量</label>
+                            <input type="range" id="customRedCount" min="1" max="20" value="8">
+                            <span class="value-display" id="customRedCountValue">8</span>
+                        </div>
+                        <div class="config-row">
+                            <label>对局时间（分钟）</label>
+                            <input type="range" id="customDuration" min="1" max="20" value="6">
+                            <span class="value-display" id="customDurationValue">6</span>
+                        </div>
+                        <div class="config-row">
+                            <label>据点数量</label>
+                            <input type="range" id="customOutposts" min="0" max="5" value="3">
+                            <span class="value-display" id="customOutpostsValue">3</span>
+                        </div>
+                        <div class="config-row" id="customBaseHpRow">
+                            <label>基地生命值</label>
+                            <input type="range" id="customBaseHp" min="1000" max="50000" step="1000" value="10000">
+                            <span class="value-display" id="customBaseHpValue">10000</span>
+                        </div>
+                        <div class="config-row">
+                            <label>AI 初始弹药</label>
+                            <input type="range" id="customAiAmmo" min="10" max="200" step="5" value="70">
+                            <span class="value-display" id="customAiAmmoValue">70</span><span class="custom-unit">%</span>
+                        </div>
+                        <div class="config-row custom-toggle-row">
+                            <label for="customReinforcements">基地持续增援</label>
+                            <input type="checkbox" id="customReinforcements" checked>
+                        </div>
+                        <div class="config-row custom-reinforcement-row">
+                            <label>蓝方增援间隔</label>
+                            <input type="range" id="customBlueSpawn" min="5" max="90" value="18">
+                            <span class="value-display" id="customBlueSpawnValue">18</span><span class="custom-unit">秒</span>
+                        </div>
+                        <div class="config-row custom-reinforcement-row">
+                            <label>红方增援间隔</label>
+                            <input type="range" id="customRedSpawn" min="5" max="90" value="18">
+                            <span class="value-display" id="customRedSpawnValue">18</span><span class="custom-unit">秒</span>
+                        </div>
+                    </div>
+                    <div class="custom-pool-head">
+                        <span>坦克池（同时限制玩家选择与 AI 出场）</span>
+                        <span>
+                            <button type="button" onclick="toggleCustomTankPoolAll(true)">全选</button>
+                            <button type="button" onclick="toggleCustomTankPoolAll(false)">清空</button>
+                        </span>
+                    </div>
+                    <div id="customTankPool"></div>
+                </div>
             </div>
 
             <button class="btn-start" id="startBtn" disabled onclick="console.log('[BUTTON] 点击: 开始战斗'); startGame()">开始战斗</button>
@@ -697,6 +772,24 @@
                 <div id="achievementStats" style="text-align:center;color:#888;margin-bottom:20px;"></div>
                 <div id="achievementList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:15px;"></div>
                 <button id="btnCloseAchievements" style="display:block;margin:30px auto;padding:12px 50px;font-size:18px;background:linear-gradient(45deg,#00a8ff,#00ff88);border:none;border-radius:25px;color:#000;font-weight:bold;cursor:pointer;" onclick="document.getElementById('achievementPanel').style.display='none'">返回</button>
+            </div>
+        </div>
+        <div id="masteryPanel">
+            <div class="mastery-panel-content">
+                <h2>★ 坦克熟练度档案</h2>
+                <p id="masterySummary"></p>
+                <div class="mastery-unlock-guide">
+                    <span>Lv.1 新兵：基础涂装</span>
+                    <span>Lv.2 · 3场：迷彩 / 被锁定 -10%</span>
+                    <span>Lv.3 · 8场：金色炮弹 / 威力 +20%</span>
+                    <span>Lv.4 · 15场：灼热尾焰伤害</span>
+                    <span>Lv.5 · 30场：激励 300 范围内所有 AI</span>
+                    <span>Lv.6 · 50场：战术王牌</span>
+                    <span>Lv.7 · 75场：传奇</span>
+                    <span>Lv.8 · 110场：战神</span>
+                </div>
+                <div id="masteryList"></div>
+                <button type="button" class="mastery-close" onclick="document.getElementById('masteryPanel').style.display='none'">返回</button>
             </div>
         </div>
         <div id="gameUI">
@@ -799,22 +892,23 @@
 
     <script src="vendor/three.min.js"></script>
     <script src="vendor/ammo.wasm.js"></script>
-    <script src="Config.js?v=combat-systems-3"></script>
+    <script src="Config.js?v=mastery-custom-2"></script>
     <script src="Audio.js"></script>
     <script src="Score.js"></script>
     <script src="Replay.js"></script>
     <script src="BattleSystems.js"></script>
     <script src="TerrainDestruction.js"></script>
-    <script src="Achievement.js"></script>
-    <script src="Pathfinding.js?v=combat-systems-3"></script>
-    <script src="UI.js?v=combat-systems-3"></script>
-    <script src="Ultimate.js?v=combat-systems-3"></script>
-    <script src="GameCore.js?v=combat-systems-3"></script>
-    <script src="MapMechanics.js?v=combat-systems-3"></script>
-    <script src="FactoryPhysics.js?v=combat-systems-3"></script>
-    <script src="AI.js?v=combat-systems-3"></script>
-    <script src="Combat.js?v=combat-systems-3"></script>
-    <script src="Render.js?v=combat-systems-3"></script>
-    <script src="ThreeRender.js?v=combat-systems-3"></script>
+    <script src="Achievement.js?v=mastery-effects-8"></script>
+    <script src="Progression.js?v=mastery-effects-8"></script>
+    <script src="Pathfinding.js?v=mastery-custom-2"></script>
+    <script src="UI.js?v=mastery-effects-8"></script>
+    <script src="Ultimate.js?v=mastery-effects-8"></script>
+    <script src="GameCore.js?v=mastery-effects-8"></script>
+    <script src="MapMechanics.js?v=mastery-custom-2"></script>
+    <script src="FactoryPhysics.js?v=mastery-custom-2"></script>
+    <script src="AI.js?v=mastery-effects-8"></script>
+    <script src="Combat.js?v=mastery-effects-8"></script>
+    <script src="Render.js?v=mastery-effects-8"></script>
+    <script src="ThreeRender.js?v=mastery-effects-8"></script>
 </body>
 </html>

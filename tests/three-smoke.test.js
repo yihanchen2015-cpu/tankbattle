@@ -60,6 +60,7 @@ const sandbox = {
     terrainDebris: [],
     damageNumbers: [],
     smokeClouds: [{ x: 1480, y: 1190, z: 0, radius: 135, life: 9, maxLife: 10 }],
+    trailEffects: [],
     allies: [],
     enemies: [],
     isTankInWater: () => false
@@ -76,7 +77,8 @@ vm.runInContext(`
         id: 'player', x: 1500, y: 1200, angle: 0, turretAngle: 0,
         color: '#4488ff', accent: '#88ccff', shape: 'medium', team: 'blue',
         tankType: 'test', turretSize: 30, isPlayer: true, dead: false, isFlying: false,
-        shellElevation: 18, aaElevation: 30, muzzleFlashTimer:.1, muzzleFlashType:'shell'
+        shellElevation: 18, aaElevation: 30, muzzleFlashTimer:.1, muzzleFlashType:'shell',
+        masteryCamouflage:true, masteryTrailColor:'#ffd85a', masteryAura:true, masteryAuraRadius:300
     };
     threeView.initialized = true;
     threeView.scene = new THREE.Scene();
@@ -111,6 +113,11 @@ vm.runInContext(`
     gameMode = 'sneak';
     sneakHiddenOutpost = { x:1500, y:1200, discovered:true, triggered:false, signalTimer:0, contested:false, progress:3, captureTime:6 };
     player.angle = Math.PI / 2;
+    threeView.tankMeshes.get('player').userData.lastTankX = player.x - 2;
+    trailEffects.push({
+        kind:'mastery', x:1490, y:1200, z:0, radius:24, life:1, maxLife:1,
+        team:'blue', owner:player, color:'#ffd85a'
+    });
     renderThreeScene();
     const secondDirection = new THREE.Vector3();
     threeView.camera.getWorldDirection(secondDirection);
@@ -150,6 +157,10 @@ vm.runInContext(`
         debrisMeshes: threeView.debrisMeshes.size,
         smokeMeshes: threeView.smokeMeshes.size,
         rescueShieldVisible: threeView.tankMeshes.get('player').userData.rescueShield.visible,
+        masteryExhaustVisible: threeView.tankMeshes.get('player').userData.masteryExhaust.visible,
+        masteryAuraRadius: threeView.tankMeshes.get('player').userData.masteryAuraRing.geometry.parameters.outerRadius,
+        masteryTrailMeshes: threeView.trailEffectMeshes.size,
+        masteryCamouflage: !!threeView.tankMeshes.get('player').userData.camouflage,
         hiddenOutpostVisible: !!threeView.hiddenOutpostMesh && threeView.hiddenOutpostMesh.visible,
         pointLights,
         fixedCameraDelta: firstDirection.distanceTo(secondDirection),
@@ -185,6 +196,10 @@ assert.strictEqual(result.preservedObstacleMesh, true, 'unchanged obstacle meshe
 assert.strictEqual(result.debrisMeshes, 1, 'physical terrain debris should be synchronized into the 3D scene');
 assert.strictEqual(result.smokeMeshes, 1, 'smoke grenades should synchronize a volumetric 3D cloud');
 assert.strictEqual(result.rescueShieldVisible, true, 'rescue shield should be visible around the reinforced player');
+assert.strictEqual(result.masteryExhaustVisible, true, 'moving mastery tanks should show a 3D exhaust flame');
+assert(Math.abs(result.masteryAuraRadius - 24) < .001, '3D ace aura should use the real 300-unit radius');
+assert.strictEqual(result.masteryTrailMeshes, 1, 'hot mastery trail zones should be visible in 3D');
+assert.strictEqual(result.masteryCamouflage, true, '3D tanks should carry visible camouflage patches');
 assert.strictEqual(result.hiddenOutpostVisible, true, 'discovered sneak outpost should be visible in the 3D world');
 assert.strictEqual(result.pointLights, 0, 'projectiles must not accumulate expensive dynamic lights');
 assert(result.fixedCameraDelta < 1e-9, 'turning the tank must never rotate the world-aligned camera');
