@@ -55,15 +55,23 @@ const result = vm.runInContext(`(() => {
     const matchesAfterStart = getTankMasteryProfile(selectedTank).matches;
     resetMatchStats();
     endMatchStats('defeat');
-    const matchesAfterResult = getTankMasteryProfile(selectedTank).matches;
+    const profileAfterResult = getTankMasteryProfile(selectedTank);
+    const matchesAfterResult = profileAfterResult.matches;
     endMatchStats('defeat');
-    const matchesAfterDuplicateResult = getTankMasteryProfile(selectedTank).matches;
+    const profileAfterDuplicateResult = getTankMasteryProfile(selectedTank);
+    const matchesAfterDuplicateResult = profileAfterDuplicateResult.matches;
+    const performanceXp = calculateTankMasteryMatchXp({
+        victory:true, kills:3, survivalSeconds:120
+    });
 
     for(let i = matchesAfterResult; i < 110; i++) recordTankMasteryMatch(selectedTank);
     const maxProfile = getTankMasteryProfile(selectedTank);
     const maxVisual = getTankMasteryVisual(selectedTank);
     currentMap = 'classic';
     const maxTank = createTank(TANKS[selectedTank], 100, 100, 'blue', true);
+    Math.random = () => .999;
+    const maxAiTank = createTank(TANKS[selectedTank], 200, 100, 'red', false);
+    const aiLevelSamples = [0, .3, .52, .68, .8, .88, .94, .999].map(rollAIMasteryLevel);
 
     const observer = { id:'observer', aiTrackedTarget:null };
     const camouflaged = { id:'camo', masteryCamouflage:true };
@@ -125,6 +133,9 @@ const result = vm.runInContext(`(() => {
         matchesAfterStart,
         matchesAfterResult,
         matchesAfterDuplicateResult,
+        xpAfterResult: profileAfterResult.xp,
+        xpAfterDuplicateResult: profileAfterDuplicateResult.xp,
+        performanceXp,
         maxLevel: maxProfile.level,
         maxVisual,
         maxTankStats: {
@@ -135,6 +146,16 @@ const result = vm.runInContext(`(() => {
             armor:maxTank.armor,
             weaponDamageMult:maxTank.masteryWeaponDamageMult
         },
+        maxAiTankStats: {
+            level:maxAiTank.masteryLevel,
+            levelColor:maxAiTank.masteryLevelColor,
+            hp:maxAiTank.hp,
+            speed:maxAiTank.speed,
+            armor:maxAiTank.armor,
+            aura:maxAiTank.masteryAura,
+            weaponDamageMult:maxAiTank.masteryWeaponDamageMult
+        },
+        aiLevelSamples,
         camoAvoided,
         normalTargetAccepted,
         golden: goldenBullet.masteryGolden,
@@ -155,6 +176,11 @@ const result = vm.runInContext(`(() => {
 assert.strictEqual(result.matchesAfterStart, 0, 'starting a battle must not grant mastery progress');
 assert.strictEqual(result.matchesAfterResult, 1, 'a completed result should grant exactly one match');
 assert.strictEqual(result.matchesAfterDuplicateResult, 1, 'duplicate settlement must not grant another match');
+assert.strictEqual(result.xpAfterResult, 100, 'a completed defeat should grant the base 100 XP');
+assert.strictEqual(result.xpAfterDuplicateResult, 100, 'duplicate settlement must not grant XP again');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(result.performanceXp)), {
+    completion:100, victory:150, kills:90, survival:60, total:400
+}, 'match XP should combine completion, victory, kills, and survival performance');
 assert.strictEqual(result.maxLevel, 8, 'mastery should have eight levels');
 assert(result.maxVisual.camouflage && result.maxVisual.goldenProjectiles && result.maxVisual.trailColor && result.maxVisual.aura,
     'maximum mastery should expose all four cumulative effects');
@@ -165,6 +191,12 @@ assert(Math.abs(result.maxTankStats.turnSpeed - .099) < 1e-9);
 assert(Math.abs(result.maxTankStats.armor - .85) < 1e-9);
 assert.strictEqual(result.maxTankStats.weaponDamageMult, 1.1,
     'levels six through eight should apply cumulative mobility, durability, and weapon bonuses');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(result.maxAiTankStats)), {
+    level:8, levelColor:'#ffd84a', hp:896, speed:5.94, armor:.85,
+    aura:true, weaponDamageMult:1.1
+}, 'randomly generated AI levels should apply the same combat bonuses and level color');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(result.aiLevelSamples)), [1,2,3,4,5,6,7,8],
+    'the weighted AI level roll should be able to produce every level');
 assert.strictEqual(result.camoAvoided, true, 'the ten-percent camouflage roll should reject target acquisition');
 assert.strictEqual(result.normalTargetAccepted, true, 'non-camouflaged targets should not be rejected');
 assert.strictEqual(result.golden, true, 'mastery shells should be marked golden for both renderers');

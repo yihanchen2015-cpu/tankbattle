@@ -418,6 +418,21 @@ function drawDamageNumbers() {
     ctx.globalAlpha = 1;
 }
 
+function drawTankLevelLabel(tank, x, y) {
+    const level = Math.max(1, Math.min(8, Number(tank.masteryLevel) || 1));
+    const color = tank.masteryLevelColor ||
+        (typeof getMasteryLevelColor === 'function' ? getMasteryLevelColor(level) : '#aab4bd');
+    ctx.save();
+    ctx.font = '900 11px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = color;
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 4;
+    ctx.fillText(`★ Lv.${level}`, x, y);
+    ctx.restore();
+}
+
 
 function drawHelicopter(tank) {
     const altitudeOffset = (tank.z || 0) * ALTITUDE_DRAW_SCALE;
@@ -551,6 +566,7 @@ function drawHelicopter(tank) {
     ctx.fillRect(tank.x - barW/2 - 1, barY - 1, barW + 2, barH + 2);
     ctx.fillStyle = hpRatio > 0.6 ? '#00ff88' : hpRatio > 0.3 ? '#ffaa00' : '#ff4444';
     ctx.fillRect(tank.x - barW/2, barY, barW * hpRatio, barH);
+    drawTankLevelLabel(tank, tank.x, barY - 14);
 
     // 玩家标识
     if(tank.isPlayer) {
@@ -779,6 +795,7 @@ function drawTank(tank) {
     ctx.roundRect(tank.x - barW/2, barY, barW * hpRatio, barH, 3);
     ctx.fill();
     ctx.shadowBlur = 0;
+    drawTankLevelLabel(tank, tank.x, barY - 12);
     
     if(tank.isPlayer) {
         ctx.strokeStyle = '#00ff88';
@@ -855,7 +872,8 @@ function drawTankAnimationEffects(tank, renderY) {
     if(tank.masteryAura) {
         ctx.save();
         ctx.translate(tank.x, renderY);
-        ctx.strokeStyle = tank.masteryTrailColor || '#ffd85a';
+        ctx.strokeStyle = tank.masteryLevelColor ||
+            (typeof getMasteryLevelColor === 'function' ? getMasteryLevelColor(tank.masteryLevel) : '#ffd85a');
         ctx.lineWidth = 3;
         ctx.globalAlpha = .22 + Math.sin(now * 4) * .06;
         ctx.setLineDash([18, 15]);

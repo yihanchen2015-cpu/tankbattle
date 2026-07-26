@@ -27,7 +27,21 @@
             font-weight: 800; text-shadow: 0 2px 3px #000, 0 0 5px #000;
             will-change: transform, opacity;
         }
-        .three-tank-label { font-size: 13px; letter-spacing: .5px; }
+        .three-tank-label {
+            display: flex; flex-direction: column; align-items: center; gap: 3px;
+            min-width: 76px; font-size: 13px; letter-spacing: .5px;
+        }
+        .three-tank-title { display: flex; align-items: center; gap: 5px; }
+        .three-tank-level { font-size: 11px; font-weight: 950; }
+        .three-tank-hp {
+            width: 70px; height: 7px; padding: 1px; overflow: hidden;
+            background: rgba(0,0,0,.78); border: 1px solid rgba(255,255,255,.38);
+            border-radius: 5px; box-shadow: 0 1px 3px #000;
+        }
+        .three-tank-hp-fill {
+            display: block; width: 100%; height: 100%; border-radius: 3px;
+            transition: width .12s linear, background .12s linear;
+        }
         .three-damage-label { color: #ffdf5d; font-size: 19px; }
         .three-capture-label {
             width: 112px; padding: 5px 7px; color: #fff; font-size: 11px;
@@ -159,6 +173,12 @@
         #matchResultOverlay.active { display: flex; animation: resultFadeIn .65s ease both; }
         @keyframes resultFadeIn { from { opacity: 0; } }
         #matchResultTitle { font-size: clamp(38px, 7vw, 84px); font-weight: 950; letter-spacing: .12em; text-shadow: 0 0 35px currentColor; }
+        #resultMasteryXp {
+            margin-top: -36px; padding: 9px 20px; color: #ffe071;
+            background: rgba(70,50,5,.58); border: 1px solid rgba(255,216,74,.65);
+            border-radius: 18px; font-size: clamp(14px, 2vw, 20px); font-weight: 900;
+            box-shadow: 0 0 22px rgba(255,216,74,.18);
+        }
         .match-result-vs { display: flex; align-items: stretch; width: min(820px, 90vw); min-height: 190px; }
         .result-team { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; border: 2px solid; }
         .result-team.blue { color: #74c2ff; background: linear-gradient(135deg, rgba(25,105,190,.48), rgba(10,28,48,.75)); border-color: #3fa9ff; clip-path: polygon(0 0,100% 0,88% 100%,0 100%); }

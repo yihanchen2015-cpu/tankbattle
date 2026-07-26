@@ -77,6 +77,7 @@ vm.runInContext(`
         id: 'player', x: 1500, y: 1200, angle: 0, turretAngle: 0,
         color: '#4488ff', accent: '#88ccff', shape: 'medium', team: 'blue',
         tankType: 'test', turretSize: 30, isPlayer: true, dead: false, isFlying: false,
+        hp:600, maxHp:800, masteryLevel:5, masteryLevelColor:'#a768ff',
         shellElevation: 18, aaElevation: 30, muzzleFlashTimer:.1, muzzleFlashType:'shell',
         masteryCamouflage:true, masteryTrailColor:'#ffd85a', masteryAura:true, masteryAuraRadius:300
     };
@@ -101,7 +102,8 @@ vm.runInContext(`
     enemies.push({
         id: 'enemy-heli', x: 1600, y: 1200, z: 120, angle: Math.PI, turretAngle: Math.PI,
         color: '#ff4444', accent: '#ffaaaa', shape: 'helicopter', team: 'red',
-        tankType: 'heli', turretSize: 25, isPlayer: false, dead: false, isFlying: true
+        tankType: 'heli', turretSize: 25, isPlayer: false, dead: false, isFlying: true,
+        hp:450, maxHp:600, masteryLevel:2, masteryLevelColor:'#78ad57'
     });
     supplyDrops.push({ id:'supply-test', x:1450, y:1160, z:180, landed:false, pulse:0 });
     const preservedObstacleId = obstacles[0].terrainId;
@@ -133,6 +135,7 @@ vm.runInContext(`
     threeView.worldRoot.traverse(child => { if(child.userData.isObstacle) obstacleMeshes.push(child); });
     const aaMesh = threeView.bulletMeshes.get(aaBullet);
     const helicopterMesh = threeView.tankMeshes.get('enemy-heli');
+    const playerHudLabel = threeView.tankLabels.get('player');
     const viewTop = threeScreenToWorld(640, 0);
     const viewBottom = threeScreenToWorld(640, 720);
     const viewLeft = threeScreenToWorld(0, 360);
@@ -159,6 +162,7 @@ vm.runInContext(`
         rescueShieldVisible: threeView.tankMeshes.get('player').userData.rescueShield.visible,
         masteryExhaustVisible: threeView.tankMeshes.get('player').userData.masteryExhaust.visible,
         masteryAuraRadius: threeView.tankMeshes.get('player').userData.masteryAuraRing.geometry.parameters.outerRadius,
+        masteryAuraColor: threeView.tankMeshes.get('player').userData.masteryAuraRing.material.color.getHexString(),
         masteryTrailMeshes: threeView.trailEffectMeshes.size,
         masteryCamouflage: !!threeView.tankMeshes.get('player').userData.camouflage,
         hiddenOutpostVisible: !!threeView.hiddenOutpostMesh && threeView.hiddenOutpostMesh.visible,
@@ -168,6 +172,9 @@ vm.runInContext(`
         obstacleTypes: obstacleMeshes.map(mesh => mesh.geometry.type),
         hudChildren: document.getElementById('threeHudLayer').children.length,
         tankLabelCount: threeView.tankLabels.size,
+        playerLevelLabel: playerHudLabel.querySelector('.three-tank-level').textContent,
+        playerLevelColor: playerHudLabel.querySelector('.three-tank-level').style.color,
+        playerHpWidth: playerHudLabel.querySelector('.three-tank-hp-fill').style.width,
         damageLabelCount: threeView.damageLabels.size,
         captureLabelCount: threeView.captureLabels.size,
         threatVisible: document.getElementById('threeThreatBorder').style.display,
@@ -198,6 +205,7 @@ assert.strictEqual(result.smokeMeshes, 1, 'smoke grenades should synchronize a v
 assert.strictEqual(result.rescueShieldVisible, true, 'rescue shield should be visible around the reinforced player');
 assert.strictEqual(result.masteryExhaustVisible, true, 'moving mastery tanks should show a 3D exhaust flame');
 assert(Math.abs(result.masteryAuraRadius - 24) < .001, '3D ace aura should use the real 300-unit radius');
+assert.strictEqual(result.masteryAuraColor, 'a768ff', '3D aura color should come from mastery level, not tank accent');
 assert.strictEqual(result.masteryTrailMeshes, 1, 'hot mastery trail zones should be visible in 3D');
 assert.strictEqual(result.masteryCamouflage, true, '3D tanks should carry visible camouflage patches');
 assert.strictEqual(result.hiddenOutpostVisible, true, 'discovered sneak outpost should be visible in the 3D world');
@@ -206,6 +214,9 @@ assert(result.fixedCameraDelta < 1e-9, 'turning the tank must never rotate the w
 assert(result.worldAxisAlignment > 0.98, 'camera should remain aligned with map north');
 assert(result.obstacleTypes.every(type => type === 'BoxGeometry'), 'all obstacle meshes should be simple boxes');
 assert(result.hudChildren >= 3, `3D HUD overlays missing: ${JSON.stringify(result)}`);
+assert.strictEqual(result.playerLevelLabel, '★ Lv.5', '3D HUD should show the tank mastery level above its head');
+assert.strictEqual(result.playerLevelColor, '#a768ff', '3D level label should use the fixed level color');
+assert.strictEqual(result.playerHpWidth, '75%', '3D HUD should synchronize the tank health bar');
 assert.strictEqual(result.threatVisible, 'block', 'nearby hostile helicopter should enable the red warning border');
 assert(result.visibleDepth > 600 && result.visibleDepth < 1800, '3D ground depth should stay close to the 2D tactical scale');
 assert(result.visibleWidth > 800 && result.visibleWidth < 2200, '3D ground width should not reveal the whole map');

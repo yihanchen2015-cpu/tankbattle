@@ -294,6 +294,7 @@ let playerStats = {
     currentLowHpTime: 0, currentMatchLowHpAwarded: false
 };
 let currentMatchMasterySettled = false;
+let lastMatchMasteryAward = null;
 
 function loadStats() {
     try {
@@ -424,10 +425,12 @@ function resetMatchStats() {
     playerStats.currentLowHpTime = 0;
     playerStats.currentMatchLowHpAwarded = false;
     currentMatchMasterySettled = false;
+    lastMatchMasteryAward = null;
 }
 
 function endMatchStats(result) {
     const matchTime = (Date.now() - playerStats.matchStartTime) / 1000;
+    playerStats.currentMatchSurvivalTime = matchTime;
     playerStats.maxSurvivalTime = Math.max(playerStats.maxSurvivalTime, matchTime);
     playerStats.maxKillsInMatch = Math.max(playerStats.maxKillsInMatch, playerStats.currentMatchKills);
 
@@ -455,10 +458,24 @@ function endMatchStats(result) {
     // 同一局即使结算回调被重复触发也只会记录一次。
     if(!currentMatchMasterySettled && typeof selectedTank === 'string') {
         currentMatchMasterySettled = true;
-        if(typeof recordTankMasteryMatch === 'function') recordTankMasteryMatch(selectedTank);
-        if(typeof recordTankMasteryResult === 'function') {
-            recordTankMasteryResult(selectedTank, result === 'victory');
+        if(typeof recordTankMasteryPerformance === 'function') {
+            lastMatchMasteryAward = recordTankMasteryPerformance(selectedTank, {
+                victory: result === 'victory',
+                kills: playerStats.currentMatchKills,
+                survivalSeconds: matchTime
+            });
+        } else {
+            if(typeof recordTankMasteryMatch === 'function') recordTankMasteryMatch(selectedTank);
+            if(typeof recordTankMasteryResult === 'function') {
+                recordTankMasteryResult(selectedTank, result === 'victory');
+            }
         }
+    }
+    const masteryXp = document.getElementById('resultMasteryXp');
+    if(masteryXp) {
+        masteryXp.textContent = lastMatchMasteryAward
+            ? `本局 ${TANKS[selectedTank].name} 获得 +${lastMatchMasteryAward.gainedXp} XP`
+            : '';
     }
     checkAchievements();
     saveStats();

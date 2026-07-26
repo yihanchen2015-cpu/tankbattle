@@ -414,14 +414,14 @@ function renderTankList() {
         else if(key.startsWith('kimi')) seriesTag = '🟣 AI系';
         const mastery = typeof getTankMasteryProfile === 'function'
             ? getTankMasteryProfile(key)
-            : {level:1,levelName:'新兵',matches:0};
+            : {level:1,levelName:'新兵',matches:0,xp:0};
         card.classList.add(`mastery-level-${mastery.level}`);
         if(mastery.level > 1) card.classList.add('mastery-unlocked');
         card.innerHTML = `
             <div class="tank-preview" id="preview-${key}"></div>
             <h4>${tank.name}</h4>
             <div style="font-size:11px;color:#888;margin-bottom:4px;">${seriesTag} | ${tank.desc.split(' - ')[0]}</div>
-            <div class="tank-mastery-badge">★${mastery.level} ${mastery.levelName} · ${mastery.matches}场</div>
+            <div class="tank-mastery-badge">★${mastery.level} ${mastery.levelName} · ${mastery.xp} XP</div>
             ${mastery.level > 1 ? `<div class="tank-mastery-effect">${mastery.reward}</div>` : ''}
             <div class="tank-stats">
                 生命: <span>${tank.hp}</span> | 速度: <span>${tank.speed}</span><br>

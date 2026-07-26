@@ -891,7 +891,7 @@ function createThreeTank(tank) {
         const auraRing = new THREE.Mesh(
             new THREE.RingGeometry(auraRadius - .35, auraRadius, 96),
             new THREE.MeshBasicMaterial({
-                color: tank.masteryTrailColor || 0xffd85a,
+                color: tank.masteryLevelColor || 0xffd85a,
                 transparent: true,
                 opacity: .23,
                 side: THREE.DoubleSide,
@@ -1000,6 +1000,7 @@ function syncThreeTanks(now) {
             }
         }
         if(mesh.userData.masteryAuraRing) {
+            mesh.userData.masteryAuraRing.material.color.set(tank.masteryLevelColor || '#ffd85a');
             mesh.userData.masteryAuraRing.material.opacity = .18 + Math.sin(now * .004) * .07;
             mesh.userData.masteryAuraRing.rotation.z = now * .00022;
         }
@@ -1011,7 +1012,9 @@ function syncThreeTanks(now) {
             const masteryPulse = tank.masteryAura ? 1 + Math.sin(now * .004) * .12 : 1;
             const spawnPulse = spawnRemaining > 0 ? 1 + (spawnRemaining / 1.15) * 1.8 : 1;
             mesh.userData.marker.scale.setScalar(masteryPulse * spawnPulse);
-            mesh.userData.marker.material.color.setHex(tank.masteryAura ? 0xffd85a : (tank.isPlayer ? 0xffffff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838)));
+            mesh.userData.marker.material.color.set(tank.masteryAura
+                ? (tank.masteryLevelColor || '#ffd85a')
+                : (tank.isPlayer ? 0xffffff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838)));
             mesh.userData.marker.material.opacity = (tank.hitFlashTimer || 0) > 0
                 ? .95
                 : tank.masteryAura ? .62 : tank.isPlayer ? .85 : .35;
@@ -1665,12 +1668,36 @@ function syncThreeHud() {
         if(!label) {
             label = document.createElement('div');
             label.className = 'three-tank-label';
+            label.innerHTML = `
+                <div class="three-tank-title">
+                    <span class="three-tank-level"></span>
+                    <span class="three-tank-name"></span>
+                </div>
+                <div class="three-tank-hp"><i class="three-tank-hp-fill"></i></div>
+            `;
             layer.appendChild(label);
             threeView.tankLabels.set(tank.id, label);
         }
         const tankData = TANKS[tank.tankType];
-        label.textContent = tankData ? tankData.name : tank.tankType;
-        label.style.color = tank.team === 'blue' ? '#55a7ff' : '#ff5555';
+        const level = Math.max(1, Math.min(8, Number(tank.masteryLevel) || 1));
+        const levelColor = tank.masteryLevelColor ||
+            (typeof getMasteryLevelColor === 'function' ? getMasteryLevelColor(level) : '#aab4bd');
+        const levelLabel = label.querySelector('.three-tank-level');
+        const nameLabel = label.querySelector('.three-tank-name');
+        const hpFill = label.querySelector('.three-tank-hp-fill');
+        if(levelLabel) {
+            levelLabel.textContent = `★ Lv.${level}`;
+            levelLabel.style.color = levelColor;
+        }
+        if(nameLabel) {
+            nameLabel.textContent = tankData ? tankData.name : tank.tankType;
+            nameLabel.style.color = tank.team === 'blue' ? '#55a7ff' : '#ff5555';
+        }
+        if(hpFill) {
+            const hpRatio = Math.max(0, Math.min(1, tank.hp / Math.max(1, tank.maxHp)));
+            hpFill.style.width = `${Math.round(hpRatio * 100)}%`;
+            hpFill.style.background = hpRatio > .6 ? '#00e98a' : hpRatio > .3 ? '#ffad2e' : '#ff4655';
+        }
         const hiddenGhost = tank.team !== player.team && tank.ghostActive && !tank.ghostRevealed;
         const point = hiddenGhost ? null : projectThreeHudPoint(tank.x, tank.y, (tank.z || 0) + (tank.isFlying ? 76 : 68));
         positionThreeHudElement(label, point, tank === player ? 1 : 0.9);

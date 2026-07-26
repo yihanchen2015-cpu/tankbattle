@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>坦克大战 - 据点争夺</title>
-    <link rel="stylesheet" href="style.css?v=mastery-effects-8">
+    <link rel="stylesheet" href="style.css?v=mastery-xp-9">
     <base target="_blank">
 </head>
 <body>
@@ -780,13 +780,13 @@
                 <p id="masterySummary"></p>
                 <div class="mastery-unlock-guide">
                     <span>Lv.1 新兵：基础涂装</span>
-                    <span>Lv.2 · 3场：迷彩 / 被锁定 -10%</span>
-                    <span>Lv.3 · 8场：金色炮弹 / 威力 +20%</span>
-                    <span>Lv.4 · 15场：灼热尾焰伤害</span>
-                    <span>Lv.5 · 30场：激励 300 范围内所有 AI</span>
-                    <span>Lv.6 · 50场：速度 +8% / 转向 +10%</span>
-                    <span>Lv.7 · 75场：生命 +12% / 装甲 +0.15</span>
-                    <span>Lv.8 · 110场：常规武器伤害 +10%</span>
+                    <span>Lv.2 · 300 XP：迷彩 / 被锁定 -10%</span>
+                    <span>Lv.3 · 800 XP：金色炮弹 / 威力 +20%</span>
+                    <span>Lv.4 · 1500 XP：灼热尾焰伤害</span>
+                    <span>Lv.5 · 3000 XP：激励 300 范围内所有 AI</span>
+                    <span>Lv.6 · 5000 XP：速度 +8% / 转向 +10%</span>
+                    <span>Lv.7 · 7500 XP：生命 +12% / 装甲 +0.15</span>
+                    <span>Lv.8 · 11000 XP：常规武器伤害 +10%</span>
                 </div>
                 <div id="masteryList"></div>
                 <button type="button" class="mastery-close" onclick="document.getElementById('masteryPanel').style.display='none'">返回</button>
@@ -884,6 +884,7 @@
             <div class="result-vs-mark">VS</div>
             <div class="result-team red"><span>红方</span><strong id="resultRedScore">0</strong></div>
         </div>
+        <div id="resultMasteryXp"></div>
         <div class="match-result-actions">
             <button type="button" onclick="returnToHome()">返回主页</button>
             <button type="button" class="primary" onclick="restartLastGame()">再来一局</button>
@@ -898,17 +899,17 @@
     <script src="Replay.js"></script>
     <script src="BattleSystems.js"></script>
     <script src="TerrainDestruction.js"></script>
-    <script src="Achievement.js?v=mastery-effects-8"></script>
-    <script src="Progression.js?v=mastery-effects-8"></script>
+    <script src="Achievement.js?v=mastery-xp-9"></script>
+    <script src="Progression.js?v=mastery-xp-9"></script>
     <script src="Pathfinding.js?v=mastery-custom-2"></script>
-    <script src="UI.js?v=mastery-effects-8"></script>
+    <script src="UI.js?v=mastery-xp-9"></script>
     <script src="Ultimate.js?v=mastery-effects-8"></script>
-    <script src="GameCore.js?v=mastery-effects-8"></script>
+    <script src="GameCore.js?v=mastery-xp-9"></script>
     <script src="MapMechanics.js?v=mastery-custom-2"></script>
     <script src="FactoryPhysics.js?v=mastery-custom-2"></script>
     <script src="AI.js?v=mastery-effects-8"></script>
     <script src="Combat.js?v=mastery-effects-8"></script>
-    <script src="Render.js?v=mastery-effects-8"></script>
-    <script src="ThreeRender.js?v=mastery-effects-8"></script>
+    <script src="Render.js?v=mastery-xp-9"></script>
+    <script src="ThreeRender.js?v=mastery-xp-9"></script>
 </body>
 </html>

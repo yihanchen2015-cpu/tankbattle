@@ -1,13 +1,13 @@
 // ==================== 坦克熟练度 ====================
 const TANK_MASTERY_LEVELS = Object.freeze([
-    { level: 1, matches: 0,   name: '新兵', reward: '基础涂装' },
-    { level: 2, matches: 3,   name: '斥候', reward: '战地迷彩：敌方锁定概率 -10%' },
-    { level: 3, matches: 8,   name: '精英', reward: '金色描边：主炮弹变为金色，威力 +20%' },
-    { level: 4, matches: 15,  name: '老兵', reward: '灼热尾焰：接触尾焰的敌人持续受伤' },
-    { level: 5, matches: 30,  name: '王牌', reward: '王牌光环：激励 300 范围内所有 AI' },
-    { level: 6, matches: 50,  name: '战术王牌', reward: '战术机动：速度 +8%，转向速度 +10%' },
-    { level: 7, matches: 75,  name: '传奇', reward: '传奇装甲：最大生命 +12%，装甲 +0.15' },
-    { level: 8, matches: 110, name: '战神', reward: '战神火力：所有常规武器伤害 +10%' }
+    { level: 1, xp: 0,     legacyMatches: 0,   name: '新兵', reward: '基础涂装' },
+    { level: 2, xp: 300,   legacyMatches: 3,   name: '斥候', reward: '战地迷彩：敌方锁定概率 -10%' },
+    { level: 3, xp: 800,   legacyMatches: 8,   name: '精英', reward: '金色描边：主炮弹变为金色，威力 +20%' },
+    { level: 4, xp: 1500,  legacyMatches: 15,  name: '老兵', reward: '灼热尾焰：接触尾焰的敌人持续受伤' },
+    { level: 5, xp: 3000,  legacyMatches: 30,  name: '王牌', reward: '王牌光环：激励 300 范围内所有 AI' },
+    { level: 6, xp: 5000,  legacyMatches: 50,  name: '战术王牌', reward: '战术机动：速度 +8%，转向速度 +10%' },
+    { level: 7, xp: 7500,  legacyMatches: 75,  name: '传奇', reward: '传奇装甲：最大生命 +12%，装甲 +0.15' },
+    { level: 8, xp: 11000, legacyMatches: 110, name: '战神', reward: '战神火力：所有常规武器伤害 +10%' }
 ]);
 
 const TANK_MASTERY_MAX_LEVEL = 8;
@@ -22,6 +22,11 @@ const MASTERY_TACTICAL_TURN_MULT = 1.10;
 const MASTERY_LEGENDARY_HP_MULT = 1.12;
 const MASTERY_LEGENDARY_ARMOR_BONUS = 0.15;
 const MASTERY_WARGOD_WEAPON_DAMAGE_MULT = 1.10;
+const MASTERY_LEVEL_COLORS = Object.freeze([
+    '#aab4bd', '#78ad57', '#37bddd', '#4d83ff',
+    '#a768ff', '#ff943d', '#ff4f75', '#ffd84a'
+]);
+const AI_MASTERY_LEVEL_WEIGHTS = Object.freeze([30, 22, 16, 12, 8, 6, 4, 2]);
 
 function ensureTankMasteryStore() {
     if(typeof playerStats === 'undefined') return {};
@@ -31,12 +36,35 @@ function ensureTankMasteryStore() {
     return playerStats.tankMastery;
 }
 
-function getTankMasteryLevel(matches) {
+function getTankMasteryLevel(xp) {
     let current = TANK_MASTERY_LEVELS[0];
     TANK_MASTERY_LEVELS.forEach(entry => {
-        if(matches >= entry.matches) current = entry;
+        if(xp >= entry.xp) current = entry;
     });
     return current;
+}
+
+function getLegacyTankMasteryXp(matches) {
+    let legacyLevel = TANK_MASTERY_LEVELS[0];
+    TANK_MASTERY_LEVELS.forEach(entry => {
+        if(matches >= entry.legacyMatches) legacyLevel = entry;
+    });
+    return legacyLevel.xp;
+}
+
+function getMasteryLevelColor(level) {
+    const index = Math.max(0, Math.min(MASTERY_LEVEL_COLORS.length - 1, (Number(level) || 1) - 1));
+    return MASTERY_LEVEL_COLORS[index];
+}
+
+function rollAIMasteryLevel(randomValue = Math.random()) {
+    const total = AI_MASTERY_LEVEL_WEIGHTS.reduce((sum, weight) => sum + weight, 0);
+    let roll = Math.max(0, Math.min(.999999, Number(randomValue) || 0)) * total;
+    for(let index = 0; index < AI_MASTERY_LEVEL_WEIGHTS.length; index++) {
+        roll -= AI_MASTERY_LEVEL_WEIGHTS[index];
+        if(roll < 0) return index + 1;
+    }
+    return 1;
 }
 
 function getTankMasteryProfile(tankType) {
@@ -45,19 +73,23 @@ function getTankMasteryProfile(tankType) {
     const matches = Math.max(0, Number(saved.matches) || 0);
     const kills = Math.max(0, Number(saved.kills) || 0);
     const wins = Math.max(0, Number(saved.wins) || 0);
-    const levelInfo = getTankMasteryLevel(matches);
-    const next = TANK_MASTERY_LEVELS.find(entry => entry.matches > matches) || null;
+    const savedXp = Number(saved.xp);
+    const xp = Number.isFinite(savedXp) && savedXp >= 0 ? savedXp : getLegacyTankMasteryXp(matches);
+    const levelInfo = getTankMasteryLevel(xp);
+    const next = TANK_MASTERY_LEVELS.find(entry => entry.xp > xp) || null;
     return {
         tankType,
         matches,
         kills,
         wins,
+        xp,
         level: levelInfo.level,
         levelName: levelInfo.name,
         reward: levelInfo.reward,
-        nextMatches: next ? next.matches : matches,
+        levelXp: levelInfo.xp,
+        nextXp: next ? next.xp : xp,
         nextReward: next ? next.reward : '已解锁全部奖励',
-        progress: next ? Math.max(0, Math.min(1, (matches - levelInfo.matches) / Math.max(1, next.matches - levelInfo.matches))) : 1
+        progress: next ? Math.max(0, Math.min(1, (xp - levelInfo.xp) / Math.max(1, next.xp - levelInfo.xp))) : 1
     };
 }
 
@@ -65,10 +97,12 @@ function updateTankMastery(tankType, updates) {
     if(!tankType || typeof TANKS === 'undefined' || !TANKS[tankType]) return null;
     const store = ensureTankMasteryStore();
     const previous = getTankMasteryProfile(tankType);
-    const current = store[tankType] || { matches: 0, kills: 0, wins: 0 };
+    const current = store[tankType] || { matches: 0, kills: 0, wins: 0, xp: 0 };
+    current.xp = previous.xp;
     current.matches = Math.max(0, (Number(current.matches) || 0) + (Number(updates.matches) || 0));
     current.kills = Math.max(0, (Number(current.kills) || 0) + (Number(updates.kills) || 0));
     current.wins = Math.max(0, (Number(current.wins) || 0) + (Number(updates.wins) || 0));
+    current.xp = Math.max(0, current.xp + (Number(updates.xp) || 0));
     store[tankType] = current;
     const next = getTankMasteryProfile(tankType);
     if(next.level > previous.level && typeof showNotification === 'function') {
@@ -79,7 +113,7 @@ function updateTankMastery(tankType, updates) {
 }
 
 function recordTankMasteryMatch(tankType) {
-    return updateTankMastery(tankType, { matches: 1 });
+    return updateTankMastery(tankType, { matches: 1, xp: 100 });
 }
 
 function recordTankMasteryKill(tankType) {
@@ -89,6 +123,37 @@ function recordTankMasteryKill(tankType) {
 function recordTankMasteryResult(tankType, victory) {
     if(!victory) return getTankMasteryProfile(tankType);
     return updateTankMastery(tankType, { wins: 1 });
+}
+
+function calculateTankMasteryMatchXp(performance = {}) {
+    const completion = 100;
+    const victory = performance.victory ? 150 : 0;
+    const kills = Math.max(0, Math.floor(Number(performance.kills) || 0)) * 30;
+    const survival = Math.min(150, Math.floor(Math.max(0, Number(performance.survivalSeconds) || 0) / 2));
+    return {
+        completion,
+        victory,
+        kills,
+        survival,
+        total: completion + victory + kills + survival
+    };
+}
+
+function recordTankMasteryPerformance(tankType, performance = {}) {
+    const breakdown = calculateTankMasteryMatchXp(performance);
+    const profile = updateTankMastery(tankType, {
+        matches: 1,
+        wins: performance.victory ? 1 : 0,
+        xp: breakdown.total
+    });
+    if(typeof showNotification === 'function') {
+        const parts = [`完赛 ${breakdown.completion}`];
+        if(breakdown.victory) parts.push(`胜利 ${breakdown.victory}`);
+        if(breakdown.kills) parts.push(`击杀 ${breakdown.kills}`);
+        if(breakdown.survival) parts.push(`生存 ${breakdown.survival}`);
+        showNotification(`★ ${TANKS[tankType].name} +${breakdown.total} 经验（${parts.join(' · ')}）`, '#ffd85a');
+    }
+    return { ...profile, gainedXp: breakdown.total, xpBreakdown: breakdown };
 }
 
 function mixMasteryColor(hex, target, amount) {
@@ -103,9 +168,18 @@ function mixMasteryColor(hex, target, amount) {
     return `#${mixed.map(value => value.toString(16).padStart(2, '0')).join('')}`;
 }
 
-function getTankMasteryVisual(tankType) {
+function getTankMasteryVisual(tankType, levelOverride = null) {
     const data = typeof TANKS !== 'undefined' ? TANKS[tankType] : null;
-    const profile = getTankMasteryProfile(tankType);
+    const savedProfile = getTankMasteryProfile(tankType);
+    const overrideInfo = levelOverride === null
+        ? null
+        : TANK_MASTERY_LEVELS.find(entry => entry.level === Math.max(1, Math.min(8, Number(levelOverride) || 1)));
+    const profile = overrideInfo ? {
+        ...savedProfile,
+        level: overrideInfo.level,
+        levelName: overrideInfo.name,
+        reward: overrideInfo.reward
+    } : savedProfile;
     if(!data) return {
         ...profile,
         color: '#888888',
@@ -118,7 +192,8 @@ function getTankMasteryVisual(tankType) {
         turnSpeedMult: 1,
         hpMult: 1,
         armorBonus: 0,
-        weaponDamageMult: 1
+        weaponDamageMult: 1,
+        levelColor: getMasteryLevelColor(profile.level)
     };
     let color = data.color;
     let accent = data.accent;
@@ -137,7 +212,8 @@ function getTankMasteryVisual(tankType) {
         turnSpeedMult: profile.level >= 6 ? MASTERY_TACTICAL_TURN_MULT : 1,
         hpMult: profile.level >= 7 ? MASTERY_LEGENDARY_HP_MULT : 1,
         armorBonus: profile.level >= 7 ? MASTERY_LEGENDARY_ARMOR_BONUS : 0,
-        weaponDamageMult: profile.level >= 8 ? MASTERY_WARGOD_WEAPON_DAMAGE_MULT : 1
+        weaponDamageMult: profile.level >= 8 ? MASTERY_WARGOD_WEAPON_DAMAGE_MULT : 1,
+        levelColor: getMasteryLevelColor(profile.level)
     };
 }
 
@@ -166,10 +242,14 @@ function updateMasteryBattleEffects() {
         tank.masteryAuraDefenseMult = 1;
         tank.masteryAuraInspired = false;
     });
-    if(typeof player === 'undefined' || !player || player.dead || !player.masteryAura) return;
+    const auraSources = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead && tank.masteryAura);
+    if(auraSources.length === 0) return;
     aiUnits.forEach(tank => {
-        if(typeof areEntitiesOnSameFactoryFloor === 'function' && !areEntitiesOnSameFactoryFloor(player, tank)) return;
-        if(Math.hypot(tank.x - player.x, tank.y - player.y) > MASTERY_AURA_RADIUS) return;
+        const source = auraSources.find(auraTank => {
+            if(typeof areEntitiesOnSameFactoryFloor === 'function' && !areEntitiesOnSameFactoryFloor(auraTank, tank)) return false;
+            return Math.hypot(tank.x - auraTank.x, tank.y - auraTank.y) <= MASTERY_AURA_RADIUS;
+        });
+        if(!source) return;
         tank.masteryAuraDamageMult = MASTERY_AURA_ATTACK_MULT;
         tank.masteryAuraDefenseMult = MASTERY_AURA_DEFENSE_MULT;
         tank.masteryAuraInspired = true;
@@ -185,7 +265,7 @@ function renderMasteryPanel() {
     const profiles = Object.keys(TANKS)
         .filter(key => !TANKS[key].isHidden || (typeof isTankUnlocked === 'function' && isTankUnlocked(key)))
         .map(key => getTankMasteryProfile(key))
-        .sort((a, b) => b.matches - a.matches || b.kills - a.kills);
+        .sort((a, b) => b.xp - a.xp || b.matches - a.matches || b.kills - a.kills);
     const totalMatches = profiles.reduce((sum, profile) => sum + profile.matches, 0);
     const mastered = profiles.filter(profile => profile.level >= TANK_MASTERY_MAX_LEVEL).length;
     if(summary) summary.textContent = `累计驾驶 ${totalMatches} 场 · 8级满熟练坦克 ${mastered} 辆`;
@@ -194,13 +274,13 @@ function renderMasteryPanel() {
         const tank = TANKS[profile.tankType];
         const card = document.createElement('div');
         card.className = `mastery-card mastery-level-${profile.level}`;
-        const progressText = profile.level >= TANK_MASTERY_MAX_LEVEL ? 'MAX' : `${profile.matches}/${profile.nextMatches}`;
+        const progressText = profile.level >= TANK_MASTERY_MAX_LEVEL ? 'MAX' : `${profile.xp}/${profile.nextXp} XP`;
         card.innerHTML = `
             <div class="mastery-card-head">
                 <strong>${tank.name}</strong>
                 <span>★${profile.level} ${profile.levelName}</span>
             </div>
-            <div class="mastery-card-stats">${profile.matches} 场 · ${profile.wins} 胜 · ${profile.kills} 击杀</div>
+            <div class="mastery-card-stats">${profile.xp} XP · ${profile.matches} 场 · ${profile.wins} 胜 · ${profile.kills} 击杀</div>
             <div class="mastery-progress"><i style="width:${Math.round(profile.progress * 100)}%"></i></div>
             <div class="mastery-reward">${profile.level >= TANK_MASTERY_MAX_LEVEL ? profile.reward : `下一奖励：${profile.nextReward}`} <b>${progressText}</b></div>
         `;

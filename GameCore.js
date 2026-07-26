@@ -589,7 +589,12 @@ function createTank(data, x, y, team, isPlayer) {
     }
     const id = Math.random().toString(36).substr(2, 9);
     const tankType = Object.keys(TANKS).find(key => TANKS[key].name === data.name) || 'xingchen27a';
-    const masteryVisual = isPlayer && typeof getTankMasteryVisual === 'function' ? getTankMasteryVisual(tankType) : null;
+    const aiMasteryLevel = !isPlayer && typeof rollAIMasteryLevel === 'function'
+        ? rollAIMasteryLevel()
+        : null;
+    const masteryVisual = typeof getTankMasteryVisual === 'function'
+        ? getTankMasteryVisual(tankType, aiMasteryLevel)
+        : null;
     return {
         x, y, z: data.isFlying ? CONFIG.helicopterAltitude : (currentMap === 'factory' && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(1) : 0),
         factoryFloor: currentMap === 'factory' ? 1 : null,
@@ -619,8 +624,9 @@ function createTank(data, x, y, team, isPlayer) {
         color: masteryVisual ? masteryVisual.color : data.color,
         accent: masteryVisual ? masteryVisual.accent : data.accent,
         baseColor: data.color, baseAccent: data.accent, shape: data.shape,
-        masteryLevel: masteryVisual ? masteryVisual.level : 0,
-        masteryLevelName: masteryVisual ? masteryVisual.levelName : '',
+        masteryLevel: masteryVisual ? masteryVisual.level : 1,
+        masteryLevelName: masteryVisual ? masteryVisual.levelName : '新兵',
+        masteryLevelColor: masteryVisual ? masteryVisual.levelColor : '#aab4bd',
         masteryCamouflage: masteryVisual ? masteryVisual.camouflage : false,
         masteryGoldenProjectiles: masteryVisual ? masteryVisual.goldenProjectiles : false,
         masteryTrailColor: masteryVisual ? masteryVisual.trailColor : null,
