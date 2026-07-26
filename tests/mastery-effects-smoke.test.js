@@ -62,6 +62,8 @@ const result = vm.runInContext(`(() => {
     for(let i = matchesAfterResult; i < 110; i++) recordTankMasteryMatch(selectedTank);
     const maxProfile = getTankMasteryProfile(selectedTank);
     const maxVisual = getTankMasteryVisual(selectedTank);
+    currentMap = 'classic';
+    const maxTank = createTank(TANKS[selectedTank], 100, 100, 'blue', true);
 
     const observer = { id:'observer', aiTrackedTarget:null };
     const camouflaged = { id:'camo', masteryCamouflage:true };
@@ -78,7 +80,7 @@ const result = vm.runInContext(`(() => {
         x:0,y:0,z:0,angle:0,turretAngle:0,turretSize:28,
         tankType:'zuoyan29',team:'blue',isPlayer:false,isFlying:false,
         shells:2,mg:0,aa:0,masteryGoldenProjectiles:true,
-        aiDamageMult:1,masteryAuraDamageMult:1,
+        aiDamageMult:1,masteryAuraDamageMult:1,masteryWeaponDamageMult:1.1,
         shellElevation:0,aaElevation:0,suddenDeathInfiniteAmmo:false,
         ghostActive:false,recoilTimer:0,recoilStrength:0
     };
@@ -125,6 +127,14 @@ const result = vm.runInContext(`(() => {
         matchesAfterDuplicateResult,
         maxLevel: maxProfile.level,
         maxVisual,
+        maxTankStats: {
+            hp:maxTank.hp,
+            maxHp:maxTank.maxHp,
+            speed:maxTank.speed,
+            turnSpeed:maxTank.turnSpeed,
+            armor:maxTank.armor,
+            weaponDamageMult:maxTank.masteryWeaponDamageMult
+        },
         camoAvoided,
         normalTargetAccepted,
         golden: goldenBullet.masteryGolden,
@@ -148,10 +158,18 @@ assert.strictEqual(result.matchesAfterDuplicateResult, 1, 'duplicate settlement 
 assert.strictEqual(result.maxLevel, 8, 'mastery should have eight levels');
 assert(result.maxVisual.camouflage && result.maxVisual.goldenProjectiles && result.maxVisual.trailColor && result.maxVisual.aura,
     'maximum mastery should expose all four cumulative effects');
+assert.strictEqual(result.maxTankStats.hp, 896);
+assert.strictEqual(result.maxTankStats.maxHp, 896);
+assert(Math.abs(result.maxTankStats.speed - 5.94) < 1e-9);
+assert(Math.abs(result.maxTankStats.turnSpeed - .099) < 1e-9);
+assert(Math.abs(result.maxTankStats.armor - .85) < 1e-9);
+assert.strictEqual(result.maxTankStats.weaponDamageMult, 1.1,
+    'levels six through eight should apply cumulative mobility, durability, and weapon bonuses');
 assert.strictEqual(result.camoAvoided, true, 'the ten-percent camouflage roll should reject target acquisition');
 assert.strictEqual(result.normalTargetAccepted, true, 'non-camouflaged targets should not be rejected');
 assert.strictEqual(result.golden, true, 'mastery shells should be marked golden for both renderers');
-assert.strictEqual(result.goldenDamage, result.baseShellDamage * 1.2, 'golden shells should deal twenty percent more damage');
+assert(Math.abs(result.goldenDamage - result.baseShellDamage * 1.2 * 1.1) < 1e-9,
+    'level-eight golden shells should combine the twenty-percent gold bonus with ten-percent weapon damage');
 assert(Math.abs(result.trailDamage - 27.5) < 0.001, 'hot mastery trail should deal 55 damage per second');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.inspired)), {
     state:'combat', attack:1.15, defense:.85, active:true

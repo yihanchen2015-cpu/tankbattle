@@ -45,7 +45,8 @@ function fireBullet(tank, type) {
         vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
         vz: type === 'bomb' ? -35 : ((type === 'shell' || type === 'aa') ? baseSpeed * 60 * Math.sin(elevation) : 0),
         damage: (type === 'bomb' ? 340 : (type === 'shell' ? CONFIG.bulletDamage : (type === 'aa' ? CONFIG.aaDamage : (type === 'airmg' ? 18 : CONFIG.mgDamage)))) *
-            damageMult * masteryDamageMult * (tank.aiDamageMult || 1) * (tank.masteryAuraDamageMult || 1),
+            damageMult * masteryDamageMult * (tank.masteryWeaponDamageMult || 1) *
+            (tank.aiDamageMult || 1) * (tank.masteryAuraDamageMult || 1),
         team: tank.team, type, owner: tank,
         masteryGolden,
         life: maxLife, maxLife, age: 0,

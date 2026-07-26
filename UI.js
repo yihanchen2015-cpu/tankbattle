@@ -422,6 +422,7 @@ function renderTankList() {
             <h4>${tank.name}</h4>
             <div style="font-size:11px;color:#888;margin-bottom:4px;">${seriesTag} | ${tank.desc.split(' - ')[0]}</div>
             <div class="tank-mastery-badge">★${mastery.level} ${mastery.levelName} · ${mastery.matches}场</div>
+            ${mastery.level > 1 ? `<div class="tank-mastery-effect">${mastery.reward}</div>` : ''}
             <div class="tank-stats">
                 生命: <span>${tank.hp}</span> | 速度: <span>${tank.speed}</span><br>
                 装甲: <span>${tank.armor}x</span> | 射速: <span>${(tank.fireRate*100).toFixed(0)}%</span><br>

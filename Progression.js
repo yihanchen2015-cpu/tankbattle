@@ -5,9 +5,9 @@ const TANK_MASTERY_LEVELS = Object.freeze([
     { level: 3, matches: 8,   name: '精英', reward: '金色描边：主炮弹变为金色，威力 +20%' },
     { level: 4, matches: 15,  name: '老兵', reward: '灼热尾焰：接触尾焰的敌人持续受伤' },
     { level: 5, matches: 30,  name: '王牌', reward: '王牌光环：激励 300 范围内所有 AI' },
-    { level: 6, matches: 50,  name: '战术王牌', reward: '高阶战术徽记' },
-    { level: 7, matches: 75,  name: '传奇', reward: '传奇动态边框' },
-    { level: 8, matches: 110, name: '战神', reward: '满级战神选车特效' }
+    { level: 6, matches: 50,  name: '战术王牌', reward: '战术机动：速度 +8%，转向速度 +10%' },
+    { level: 7, matches: 75,  name: '传奇', reward: '传奇装甲：最大生命 +12%，装甲 +0.15' },
+    { level: 8, matches: 110, name: '战神', reward: '战神火力：所有常规武器伤害 +10%' }
 ]);
 
 const TANK_MASTERY_MAX_LEVEL = 8;
@@ -17,6 +17,11 @@ const MASTERY_TRAIL_DAMAGE_PER_SECOND = 55;
 const MASTERY_AURA_RADIUS = 300;
 const MASTERY_AURA_ATTACK_MULT = 1.15;
 const MASTERY_AURA_DEFENSE_MULT = 0.85;
+const MASTERY_TACTICAL_SPEED_MULT = 1.08;
+const MASTERY_TACTICAL_TURN_MULT = 1.10;
+const MASTERY_LEGENDARY_HP_MULT = 1.12;
+const MASTERY_LEGENDARY_ARMOR_BONUS = 0.15;
+const MASTERY_WARGOD_WEAPON_DAMAGE_MULT = 1.10;
 
 function ensureTankMasteryStore() {
     if(typeof playerStats === 'undefined') return {};
@@ -108,7 +113,12 @@ function getTankMasteryVisual(tankType) {
         camouflage: false,
         goldenProjectiles: false,
         trailColor: null,
-        aura: false
+        aura: false,
+        speedMult: 1,
+        turnSpeedMult: 1,
+        hpMult: 1,
+        armorBonus: 0,
+        weaponDamageMult: 1
     };
     let color = data.color;
     let accent = data.accent;
@@ -122,7 +132,12 @@ function getTankMasteryVisual(tankType) {
         goldenProjectiles: profile.level >= 3,
         trailColor: profile.level >= 4 ? accent : null,
         aura: profile.level >= 5,
-        auraRadius: profile.level >= 5 ? MASTERY_AURA_RADIUS : 0
+        auraRadius: profile.level >= 5 ? MASTERY_AURA_RADIUS : 0,
+        speedMult: profile.level >= 6 ? MASTERY_TACTICAL_SPEED_MULT : 1,
+        turnSpeedMult: profile.level >= 6 ? MASTERY_TACTICAL_TURN_MULT : 1,
+        hpMult: profile.level >= 7 ? MASTERY_LEGENDARY_HP_MULT : 1,
+        armorBonus: profile.level >= 7 ? MASTERY_LEGENDARY_ARMOR_BONUS : 0,
+        weaponDamageMult: profile.level >= 8 ? MASTERY_WARGOD_WEAPON_DAMAGE_MULT : 1
     };
 }
 
