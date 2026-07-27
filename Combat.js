@@ -89,10 +89,11 @@ function fireBullet(tank, type) {
     if(typeof playWorldSound === 'function') playWorldSound(type === 'airmg' ? 'mg' : type, tank.x, tank.y, tank.isPlayer ? 1 : 0.72);
 }
 
-function deploySmokeGrenade(tank) {
+function deploySmokeGrenade(tank, options = {}) {
     if(!tank || tank.dead || tank.isFlying || (tank.smoke || 0) <= 0 || (tank.smokeCooldown || 0) > 0) return false;
     const angle = typeof getTankFiringAngle === 'function' ? getTankFiringAngle(tank) : tank.turretAngle;
-    const distance = 95;
+    const atFeet = options.atFeet === true;
+    const distance = atFeet ? 0 : 95;
     smokeClouds.push({
         x: tank.x + Math.cos(angle) * distance,
         y: tank.y + Math.sin(angle) * distance,
@@ -104,9 +105,13 @@ function deploySmokeGrenade(tank) {
     });
     tank.smoke--;
     tank.smokeCooldown = CONFIG.smokeCooldown;
-    createParticles(tank.x + Math.cos(angle) * 40, tank.y + Math.sin(angle) * 40, 12, '#c8ced0', 1.3);
+    const particleDistance = atFeet ? 0 : 40;
+    createParticles(tank.x + Math.cos(angle) * particleDistance, tank.y + Math.sin(angle) * particleDistance, 12, '#c8ced0', 1.3);
     if(typeof playWorldSound === 'function') playWorldSound('capture', tank.x, tank.y, tank.isPlayer ? .55 : .35);
-    if(tank === player && typeof showMessage === 'function') showMessage('💨 烟雾弹展开：遮断敌方视线', '#d7e1e4');
+    if(tank === player && typeof recordSmokeDeployment === 'function') recordSmokeDeployment(options.quick === true);
+    if(tank === player && typeof showMessage === 'function') {
+        showMessage(atFeet ? '💨 快速烟幕：已在脚下展开' : '💨 烟雾弹展开：遮断敌方视线', '#d7e1e4');
+    }
     return true;
 }
 
@@ -420,12 +425,16 @@ function applyDirectDamage(tank, damage, source, cause = null, projectile = null
     if(tank.hp <= 0 && !tank.dead) {
         if(source) recordKill(source, tank, { preHitHp, damage, weapon: source.isPlayer ? currentWeapon : null });
         tank.dead = true;
+        if(typeof spawnMasteryDeathFlame === 'function') spawnMasteryDeathFlame(tank);
         createParticles(tank.x, tank.y, 40, tank.color, 3);
         createParticles(tank.x, tank.y, 25, '#ffaa00', 2);
         if(tank === player && typeof captureCombatReplayFrame === 'function') captureCombatReplayFrame(true);
         if(typeof playWorldSound === 'function') playWorldSound(tank === player ? 'death' : 'kill', tank.x, tank.y, tank === player ? 1.25 : 1);
         if(typeof shouldAmmoRackExplode === 'function' && shouldAmmoRackExplode(tank)) triggerAmmoRackExplosion(tank);
-        if(tank === player && typeof beginDamageUpgrade === 'function') beginDamageUpgrade();
+        if(tank === player) {
+            if(typeof scheduleDamageUpgrade === 'function') scheduleDamageUpgrade();
+            else if(typeof beginDamageUpgrade === 'function') beginDamageUpgrade();
+        }
     }
     return remaining;
 }

@@ -243,7 +243,7 @@
                         <li><strong>鼠标</strong>：控制炮塔瞄准方向</li>
                         <li><strong>F 键 / 射击按钮</strong>：开火</li>
                         <li><strong>T 键 / 切换按钮</strong>：切换主炮 / 机枪 / 高射炮</li>
-                        <li><strong>1 / 2 / 3</strong>：直接选择武器；<strong>[ / ]</strong>：降低 / 提高主炮或高射炮仰角（机枪仰角固定）</li>
+                        <li><strong>1 / 2 / 3 / 4</strong>：直接选择武器；<strong>Q 键</strong>：地面载具在脚下快速展开烟雾弹；<strong>[ / ]</strong>：降低 / 提高主炮或高射炮仰角（机枪仰角固定）</li>
                         <li><strong>G 键 / 大招按钮</strong>：释放终极技能</li>
                         <li><strong>R 键 / 维修按钮</strong>：工程车维修范围内队友</li>
                         <li><strong>V 键</strong>：实时切换 2D 俯视 / 3D 战术视角</li>
@@ -782,11 +782,11 @@
                     <span>Lv.1 新兵：基础涂装</span>
                     <span>Lv.2 · 300 XP：迷彩 / 被锁定 -10%</span>
                     <span>Lv.3 · 800 XP：金色炮弹 / 威力 +20%</span>
-                    <span>Lv.4 · 1500 XP：灼热尾焰伤害</span>
-                    <span>Lv.5 · 3000 XP：激励 300 范围内所有 AI</span>
-                    <span>Lv.6 · 5000 XP：速度 +8% / 转向 +10%</span>
-                    <span>Lv.7 · 7500 XP：生命 +12% / 装甲 +0.15</span>
-                    <span>Lv.8 · 11000 XP：常规武器伤害 +10%</span>
+                    <span>Lv.4 · 1500 XP：灼热尾焰；Kimi 环绕 0/1 字样</span>
+                    <span>Lv.5 · 3000 XP：300范围光环；紫焰 45/秒，持续4秒</span>
+                    <span>Lv.6 · 5000 XP：速度+8% / 转向+10%；橙焰 65/秒，持续5秒</span>
+                    <span>Lv.7 · 7500 XP：生命+12% / 装甲+0.15；红焰 90/秒，持续6秒</span>
+                    <span>Lv.8 · 11000 XP：常规伤害+10%；金焰 120/秒，持续8秒</span>
                 </div>
                 <div id="masteryList"></div>
                 <button type="button" class="mastery-close" onclick="document.getElementById('masteryPanel').style.display='none'">返回</button>
@@ -893,23 +893,23 @@
 
     <script src="vendor/three.min.js"></script>
     <script src="vendor/ammo.wasm.js"></script>
-    <script src="Config.js?v=mastery-custom-2"></script>
+    <script src="Config.js?v=death-delay-12"></script>
     <script src="Audio.js"></script>
     <script src="Score.js"></script>
     <script src="Replay.js"></script>
     <script src="BattleSystems.js"></script>
     <script src="TerrainDestruction.js"></script>
-    <script src="Achievement.js?v=mastery-xp-9"></script>
-    <script src="Progression.js?v=mastery-xp-9"></script>
+    <script src="Achievement.js?v=quick-smoke-13"></script>
+    <script src="Progression.js?v=mastery-fx-11"></script>
     <script src="Pathfinding.js?v=mastery-custom-2"></script>
-    <script src="UI.js?v=mastery-xp-9"></script>
-    <script src="Ultimate.js?v=mastery-effects-8"></script>
-    <script src="GameCore.js?v=mastery-xp-9"></script>
+    <script src="UI.js?v=quick-smoke-13"></script>
+    <script src="Ultimate.js?v=mastery-fx-11"></script>
+    <script src="GameCore.js?v=quick-smoke-13"></script>
     <script src="MapMechanics.js?v=mastery-custom-2"></script>
     <script src="FactoryPhysics.js?v=mastery-custom-2"></script>
     <script src="AI.js?v=mastery-effects-8"></script>
-    <script src="Combat.js?v=mastery-effects-8"></script>
-    <script src="Render.js?v=mastery-xp-9"></script>
-    <script src="ThreeRender.js?v=mastery-xp-9"></script>
+    <script src="Combat.js?v=quick-smoke-13"></script>
+    <script src="Render.js?v=death-delay-12"></script>
+    <script src="ThreeRender.js?v=mastery-fx-11"></script>
 </body>
 </html>

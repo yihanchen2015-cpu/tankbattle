@@ -398,19 +398,23 @@ function updateTrailEffects(dt) {
         t.life -= dt;
         if(t.life <= 0) trailEffects.splice(i, 1);
     }
-    const hotTrails = trailEffects.filter(effect => effect.kind === 'mastery' && effect.life > 0);
+    const hotTrails = trailEffects.filter(effect =>
+        (effect.kind === 'mastery' || effect.kind === 'mastery-death-flame') && effect.life > 0
+    );
     if(hotTrails.length === 0 || typeof applyDirectDamage !== 'function') return;
     const livingTanks = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead);
     livingTanks.forEach(tank => {
         const hotTrail = hotTrails.find(effect => {
-            if(!effect.owner || effect.owner.dead || effect.team === tank.team || tank.invincible > 0) return false;
+            if(!effect.owner || effect.team === tank.team || tank.invincible > 0) return false;
+            if(effect.kind === 'mastery' && effect.owner.dead) return false;
             if(typeof areEntitiesOnSameFactoryFloor === 'function' &&
                !areEntitiesOnSameFactoryFloor(effect, tank)) return false;
             return Math.hypot(tank.x - effect.x, tank.y - effect.y) <= effect.radius + CONFIG.tankSize * .45;
         });
         if(!hotTrail) return;
         const damage = (hotTrail.damagePerSecond || 55) * dt;
-        applyDirectDamage(tank, damage, hotTrail.owner, '灼热尾焰');
+        const cause = hotTrail.kind === 'mastery-death-flame' ? '熟练度死亡火焰' : '灼热尾焰';
+        applyDirectDamage(tank, damage, hotTrail.owner, cause);
         tank.masteryTrailDamageCue = (tank.masteryTrailDamageCue || 0) - dt;
         if(tank.masteryTrailDamageCue <= 0) {
             if(typeof showDamageNumber === 'function') showDamageNumber(tank.x, tank.y - 30, Math.round(hotTrail.damagePerSecond || 55));

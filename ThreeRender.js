@@ -757,6 +757,34 @@ function buildThreeBoundary() {
     walls.forEach(values => addStaticMesh(new THREE.BoxGeometry(values[3], values[4], values[5]), material.clone(), new THREE.Vector3(values[0], values[1], values[2])));
 }
 
+function createThreeBinaryCodeField() {
+    const field = new THREE.Group();
+    const material = new THREE.MeshBasicMaterial({
+        color: 0x82eaff,
+        transparent: true,
+        opacity: .42,
+        side: THREE.DoubleSide,
+        depthWrite: false
+    });
+    const digitCount = typeof touchControlMode !== 'undefined' && touchControlMode ? 6 : 10;
+    for(let index = 0; index < digitCount; index++) {
+        const holder = new THREE.Group();
+        const isOne = index % 2 === 1;
+        const digit = isOne
+            ? new THREE.Mesh(new THREE.BoxGeometry(.22, 1.25, .16), material.clone())
+            : new THREE.Mesh(new THREE.TorusGeometry(.48, .11, 6, 14), material.clone());
+        const angle = index / digitCount * Math.PI * 2;
+        const radius = 5.2 + (index % 3) * .65;
+        holder.position.set(Math.cos(angle) * radius, 2.4 + (index % 4) * .42, Math.sin(angle) * radius);
+        holder.rotation.y = -angle + Math.PI / 2;
+        holder.userData.baseY = holder.position.y;
+        holder.userData.phase = index * 1.37;
+        holder.add(digit);
+        field.add(holder);
+    }
+    return field;
+}
+
 function createThreeTank(tank) {
     const group = new THREE.Group();
     const bodyColor = new THREE.Color(tank.color || (tank.team === 'blue' ? 0x4488ff : 0xff4444));
@@ -886,22 +914,57 @@ function createThreeTank(tank) {
         group.add(masteryExhaust);
         group.userData.masteryExhaust = masteryExhaust;
     }
+    if(tank.masteryBinaryCode) {
+        const binaryCodeField = createThreeBinaryCodeField();
+        group.add(binaryCodeField);
+        group.userData.binaryCodeField = binaryCodeField;
+    }
     if(tank.masteryAura) {
+        const auraColor = tank.masteryAuraColor ||
+            (typeof getMasteryAuraColor === 'function' ? getMasteryAuraColor(tank.masteryLevel) : '#a000ff');
         const auraRadius = (tank.masteryAuraRadius || 300) * THREE_WORLD_SCALE;
+        const auraMaterial = options => new THREE.MeshBasicMaterial({
+            color: auraColor,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            ...options
+        });
+        const auraField = new THREE.Mesh(
+            new THREE.CircleGeometry(auraRadius, 96),
+            auraMaterial({ opacity: .055 })
+        );
+        auraField.rotation.x = -Math.PI / 2;
+        auraField.position.y = .055;
         const auraRing = new THREE.Mesh(
-            new THREE.RingGeometry(auraRadius - .35, auraRadius, 96),
-            new THREE.MeshBasicMaterial({
-                color: tank.masteryLevelColor || 0xffd85a,
-                transparent: true,
-                opacity: .23,
-                side: THREE.DoubleSide,
-                depthWrite: false
-            })
+            new THREE.RingGeometry(auraRadius - .42, auraRadius, 96),
+            auraMaterial({ opacity: .68 })
         );
         auraRing.rotation.x = -Math.PI / 2;
         auraRing.position.y = .12;
-        group.add(auraRing);
+        const auraInnerRing = new THREE.Mesh(
+            new THREE.RingGeometry(auraRadius * .82 - .16, auraRadius * .82, 80),
+            auraMaterial({ opacity: .3 })
+        );
+        auraInnerRing.rotation.x = -Math.PI / 2;
+        auraInnerRing.position.y = .1;
+        const auraNodes = new THREE.Group();
+        const nodeCount = typeof touchControlMode !== 'undefined' && touchControlMode ? 6 : 12;
+        for(let index = 0; index < nodeCount; index++) {
+            const angle = index / nodeCount * Math.PI * 2;
+            const node = new THREE.Mesh(
+                new THREE.OctahedronGeometry(.28 + (index % 3) * .07, 0),
+                auraMaterial({ opacity: .78 })
+            );
+            node.position.set(Math.cos(angle) * auraRadius * .91, .22, Math.sin(angle) * auraRadius * .91);
+            node.userData.phase = index * .72;
+            auraNodes.add(node);
+        }
+        group.add(auraField, auraRing, auraInnerRing, auraNodes);
+        group.userData.masteryAuraField = auraField;
         group.userData.masteryAuraRing = auraRing;
+        group.userData.masteryAuraInnerRing = auraInnerRing;
+        group.userData.masteryAuraNodes = auraNodes;
     }
     const markerMaterial = new THREE.MeshBasicMaterial({ color: tank.isPlayer ? 0xffffff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838), transparent: true, opacity: tank.isPlayer ? 0.85 : 0.35, side: THREE.DoubleSide });
     const marker = new THREE.Mesh(new THREE.RingGeometry(3.9, 4.35, 32), markerMaterial);
@@ -999,26 +1062,57 @@ function syncThreeTanks(now) {
                 mesh.userData.masteryExhaust.rotation.x = Math.sin(now * .018) * .08;
             }
         }
+        if(mesh.userData.binaryCodeField) {
+            mesh.userData.binaryCodeField.rotation.y = now * .00032;
+            mesh.userData.binaryCodeField.children.forEach((digit, index) => {
+                digit.position.y = digit.userData.baseY + Math.sin(now * .0024 + digit.userData.phase) * .55;
+                const pulse = .86 + Math.sin(now * .003 + index) * .16;
+                digit.scale.setScalar(pulse);
+                digit.children.forEach(child => {
+                    if(child.material) child.material.opacity = .28 + (Math.sin(now * .002 + index) + 1) * .13;
+                });
+            });
+        }
         if(mesh.userData.masteryAuraRing) {
-            mesh.userData.masteryAuraRing.material.color.set(tank.masteryLevelColor || '#ffd85a');
-            mesh.userData.masteryAuraRing.material.opacity = .18 + Math.sin(now * .004) * .07;
+            const auraColor = tank.masteryAuraColor ||
+                (typeof getMasteryAuraColor === 'function' ? getMasteryAuraColor(tank.masteryLevel) : '#a000ff');
+            [
+                mesh.userData.masteryAuraField,
+                mesh.userData.masteryAuraRing,
+                mesh.userData.masteryAuraInnerRing
+            ].filter(Boolean).forEach(part => part.material.color.set(auraColor));
+            mesh.userData.masteryAuraRing.material.opacity = .58 + Math.sin(now * .004) * .10;
             mesh.userData.masteryAuraRing.rotation.z = now * .00022;
+            if(mesh.userData.masteryAuraField) {
+                mesh.userData.masteryAuraField.material.opacity = .045 + Math.sin(now * .0025) * .012;
+            }
+            if(mesh.userData.masteryAuraInnerRing) {
+                mesh.userData.masteryAuraInnerRing.material.opacity = .25 + Math.sin(now * .0032 + 1) * .08;
+                mesh.userData.masteryAuraInnerRing.rotation.z = -now * .00016;
+            }
+            if(mesh.userData.masteryAuraNodes) {
+                mesh.userData.masteryAuraNodes.rotation.y = now * .0002;
+                mesh.userData.masteryAuraNodes.children.forEach((node, index) => {
+                    node.material.color.set(auraColor);
+                    const pulse = .82 + Math.sin(now * .004 + node.userData.phase + index) * .25;
+                    node.scale.setScalar(pulse);
+                });
+            }
         }
         if(mesh.userData.rescueShield) {
             mesh.userData.rescueShield.visible = !!(tank.rescueShieldActive && tank.shieldActive && tank.shieldHp > 0);
             mesh.userData.rescueShield.material.opacity = 0.14 + Math.sin(now * 0.012 + tank.x) * 0.05;
         }
         if(mesh.userData.marker) {
-            const masteryPulse = tank.masteryAura ? 1 + Math.sin(now * .004) * .12 : 1;
             const spawnPulse = spawnRemaining > 0 ? 1 + (spawnRemaining / 1.15) * 1.8 : 1;
-            mesh.userData.marker.scale.setScalar(masteryPulse * spawnPulse);
-            mesh.userData.marker.material.color.set(tank.masteryAura
-                ? (tank.masteryLevelColor || '#ffd85a')
-                : (tank.isPlayer ? 0xffffff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838)));
+            mesh.userData.marker.scale.setScalar(spawnPulse);
+            mesh.userData.marker.material.color.set(
+                tank.isPlayer ? 0xffffff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838)
+            );
             mesh.userData.marker.material.opacity = (tank.hitFlashTimer || 0) > 0
                 ? .95
-                : tank.masteryAura ? .62 : tank.isPlayer ? .85 : .35;
-            mesh.userData.marker.rotation.z = tank.masteryAura ? now * .001 : 0;
+                : tank.isPlayer ? .85 : .35;
+            mesh.userData.marker.rotation.z = 0;
         }
         const opacity = tank.ghostActive && !tank.ghostRevealed ? 0.28 : 1;
         if(mesh.userData.lastOpacity !== opacity) {
@@ -1235,7 +1329,50 @@ function syncThreeSmokeClouds(now) {
 
 function createThreeTrailEffect(effect) {
     const group = new THREE.Group();
-    if(effect.kind === 'mastery') {
+    if(effect.kind === 'mastery-death-flame') {
+        const color = new THREE.Color(effect.color || 0xa000ff);
+        const radius = Math.max(1, effect.radius * THREE_WORLD_SCALE);
+        const flameMaterial = opacity => new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity,
+            depthWrite: false
+        });
+        const ember = new THREE.Mesh(
+            new THREE.CylinderGeometry(radius, radius * .92, .3, 32),
+            flameMaterial(.28)
+        );
+        const core = new THREE.Mesh(
+            new THREE.RingGeometry(radius * .28, radius * .82, 48),
+            new THREE.MeshBasicMaterial({
+                color,
+                transparent: true,
+                opacity: .5,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            })
+        );
+        core.rotation.x = -Math.PI / 2;
+        core.position.y = .2;
+        const flames = new THREE.Group();
+        const flameCount = typeof touchControlMode !== 'undefined' && touchControlMode ? 8 : 14;
+        for(let index = 0; index < flameCount; index++) {
+            const angle = index / flameCount * Math.PI * 2 + (effect.seed || 0);
+            const distance = radius * (.2 + (index % 4) * .15);
+            const flame = new THREE.Mesh(
+                new THREE.ConeGeometry(.38 + (index % 3) * .12, 2.8 + (index % 4) * .55, 7),
+                flameMaterial(.62)
+            );
+            flame.position.set(Math.cos(angle) * distance, 1.2, Math.sin(angle) * distance);
+            flame.userData.baseY = flame.position.y;
+            flame.userData.phase = index * 1.21 + (effect.seed || 0);
+            flames.add(flame);
+        }
+        group.add(ember, core, flames);
+        group.userData.ember = ember;
+        group.userData.core = core;
+        group.userData.flames = flames;
+    } else if(effect.kind === 'mastery') {
         const color = new THREE.Color(effect.color || 0xffa629);
         const radius = Math.max(1, effect.radius * THREE_WORLD_SCALE);
         const ember = new THREE.Mesh(
@@ -1291,10 +1428,26 @@ function syncThreeTrailEffects(now) {
         }
         setThreeWorldPosition(mesh, effect.x, effect.y, ((effect.z || 0) * THREE_WORLD_SCALE) + .12);
         const alpha = Math.max(0, effect.life / Math.max(.01, effect.maxLife));
-        if(mesh.userData.ember) mesh.userData.ember.material.opacity = alpha * (effect.kind === 'mastery' ? .5 : .3);
+        if(mesh.userData.ember) {
+            const opacity = effect.kind === 'mastery-death-flame' ? .28 : (effect.kind === 'mastery' ? .5 : .3);
+            mesh.userData.ember.material.opacity = alpha * opacity;
+        }
         if(mesh.userData.core) {
-            mesh.userData.core.material.opacity = alpha * .72;
-            mesh.userData.core.scale.setScalar(.78 + Math.sin(now * .018 + effect.x) * .18);
+            mesh.userData.core.material.opacity = alpha * (effect.kind === 'mastery-death-flame' ? .5 : .72);
+            if(effect.kind === 'mastery-death-flame') {
+                mesh.userData.core.rotation.z = now * .00035;
+            } else {
+                mesh.userData.core.scale.setScalar(.78 + Math.sin(now * .018 + effect.x) * .18);
+            }
+        }
+        if(mesh.userData.flames) {
+            mesh.userData.flames.rotation.y = now * .00008;
+            mesh.userData.flames.children.forEach((flame, index) => {
+                const flicker = .72 + Math.sin(now * .007 + flame.userData.phase) * .25;
+                flame.scale.set(.82 + (index % 2) * .15, flicker, .82 + (index % 2) * .15);
+                flame.position.y = flame.userData.baseY * flicker;
+                flame.material.opacity = alpha * (.48 + (index % 3) * .08);
+            });
         }
     });
     for(const [effect, mesh] of threeView.trailEffectMeshes) {
@@ -1680,14 +1833,12 @@ function syncThreeHud() {
         }
         const tankData = TANKS[tank.tankType];
         const level = Math.max(1, Math.min(8, Number(tank.masteryLevel) || 1));
-        const levelColor = tank.masteryLevelColor ||
-            (typeof getMasteryLevelColor === 'function' ? getMasteryLevelColor(level) : '#aab4bd');
         const levelLabel = label.querySelector('.three-tank-level');
         const nameLabel = label.querySelector('.three-tank-name');
         const hpFill = label.querySelector('.three-tank-hp-fill');
         if(levelLabel) {
             levelLabel.textContent = `★ Lv.${level}`;
-            levelLabel.style.color = levelColor;
+            levelLabel.style.color = '#f2f4f7';
         }
         if(nameLabel) {
             nameLabel.textContent = tankData ? tankData.name : tank.tankType;

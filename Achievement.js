@@ -33,6 +33,11 @@ const ACHIEVEMENTS = {
         icon: '🚀', category: 'weapon', difficulty: 'easy',
         condition: (stats) => stats.aaFired >= 50 
     },
+    smokeRookie: {
+        id: 'smokeRookie', name: '💨 烟幕初体验', desc: '首次部署烟雾弹',
+        icon: '💨', category: 'weapon', difficulty: 'easy',
+        condition: (stats) => (stats.smokeGrenadesDeployed || 0) >= 1
+    },
 
     // 据点类
     flagRaiser: { 
@@ -97,6 +102,11 @@ const ACHIEVEMENTS = {
         icon: '✨', category: 'weapon', difficulty: 'medium',
         condition: (stats) => stats.ultimatesUsed >= 10 
     },
+    quickSmokeExpert: {
+        id: 'quickSmokeExpert', name: '🌫️ 烟中恶鬼', desc: '使用 Q 键在脚下快速部署20次烟幕',
+        icon: '🌫️', category: 'weapon', difficulty: 'medium',
+        condition: (stats) => (stats.quickSmokeDeploys || 0) >= 20
+    },
 
     // 据点类
     outpostVeteran: { 
@@ -151,6 +161,11 @@ const ACHIEVEMENTS = {
         id: 'ghostWalker', name: '👻 幽灵行者', desc: '使用左研30隐身状态下击毁3辆坦克', 
         icon: '👻', category: 'special', difficulty: 'medium',
         condition: (stats) => stats.ghostKills >= 3 
+    },
+    fieldRefit: {
+        id: 'fieldRefit', name: '🔧 战地改装', desc: '累计选择3次战损升级',
+        icon: '🔧', category: 'special', difficulty: 'medium',
+        condition: (stats) => (stats.damageUpgradesChosen || 0) >= 3
     },
 
     // 收集类
@@ -260,6 +275,11 @@ const ACHIEVEMENTS = {
         icon: '💎', category: 'special', difficulty: 'hard',
         condition: (stats) => stats.perfectGames >= 1 
     },
+    battleHardened: {
+        id: 'battleHardened', name: '⚙️ 百战之躯', desc: '累计选择10次战损升级',
+        icon: '⚙️', category: 'special', difficulty: 'hard',
+        condition: (stats) => (stats.damageUpgradesChosen || 0) >= 10
+    },
 
     // 收集类
     tankMaster: { 
@@ -287,6 +307,7 @@ let playerStats = {
     maxSurvivalTime: 0, currentMatchSurvivalTime: 0, survivalStartTime: 0,
     lowHpKills: 0, lowHpSurvives: 0, outpostsCaptured: 0, basesDestroyed: 0,
     shellsFired: 0, mgFired: 0, aaFired: 0, ultimatesUsed: 0,
+    smokeGrenadesDeployed: 0, quickSmokeDeploys: 0, damageUpgradesChosen: 0,
     ctfWins: 0, stormSurvived: 0, infectionSurvivorWins: 0, defenseWins: 0, sneakWins: 0,
     totalWins: 0, comebackWins: 0, maxSpeedReached: 0, ghostKills: 0,
     perfectGames: 0, modesWon: [], tanksUsed: [], seriesUsed: [], oneShotKills: 0,
@@ -356,6 +377,8 @@ function getAchievementProgress(achId) {
         case 'aaRookie': return { current: playerStats.aaFired, target: 50, text: `${playerStats.aaFired}/50` };
         case 'aaMaster': return { current: playerStats.aaFired, target: 200, text: `${playerStats.aaFired}/200` };
         case 'aaGod': return { current: playerStats.aaFired, target: 500, text: `${playerStats.aaFired}/500` };
+        case 'smokeRookie': return { current: playerStats.smokeGrenadesDeployed || 0, target: 1, text: `${playerStats.smokeGrenadesDeployed || 0}/1` };
+        case 'quickSmokeExpert': return { current: playerStats.quickSmokeDeploys || 0, target: 20, text: `${playerStats.quickSmokeDeploys || 0}/20` };
         case 'ultimateRookie': return { current: playerStats.ultimatesUsed, target: 10, text: `${playerStats.ultimatesUsed}/10` };
         case 'ultimateMaster': return { current: playerStats.ultimatesUsed, target: 30, text: `${playerStats.ultimatesUsed}/30` };
         case 'flagRaiser': return { current: playerStats.outpostsCaptured, target: 3, text: `${playerStats.outpostsCaptured}/3` };
@@ -378,6 +401,8 @@ function getAchievementProgress(achId) {
         case 'phoenix': return { current: playerStats.lowHpKills, target: 1, text: `${playerStats.lowHpKills}/1` };
         case 'speedDemon': return { current: playerStats.maxSpeedReached.toFixed(1), target: 12, text: `${playerStats.maxSpeedReached.toFixed(1)}/12` };
         case 'ghostWalker': return { current: playerStats.ghostKills, target: 3, text: `${playerStats.ghostKills}/3` };
+        case 'fieldRefit': return { current: playerStats.damageUpgradesChosen || 0, target: 3, text: `${playerStats.damageUpgradesChosen || 0}/3` };
+        case 'battleHardened': return { current: playerStats.damageUpgradesChosen || 0, target: 10, text: `${playerStats.damageUpgradesChosen || 0}/10` };
         case 'tankRookie': return { current: playerStats.tanksUsed.length, target: 3, text: `${playerStats.tanksUsed.length}/3` };
         case 'tankCollector': return { current: playerStats.tanksUsed.length, target: 8, text: `${playerStats.tanksUsed.length}/8` };
         case 'tankMaster': return { current: playerStats.tanksUsed.length, target: 15, text: `${playerStats.tanksUsed.length}/15` };
@@ -531,6 +556,19 @@ function recordShot(type) {
 function recordUltimate() {
     playerStats.ultimatesUsed++;
     checkAchievements();
+}
+
+function recordSmokeDeployment(quick = false) {
+    playerStats.smokeGrenadesDeployed = (playerStats.smokeGrenadesDeployed || 0) + 1;
+    if(quick) playerStats.quickSmokeDeploys = (playerStats.quickSmokeDeploys || 0) + 1;
+    checkAchievements();
+    saveStats();
+}
+
+function recordDamageUpgrade() {
+    playerStats.damageUpgradesChosen = (playerStats.damageUpgradesChosen || 0) + 1;
+    checkAchievements();
+    saveStats();
 }
 
 function recordOutpostCapture(team) {

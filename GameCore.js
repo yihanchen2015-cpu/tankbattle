@@ -8,7 +8,7 @@ function startGame() {
     }
     resetMatchStats();
     smokeClouds = [];
-    damageUpgradeState = { active: false, deaths: 0, offered: [], chosen: [] };
+    damageUpgradeState = { active: false, pending: false, delayTimer: 0, deaths: 0, offered: [], chosen: [] };
     if(typeof resetTeamScores === 'function') resetTeamScores();
     if(typeof resetCombatReplay === 'function') resetCombatReplay();
     if(typeof resetBattleSystems === 'function') resetBattleSystems();
@@ -631,7 +631,11 @@ function createTank(data, x, y, team, isPlayer) {
         masteryGoldenProjectiles: masteryVisual ? masteryVisual.goldenProjectiles : false,
         masteryTrailColor: masteryVisual ? masteryVisual.trailColor : null,
         masteryAura: masteryVisual ? masteryVisual.aura : false,
+        masteryAuraColor: masteryVisual ? masteryVisual.auraColor : null,
         masteryAuraRadius: masteryVisual ? masteryVisual.auraRadius : 0,
+        masteryBinaryCode: masteryVisual ? masteryVisual.binaryCode : false,
+        masteryDeathFlame: masteryVisual ? masteryVisual.deathFlame : null,
+        masteryDeathFlameSpawned: false,
         masteryWeaponDamageMult: masteryVisual ? masteryVisual.weaponDamageMult : 1,
         masteryTrailZoneTimer: 0,
         weight: data.weight || 1.0,
@@ -867,7 +871,7 @@ function update(dt) {
     }
 
     gameTime -= dt;
-    if(gameTime <= 0) {
+    if(gameTime <= 0 && !damageUpgradeState.pending) {
         if(typeof handleBattleTimeExpired === 'function' && handleBattleTimeExpired()) {
             updateTimer();
             return;
@@ -924,6 +928,7 @@ function update(dt) {
     checkCollisions();
     if(typeof updateCombatReplayBuffer === 'function') updateCombatReplayBuffer(dt);
     updateMapElements(dt);
+    if(updatePendingDamageUpgrade(dt)) return;
     checkWinCondition();
     if(gameState !== 'playing') return;
     updateUltimates(dt);
@@ -1354,7 +1359,10 @@ function updateStatusEffects(tank, dt) {
                     ? MASTERY_TRAIL_DAMAGE_PER_SECOND
                     : 55
             });
-            if(trailEffects.length > 180) trailEffects.splice(0, trailEffects.length - 180);
+            while(trailEffects.length > 180) {
+                const removable = trailEffects.findIndex(effect => effect.kind === 'mastery');
+                trailEffects.splice(removable >= 0 ? removable : 0, 1);
+            }
             tank.masteryTrailZoneTimer = .13;
         }
     }
@@ -1453,8 +1461,36 @@ const DAMAGE_UPGRADE_POOL = [
     }
 ];
 
+const DAMAGE_UPGRADE_DEATH_DELAY = 1.5;
+
+function scheduleDamageUpgrade(delay = DAMAGE_UPGRADE_DEATH_DELAY) {
+    if(!player || !player.dead || damageUpgradeState.active || damageUpgradeState.pending) return false;
+    damageUpgradeState.pending = true;
+    damageUpgradeState.delayTimer = Math.max(0, Number(delay) || 0);
+    player.canMove = false;
+    if(typeof showMessage === 'function') {
+        showMessage(`战损确认 · ${damageUpgradeState.delayTimer.toFixed(1)}秒后进入升级`, '#ff9a3d');
+    }
+    return true;
+}
+
+function updatePendingDamageUpgrade(dt) {
+    if(!damageUpgradeState.pending) return false;
+    if(!player || !player.dead) {
+        damageUpgradeState.pending = false;
+        damageUpgradeState.delayTimer = 0;
+        return false;
+    }
+    damageUpgradeState.delayTimer = Math.max(0, damageUpgradeState.delayTimer - Math.max(0, dt));
+    if(damageUpgradeState.delayTimer > 0) return false;
+    damageUpgradeState.pending = false;
+    return beginDamageUpgrade();
+}
+
 function beginDamageUpgrade() {
     if(!player || !player.dead || damageUpgradeState.active) return false;
+    damageUpgradeState.pending = false;
+    damageUpgradeState.delayTimer = 0;
     damageUpgradeState.active = true;
     damageUpgradeState.deaths++;
     const shuffled = DAMAGE_UPGRADE_POOL.slice().sort(() => Math.random() - .5);
@@ -1490,7 +1526,10 @@ function chooseDamageUpgrade(id) {
     upgrade.apply(player);
     damageUpgradeState.chosen.push(id);
     damageUpgradeState.active = false;
+    damageUpgradeState.pending = false;
+    damageUpgradeState.delayTimer = 0;
     damageUpgradeState.offered = [];
+    if(typeof recordDamageUpgrade === 'function') recordDamageUpgrade();
     respawnPlayerNearBase();
     return true;
 }
@@ -1509,8 +1548,9 @@ function respawnPlayerNearBase() {
         player.z = Number.isFinite(bases.blue.z) ? bases.blue.z : getFactoryFloorZ(player.factoryFloor);
     } else if(!player.isFlying) player.z = 0;
     player.dead = false;
+    player.masteryDeathFlameSpawned = false;
     player.hp = player.maxHp;
-    player.invincible = 4;
+    player.invincible = 5;
     player.canMove = true;
     player.turretJamTimer = 0;
     player.trackDamageTimer = 0;
@@ -1536,7 +1576,7 @@ function respawnPlayerNearBase() {
 
 // ==================== 检查胜利条件 ====================
 function checkWinCondition() {
-    if(damageUpgradeState.active || gameState === 'damageUpgrade') return;
+    if(damageUpgradeState.active || damageUpgradeState.pending || gameState === 'damageUpgrade') return;
     if(gameMode === 'custom' && typeof customRoomConfig !== 'undefined') {
         if(customRoomConfig.rule === 'base') {
             if(bases.blue && bases.blue.hp <= 0) { endGame('baseDestroyed'); return; }
@@ -1696,7 +1736,7 @@ function resetGame() {
     if(typeof resetBattleSystems === 'function') resetBattleSystems();
     selectedTank = null;
     smokeClouds = [];
-    damageUpgradeState = { active: false, deaths: 0, offered: [], chosen: [] };
+    damageUpgradeState = { active: false, pending: false, delayTimer: 0, deaths: 0, offered: [], chosen: [] };
     allies = []; enemies = []; bullets = []; particles = []; exhaustTrails = [];
     trailEffects = []; damageNumbers = []; outposts = []; aiTanks = []; player = null;
 

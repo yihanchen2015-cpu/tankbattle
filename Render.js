@@ -373,10 +373,53 @@ function drawExhaustTrails() {
 }
 
 function drawTrailEffects() {
+    const now = performance.now() * .001;
     trailEffects.forEach(t => {
         const alpha = Math.max(0, t.life / t.maxLife);
         ctx.save();
-        if(t.kind === 'mastery') {
+        if(t.kind === 'mastery-death-flame') {
+            const color = t.color || '#a000ff';
+            const radius = t.radius || 90;
+            ctx.translate(t.x, t.y);
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = color;
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 24;
+            ctx.globalAlpha = alpha * .18;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = alpha * .38;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius * (.56 + Math.sin(now * 3 + (t.seed || 0)) * .04), 0, Math.PI * 2);
+            ctx.fill();
+            const flameCount = touchControlMode ? 8 : 14;
+            for(let index = 0; index < flameCount; index++) {
+                const angle = index / flameCount * Math.PI * 2 + (t.seed || 0);
+                const distance = radius * (.22 + (index % 4) * .13);
+                const flameWidth = radius * (.09 + (index % 3) * .018);
+                const flicker = .78 + Math.sin(now * (5.5 + index * .16) + index * 1.7) * .24;
+                ctx.save();
+                ctx.translate(Math.cos(angle) * distance, Math.sin(angle) * distance);
+                ctx.rotate(angle + Math.PI / 2);
+                ctx.globalAlpha = alpha * (.48 + (index % 3) * .1);
+                ctx.beginPath();
+                ctx.moveTo(-flameWidth, flameWidth * .55);
+                ctx.bezierCurveTo(
+                    -flameWidth * .7, -flameWidth,
+                    -flameWidth * .18, -flameWidth * 3.8 * flicker,
+                    0, -flameWidth * 5.2 * flicker
+                );
+                ctx.bezierCurveTo(
+                    flameWidth * .55, -flameWidth * 2.7 * flicker,
+                    flameWidth * .9, -flameWidth,
+                    flameWidth, flameWidth * .55
+                );
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        } else if(t.kind === 'mastery') {
             const color = t.color || '#ffb11b';
             ctx.globalCompositeOperation = 'lighter';
             ctx.globalAlpha = alpha * .5;
@@ -420,13 +463,11 @@ function drawDamageNumbers() {
 
 function drawTankLevelLabel(tank, x, y) {
     const level = Math.max(1, Math.min(8, Number(tank.masteryLevel) || 1));
-    const color = tank.masteryLevelColor ||
-        (typeof getMasteryLevelColor === 'function' ? getMasteryLevelColor(level) : '#aab4bd');
     ctx.save();
     ctx.font = '900 11px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillStyle = color;
+    ctx.fillStyle = '#f2f4f7';
     ctx.shadowColor = '#000';
     ctx.shadowBlur = 4;
     ctx.fillText(`★ Lv.${level}`, x, y);
@@ -870,28 +911,85 @@ function drawTankAnimationEffects(tank, renderY) {
         ctx.restore();
     }
     if(tank.masteryAura) {
+        const auraColor = tank.masteryAuraColor ||
+            (typeof getMasteryAuraColor === 'function' ? getMasteryAuraColor(tank.masteryLevel) : '#a000ff');
+        const auraRadius = tank.masteryAuraRadius || 300;
+        const reducedFx = typeof mobileDenseCombatMode !== 'undefined' && mobileDenseCombatMode && !tank.isPlayer;
         ctx.save();
         ctx.translate(tank.x, renderY);
-        ctx.strokeStyle = tank.masteryLevelColor ||
-            (typeof getMasteryLevelColor === 'function' ? getMasteryLevelColor(tank.masteryLevel) : '#ffd85a');
-        ctx.lineWidth = 3;
-        ctx.globalAlpha = .22 + Math.sin(now * 4) * .06;
-        ctx.setLineDash([18, 15]);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = auraColor;
+        ctx.fillStyle = auraColor;
+        ctx.shadowColor = auraColor;
+        ctx.shadowBlur = 16;
+        ctx.globalAlpha = .055 + Math.sin(now * 2.4) * .012;
         ctx.beginPath();
-        ctx.arc(0, 0, tank.masteryAuraRadius || 300, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.rotate(now * .65);
-        ctx.globalAlpha = .45;
-        ctx.setLineDash([9, 12]);
+        ctx.arc(0, 0, auraRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.save();
+        ctx.rotate(now * .16);
+        ctx.lineWidth = 4;
+        ctx.globalAlpha = .62 + Math.sin(now * 4) * .08;
+        ctx.setLineDash([26, 11, 7, 11]);
         ctx.beginPath();
-        ctx.arc(0, 0, CONFIG.tankSize + 17 + Math.sin(now * 3) * 2, 0, Math.PI * 2);
+        ctx.arc(0, 0, auraRadius, 0, Math.PI * 2);
         ctx.stroke();
-        for(let i = 0; i < 4; i++) {
-            const angle = now * 1.8 + i * Math.PI / 2;
-            ctx.fillStyle = '#ffe68b';
+        ctx.restore();
+        ctx.save();
+        ctx.rotate(-now * .11);
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = .38;
+        ctx.setLineDash([5, 17]);
+        ctx.beginPath();
+        ctx.arc(0, 0, auraRadius * .84, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        const markerCount = reducedFx ? 6 : 12;
+        for(let i = 0; i < markerCount; i++) {
+            const angle = now * .22 + i * Math.PI * 2 / markerCount;
+            const markerRadius = auraRadius * (.91 + Math.sin(now * 2.1 + i) * .018);
+            const markerSize = 3 + (i % 3);
+            ctx.save();
+            ctx.translate(Math.cos(angle) * markerRadius, Math.sin(angle) * markerRadius);
+            ctx.rotate(angle + now * .6);
+            ctx.globalAlpha = .72;
             ctx.beginPath();
-            ctx.arc(Math.cos(angle) * (CONFIG.tankSize + 19), Math.sin(angle) * (CONFIG.tankSize + 19), 2.5, 0, Math.PI * 2);
+            ctx.moveTo(0, -markerSize * 1.7);
+            ctx.lineTo(markerSize, 0);
+            ctx.lineTo(0, markerSize * 1.7);
+            ctx.lineTo(-markerSize, 0);
+            ctx.closePath();
             ctx.fill();
+            ctx.restore();
+        }
+        ctx.globalAlpha = .86;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 8]);
+        ctx.beginPath();
+        ctx.arc(0, 0, CONFIG.tankSize + 19 + Math.sin(now * 3) * 2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+    if(tank.masteryBinaryCode) {
+        const idSeed = String(tank.id || tank.tankType || '').split('')
+            .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+        const digitCount = touchControlMode ? 6 : 10;
+        ctx.save();
+        ctx.translate(tank.x, renderY);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = '#82eaff';
+        ctx.shadowColor = '#52d9ff';
+        ctx.shadowBlur = 9;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for(let index = 0; index < digitCount; index++) {
+            const orbit = now * .32 + index * Math.PI * 2 / digitCount + idSeed * .01;
+            const radius = CONFIG.tankSize + 28 + (index % 3) * 9;
+            const bob = Math.sin(now * 2.3 + index * 1.8) * 8;
+            const digit = (Math.floor(now * 1.7 + index + idSeed) % 2).toString();
+            ctx.globalAlpha = .28 + (Math.sin(now * 2 + index) + 1) * .16;
+            ctx.font = `900 ${12 + (index % 3) * 2}px monospace`;
+            ctx.fillText(digit, Math.cos(orbit) * radius, Math.sin(orbit) * radius + bob);
         }
         ctx.restore();
     }
@@ -2117,6 +2215,7 @@ function updateInfectionMode(dt) {
 
     // 所有幸存者被感染或死亡 -> 感染者胜利
     if(aliveSurvivors.length === 0) {
+        if(typeof damageUpgradeState !== 'undefined' && damageUpgradeState.pending) return;
         if(player && player.isInfected && !player.dead) {
             endGame('victory'); // 玩家被感染且存活，感染者胜利
         } else {
@@ -2207,13 +2306,17 @@ function updateStormMode(dt) {
                 createParticles(tank.x, tank.y, 3, '#00d9a7', 0.7);
                 tank.stormDamageTick = 1;
             }
-            if(tank.dead && tank === player) endGame('playerDead');
+            if(tank.dead && tank === player &&
+               !(typeof damageUpgradeState !== 'undefined' && damageUpgradeState.pending)) {
+                endGame('playerDead');
+            }
         } else tank.stormDamageTick = 0;
     });
 
     const aliveBlue = [...allies].filter(t => !t.dead);
     const aliveRed = [...enemies].filter(t => !t.dead);
-    if(aliveBlue.length === 0 && player.dead) {
+    if(aliveBlue.length === 0 && player.dead &&
+       !(typeof damageUpgradeState !== 'undefined' && damageUpgradeState.pending)) {
         endGame('playerDead');
     } else if(aliveRed.length === 0 && !player.dead) {
         endGame('victory');

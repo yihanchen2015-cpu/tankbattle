@@ -581,6 +581,9 @@ function setupControls() {
         if(e.code === 'Digit2' && !e.repeat) selectWeaponSlot(1);
         if(e.code === 'Digit3' && !e.repeat) selectWeaponSlot(2);
         if(e.code === 'Digit4' && !e.repeat) selectWeaponSlot(3);
+        if(e.code === 'KeyQ' && !e.repeat && gameState === 'playing' && player && !player.isFlying && typeof deploySmokeGrenade === 'function') {
+            deploySmokeGrenade(player, {atFeet:true, quick:true});
+        }
         if(e.code === 'BracketLeft' && !e.repeat) adjustGunElevation(-CONFIG.gunElevationStep);
         if(e.code === 'BracketRight' && !e.repeat) adjustGunElevation(CONFIG.gunElevationStep);
         if(e.code === 'KeyG') activateUltimate();

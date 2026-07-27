@@ -325,7 +325,14 @@ let environmentState = {
     windStrength: 0
 };
 let smokeClouds = [];
-let damageUpgradeState = { active: false, deaths: 0, offered: [], chosen: [] };
+let damageUpgradeState = {
+    active: false,
+    pending: false,
+    delayTimer: 0,
+    deaths: 0,
+    offered: [],
+    chosen: []
+};
 
 // 新模式状态变量
 let ctfFlags = { blue: null, red: null };

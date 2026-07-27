@@ -1,6 +1,8 @@
 const fs = require('fs');
 const vm = require('vm');
 const assert = require('assert');
+const recordedSmokeDeployments = [];
+const recordedDamageUpgrades = [];
 
 const context = {
     console,
@@ -26,6 +28,10 @@ const context = {
     showMessage() {},
     stopEngineAudio() {},
     recordShot() {},
+    smokeRecords: recordedSmokeDeployments,
+    damageUpgradeRecords: recordedDamageUpgrades,
+    recordSmokeDeployment(quick) { recordedSmokeDeployments.push(quick); },
+    recordDamageUpgrade() { recordedDamageUpgrades.push(true); },
     recordKill() {},
     recordPlayerDamageSource() {}
 };
@@ -78,16 +84,25 @@ const result = vm.runInContext(`(() => {
     const smokeDeployed=deploySmokeGrenade(player);
     const smokeBlocks=!lineOfSight(1000,1000,1300,1000);
     const smokeRemainingAfterDeploy=player.smoke;
+    player.smokeCooldown=0;
+    const quickSmokeDeployed=deploySmokeGrenade(player,{atFeet:true,quick:true});
+    const quickSmoke=smokeClouds[smokeClouds.length-1];
 
     const directChance=getTankArmorRicochetChance(target,{type:'shell',x:1165,y:1200,vx:18,vy:0,ricocheted:false},2.5);
     const glancingChance=getTankArmorRicochetChance(target,{type:'shell',x:1200,y:1165,vx:18,vy:0,ricocheted:false},2.5);
 
     enemies=[];
+    gameState='playing';
     player.hp=10;
     player.dead=false;
     player.goldenShieldReady=false;
     const attacker=createTank(TANKS.xingchen27a,1400,1000,'red',false);
     applyDirectDamage(player,100,attacker,'主炮',{type:'shell'});
+    const stateImmediatelyAfterDeath=gameState;
+    const pendingImmediatelyAfterDeath=damageUpgradeState.pending;
+    updatePendingDamageUpgrade(1.49);
+    const stateBeforeDelayEnds=gameState;
+    updatePendingDamageUpgrade(.02);
     const upgradeState=gameState;
     damageUpgradeState.offered=['speed'];
     const speedBefore=player.damageUpgradeSpeedBoost;
@@ -108,10 +123,14 @@ const result = vm.runInContext(`(() => {
         flightAngle,
         turretZone,turretJam,trackZone,trackSlow,fuelZone,fuelFire,
         smokeDeployed,smokeBlocks,smokeRemaining:smokeRemainingAfterDeploy,
+        quickSmokeDeployed,quickSmokeX:quickSmoke.x,quickSmokeY:quickSmoke.y,
+        smokeRecords:smokeRecords.slice(),
         directChance,glancingChance,
+        stateImmediatelyAfterDeath,pendingImmediatelyAfterDeath,stateBeforeDelayEnds,
         upgradeState,selected,respawned:!player.dead,
         speedGain:player.damageUpgradeSpeedBoost-speedBefore,
-        respawnHp:player.hp,
+        respawnHp:player.hp,respawnInvincibility:player.invincible,
+        damageUpgradeRecords:damageUpgradeRecords.length,
         shieldDamage,
         shieldBlocked:player.hp===shieldHpBefore && !player.goldenShieldReady,
         shieldExplosionDamage:attackerHpBefore-attacker.hp
@@ -129,13 +148,22 @@ assert(result.fuelFire > 3,'side hits should ignite the fuel tank');
 assert.strictEqual(result.smokeDeployed,true,'a ground tank should deploy smoke');
 assert.strictEqual(result.smokeBlocks,true,'smoke must block line of sight');
 assert.strictEqual(result.smokeRemaining,1,'deploying smoke should consume one charge');
+assert.strictEqual(result.quickSmokeDeployed,true,'Q-style smoke should deploy immediately');
+assert.strictEqual(result.quickSmokeX,1000,'quick smoke should be centered on the tank X position');
+assert.strictEqual(result.quickSmokeY,1000,'quick smoke should be centered on the tank Y position');
+assert.deepStrictEqual(Array.from(result.smokeRecords),[false,true],'only quick smoke should count as a quick deployment');
 assert(result.glancingChance > result.directChance,'oblique armor impacts should ricochet more often');
 assert(result.glancingChance < 1,'armor ricochet must remain probabilistic');
-assert.strictEqual(result.upgradeState,'damageUpgrade','player death should enter the damage-upgrade screen');
+assert.strictEqual(result.stateImmediatelyAfterDeath,'playing','battle should continue immediately after player death');
+assert.strictEqual(result.pendingImmediatelyAfterDeath,true,'player death should schedule the delayed damage upgrade');
+assert.strictEqual(result.stateBeforeDelayEnds,'playing','damage upgrade must remain hidden for the first 1.49 seconds');
+assert.strictEqual(result.upgradeState,'damageUpgrade','damage upgrade should open after the 1.5-second death delay');
 assert.strictEqual(result.selected,true,'a presented damage upgrade should be selectable');
 assert.strictEqual(result.respawned,true,'selecting an upgrade should respawn the player');
 assert(Math.abs(result.speedGain-.15)<1e-9,'speed upgrade should add 15% maximum speed');
 assert(result.respawnHp>0,'respawn should restore player HP');
+assert.strictEqual(result.respawnInvincibility,5,'damage-upgrade respawn should grant five seconds of invincibility');
+assert.strictEqual(result.damageUpgradeRecords,1,'a selected damage upgrade should be recorded once');
 assert.strictEqual(result.shieldDamage,0,'golden shield should fully block the next hit');
 assert.strictEqual(result.shieldBlocked,true,'golden shield should be consumed without damaging the player');
 assert(result.shieldExplosionDamage>0,'golden shield should produce a damaging short-range blast');

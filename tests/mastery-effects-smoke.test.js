@@ -69,8 +69,20 @@ const result = vm.runInContext(`(() => {
     const maxVisual = getTankMasteryVisual(selectedTank);
     currentMap = 'classic';
     const maxTank = createTank(TANKS[selectedTank], 100, 100, 'blue', true);
+    playerStats.tankMastery.kimi_tank = { matches:15, kills:0, wins:0, xp:1500 };
+    const kimiVisual = getTankMasteryVisual('kimi_tank');
+    const kimiTank = createTank(TANKS.kimi_tank, 150, 100, 'blue', true);
     Math.random = () => .999;
     const maxAiTank = createTank(TANKS[selectedTank], 200, 100, 'red', false);
+    const maxAiTankStats = {
+        level:maxAiTank.masteryLevel,
+        levelColor:maxAiTank.masteryLevelColor,
+        hp:maxAiTank.hp,
+        speed:maxAiTank.speed,
+        armor:maxAiTank.armor,
+        aura:maxAiTank.masteryAura,
+        weaponDamageMult:maxAiTank.masteryWeaponDamageMult
+    };
     const aiLevelSamples = [0, .3, .52, .68, .8, .88, .94, .999].map(rollAIMasteryLevel);
 
     const observer = { id:'observer', aiTrackedTarget:null };
@@ -112,6 +124,33 @@ const result = vm.runInContext(`(() => {
     updateTrailEffects(.5);
     const trailDamage = 100 - victim.hp;
 
+    trailEffects = [];
+    maxAiTank.x = 0;
+    maxAiTank.y = 0;
+    maxAiTank.hp = 1;
+    maxAiTank.dead = false;
+    maxAiTank.invincible = 0;
+    maxAiTank.masteryDeathFlameSpawned = false;
+    player = null;
+    applyDirectDamage(maxAiTank, 10, null, '测试击毁');
+    const deathFlame = trailEffects[0];
+    const flameVictim = {
+        id:'flame-victim', team:'blue', dead:false, isPlayer:false, x:20, y:0,
+        hp:1000, maxHp:1000, invincible:0, armor:1, damageReduction:0,
+        masteryAuraDefenseMult:1, shieldActive:false, shieldHp:0
+    };
+    const flameFriendly = {
+        id:'flame-friendly', team:'red', dead:false, isPlayer:false, x:20, y:0,
+        hp:1000, maxHp:1000, invincible:0, armor:1, damageReduction:0,
+        masteryAuraDefenseMult:1, shieldActive:false, shieldHp:0
+    };
+    player = null;
+    allies = [flameVictim];
+    enemies = [flameFriendly];
+    updateTrailEffects(.5);
+    const deathFlameDamage = 1000 - flameVictim.hp;
+    const friendlyDeathFlameDamage = 1000 - flameFriendly.hp;
+
     const inspired = {
         id:'ally', team:'blue', dead:false, isPlayer:false, x:250, y:0,
         aiState:'capture', aiStateTimer:0
@@ -136,6 +175,10 @@ const result = vm.runInContext(`(() => {
         xpAfterResult: profileAfterResult.xp,
         xpAfterDuplicateResult: profileAfterDuplicateResult.xp,
         performanceXp,
+        auraColors: [5,6,7,8].map(getMasteryAuraColor),
+        deathFlameConfigs: [5,6,7,8].map(getMasteryDeathFlameConfig),
+        kimiBinaryVisual: kimiVisual.binaryCode,
+        kimiBinaryTank: kimiTank.masteryBinaryCode,
         maxLevel: maxProfile.level,
         maxVisual,
         maxTankStats: {
@@ -146,15 +189,7 @@ const result = vm.runInContext(`(() => {
             armor:maxTank.armor,
             weaponDamageMult:maxTank.masteryWeaponDamageMult
         },
-        maxAiTankStats: {
-            level:maxAiTank.masteryLevel,
-            levelColor:maxAiTank.masteryLevelColor,
-            hp:maxAiTank.hp,
-            speed:maxAiTank.speed,
-            armor:maxAiTank.armor,
-            aura:maxAiTank.masteryAura,
-            weaponDamageMult:maxAiTank.masteryWeaponDamageMult
-        },
+        maxAiTankStats,
         aiLevelSamples,
         camoAvoided,
         normalTargetAccepted,
@@ -162,6 +197,15 @@ const result = vm.runInContext(`(() => {
         goldenDamage: goldenBullet.damage,
         baseShellDamage: CONFIG.bulletDamage,
         trailDamage,
+        deathFlame: {
+            kind:deathFlame.kind,
+            color:deathFlame.color,
+            duration:deathFlame.maxLife,
+            radius:deathFlame.radius,
+            damagePerSecond:deathFlame.damagePerSecond,
+            damage:deathFlameDamage,
+            friendlyDamage:friendlyDeathFlameDamage
+        },
         inspired: {
             state: inspired.aiState,
             attack: inspired.masteryAuraDamageMult,
@@ -181,6 +225,17 @@ assert.strictEqual(result.xpAfterDuplicateResult, 100, 'duplicate settlement mus
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.performanceXp)), {
     completion:100, victory:150, kills:90, survival:60, total:400
 }, 'match XP should combine completion, victory, kills, and survival performance');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(result.auraColors)), [
+    '#a000ff', '#ff7a00', '#ff1744', '#ffd700'
+], 'level-five-to-eight battle auras should come from independent pure-color constants');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(result.deathFlameConfigs)), [
+    {color:'#a000ff',damagePerSecond:45,duration:4,radius:90},
+    {color:'#ff7a00',damagePerSecond:65,duration:5,radius:105},
+    {color:'#ff1744',damagePerSecond:90,duration:6,radius:120},
+    {color:'#ffd700',damagePerSecond:120,duration:8,radius:140}
+], 'death flames should have distinct level-five-to-eight colors, damage, duration, and radius');
+assert.strictEqual(result.kimiBinaryVisual, true, 'level-four Kimi should unlock the binary-code visual');
+assert.strictEqual(result.kimiBinaryTank, true, 'the created Kimi tank should carry the binary-code visual flag');
 assert.strictEqual(result.maxLevel, 8, 'mastery should have eight levels');
 assert(result.maxVisual.camouflage && result.maxVisual.goldenProjectiles && result.maxVisual.trailColor && result.maxVisual.aura,
     'maximum mastery should expose all four cumulative effects');
@@ -203,6 +258,10 @@ assert.strictEqual(result.golden, true, 'mastery shells should be marked golden 
 assert(Math.abs(result.goldenDamage - result.baseShellDamage * 1.2 * 1.1) < 1e-9,
     'level-eight golden shells should combine the twenty-percent gold bonus with ten-percent weapon damage');
 assert(Math.abs(result.trailDamage - 27.5) < 0.001, 'hot mastery trail should deal 55 damage per second');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(result.deathFlame)), {
+    kind:'mastery-death-flame', color:'#ffd700', duration:8, radius:140,
+    damagePerSecond:120, damage:60, friendlyDamage:0
+}, 'level-eight death fire should persist after owner death and damage enemies only');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.inspired)), {
     state:'combat', attack:1.15, defense:.85, active:true
 }, 'AI within 300 should gain attack, defense, and attack-mode inspiration');

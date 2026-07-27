@@ -3,11 +3,11 @@ const TANK_MASTERY_LEVELS = Object.freeze([
     { level: 1, xp: 0,     legacyMatches: 0,   name: '新兵', reward: '基础涂装' },
     { level: 2, xp: 300,   legacyMatches: 3,   name: '斥候', reward: '战地迷彩：敌方锁定概率 -10%' },
     { level: 3, xp: 800,   legacyMatches: 8,   name: '精英', reward: '金色描边：主炮弹变为金色，威力 +20%' },
-    { level: 4, xp: 1500,  legacyMatches: 15,  name: '老兵', reward: '灼热尾焰：接触尾焰的敌人持续受伤' },
-    { level: 5, xp: 3000,  legacyMatches: 30,  name: '王牌', reward: '王牌光环：激励 300 范围内所有 AI' },
-    { level: 6, xp: 5000,  legacyMatches: 50,  name: '战术王牌', reward: '战术机动：速度 +8%，转向速度 +10%' },
-    { level: 7, xp: 7500,  legacyMatches: 75,  name: '传奇', reward: '传奇装甲：最大生命 +12%，装甲 +0.15' },
-    { level: 8, xp: 11000, legacyMatches: 110, name: '战神', reward: '战神火力：所有常规武器伤害 +10%' }
+    { level: 4, xp: 1500,  legacyMatches: 15,  name: '老兵', reward: '灼热尾焰；Kimi 解锁二进制环绕特效' },
+    { level: 5, xp: 3000,  legacyMatches: 30,  name: '王牌', reward: '王牌光环；死亡留下紫色火焰' },
+    { level: 6, xp: 5000,  legacyMatches: 50,  name: '战术王牌', reward: '速度 +8%，转向 +10%；死亡火焰升级为橙色' },
+    { level: 7, xp: 7500,  legacyMatches: 75,  name: '传奇', reward: '生命 +12%，装甲 +0.15；死亡火焰升级为红色' },
+    { level: 8, xp: 11000, legacyMatches: 110, name: '战神', reward: '常规武器伤害 +10%；死亡火焰升级为金色' }
 ]);
 
 const TANK_MASTERY_MAX_LEVEL = 8;
@@ -26,6 +26,18 @@ const MASTERY_LEVEL_COLORS = Object.freeze([
     '#aab4bd', '#78ad57', '#37bddd', '#4d83ff',
     '#a768ff', '#ff943d', '#ff4f75', '#ffd84a'
 ]);
+const MASTERY_AURA_COLORS = Object.freeze({
+    5: '#a000ff',
+    6: '#ff7a00',
+    7: '#ff1744',
+    8: '#ffd700'
+});
+const MASTERY_DEATH_FLAME_LEVELS = Object.freeze({
+    5: Object.freeze({ color: '#a000ff', damagePerSecond: 45, duration: 4, radius: 90 }),
+    6: Object.freeze({ color: '#ff7a00', damagePerSecond: 65, duration: 5, radius: 105 }),
+    7: Object.freeze({ color: '#ff1744', damagePerSecond: 90, duration: 6, radius: 120 }),
+    8: Object.freeze({ color: '#ffd700', damagePerSecond: 120, duration: 8, radius: 140 })
+});
 const AI_MASTERY_LEVEL_WEIGHTS = Object.freeze([30, 22, 16, 12, 8, 6, 4, 2]);
 
 function ensureTankMasteryStore() {
@@ -55,6 +67,16 @@ function getLegacyTankMasteryXp(matches) {
 function getMasteryLevelColor(level) {
     const index = Math.max(0, Math.min(MASTERY_LEVEL_COLORS.length - 1, (Number(level) || 1) - 1));
     return MASTERY_LEVEL_COLORS[index];
+}
+
+function getMasteryAuraColor(level) {
+    const normalizedLevel = Math.max(5, Math.min(8, Math.floor(Number(level) || 5)));
+    return MASTERY_AURA_COLORS[normalizedLevel];
+}
+
+function getMasteryDeathFlameConfig(level) {
+    const normalizedLevel = Math.floor(Number(level) || 0);
+    return MASTERY_DEATH_FLAME_LEVELS[normalizedLevel] || null;
 }
 
 function rollAIMasteryLevel(randomValue = Math.random()) {
@@ -188,6 +210,9 @@ function getTankMasteryVisual(tankType, levelOverride = null) {
         goldenProjectiles: false,
         trailColor: null,
         aura: false,
+        auraColor: null,
+        binaryCode: false,
+        deathFlame: null,
         speedMult: 1,
         turnSpeedMult: 1,
         hpMult: 1,
@@ -207,7 +232,10 @@ function getTankMasteryVisual(tankType, levelOverride = null) {
         goldenProjectiles: profile.level >= 3,
         trailColor: profile.level >= 4 ? accent : null,
         aura: profile.level >= 5,
+        auraColor: profile.level >= 5 ? getMasteryAuraColor(profile.level) : null,
         auraRadius: profile.level >= 5 ? MASTERY_AURA_RADIUS : 0,
+        binaryCode: tankType === 'kimi_tank' && profile.level >= 4,
+        deathFlame: getMasteryDeathFlameConfig(profile.level),
         speedMult: profile.level >= 6 ? MASTERY_TACTICAL_SPEED_MULT : 1,
         turnSpeedMult: profile.level >= 6 ? MASTERY_TACTICAL_TURN_MULT : 1,
         hpMult: profile.level >= 7 ? MASTERY_LEGENDARY_HP_MULT : 1,
@@ -215,6 +243,34 @@ function getTankMasteryVisual(tankType, levelOverride = null) {
         weaponDamageMult: profile.level >= 8 ? MASTERY_WARGOD_WEAPON_DAMAGE_MULT : 1,
         levelColor: getMasteryLevelColor(profile.level)
     };
+}
+
+function spawnMasteryDeathFlame(tank) {
+    if(!tank || tank.isClone || tank.masteryDeathFlameSpawned || typeof trailEffects === 'undefined') return null;
+    const config = tank.masteryDeathFlame || getMasteryDeathFlameConfig(tank.masteryLevel);
+    if(!config) return null;
+    tank.masteryDeathFlameSpawned = true;
+    const effect = {
+        kind: 'mastery-death-flame',
+        x: tank.x,
+        y: tank.y,
+        z: tank.isFlying ? 0 : (tank.z || 0),
+        factoryFloor: tank.factoryFloor,
+        life: config.duration,
+        maxLife: config.duration,
+        team: tank.team,
+        owner: tank,
+        radius: config.radius,
+        color: config.color,
+        damagePerSecond: config.damagePerSecond,
+        masteryLevel: tank.masteryLevel,
+        seed: Math.random() * 1000
+    };
+    trailEffects.push(effect);
+    if(typeof createParticles === 'function') {
+        createParticles(tank.x, tank.y, 28 + tank.masteryLevel * 3, config.color, 2.4);
+    }
+    return effect;
 }
 
 function shouldAIAcquireMasteryTarget(observer, target, now = performance.now()) {
