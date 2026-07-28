@@ -47,6 +47,11 @@ const sandbox = {
     },
     outposts: [{ x: 1500, y: 1200, radius: 240, owner: null }],
     mapElements: [{ type: 'mine', x: 1300, y: 1200, radius: 40, armed: true }],
+    neutralNPCs: [{
+        id:'neutral-sniper-tower', type:'neutralSniperTower', name:'中立狙击塔',
+        team:'neutral', x:1500, y:1200, z:0, radius:52, angle:0,
+        muzzleFlashTimer:.2, currentTargetName:'测试坦克', currentTargetScore:500
+    }],
     environmentState: { sandstormActive: false },
     stormData: { safeZone: { x: 1500, y: 1200, radius: 900 } },
     ctfFlags: {},
@@ -180,6 +185,8 @@ vm.runInContext(`
         deathFlameMesh: !!threeView.trailEffectMeshes.get(deathFlameEffect).userData.flames,
         masteryCamouflage: !!threeView.tankMeshes.get('player').userData.camouflage,
         hiddenOutpostVisible: !!threeView.hiddenOutpostMesh && threeView.hiddenOutpostMesh.visible,
+        neutralSniperMesh: threeView.turretMeshes.has(neutralNPCs[0]),
+        neutralSniperParts: threeView.turretMeshes.get(neutralNPCs[0]).children.length,
         pointLights,
         fixedCameraDelta: firstDirection.distanceTo(secondDirection),
         worldAxisAlignment: settledDirection.dot(expectedForward),
@@ -228,6 +235,8 @@ assert.strictEqual(result.masteryTrailMeshes, 2, 'hot trail and death-flame zone
 assert.strictEqual(result.deathFlameMesh, true, 'death-flame zone should use animated 3D flame meshes');
 assert.strictEqual(result.masteryCamouflage, true, '3D tanks should carry visible camouflage patches');
 assert.strictEqual(result.hiddenOutpostVisible, true, 'discovered sneak outpost should be visible in the 3D world');
+assert.strictEqual(result.neutralSniperMesh, true, 'the neutral sniper tower should synchronize into the 3D world');
+assert(result.neutralSniperParts >= 5, 'the 3D neutral sniper should include its base, energy ring, turret, gun, and lens');
 assert.strictEqual(result.pointLights, 0, 'projectiles must not accumulate expensive dynamic lights');
 assert(result.fixedCameraDelta < 1e-9, 'turning the tank must never rotate the world-aligned camera');
 assert(result.worldAxisAlignment > 0.98, 'camera should remain aligned with map north');

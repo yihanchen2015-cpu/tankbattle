@@ -68,7 +68,7 @@ const result = vm.runInContext(`(() => {
         };
     };
 
-    const modes=['classic','defense','ctf','sneak','infection','storm'];
+    const modes=['classic','defense','escort','sneak','deathmatch','boss'];
     const byMode=Object.fromEntries(modes.map(mode=>[mode,runMode(mode)]));
     const blocked=runMode('classic',{blocked:true});
     const distant=runMode('classic',{distance:1500});

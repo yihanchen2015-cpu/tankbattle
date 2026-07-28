@@ -67,14 +67,14 @@ vm.runInContext(`
     selectMode = mode => { gameMode = mode; calls.push('mode:' + mode); };
     startGame = () => calls.push('start');
     lastMatchSetup = {
-        selectedTank:'niuniu', currentMap:'island', gameMode:'storm',
+        selectedTank:'niuniu', currentMap:'island', gameMode:'boss',
         ammo:72, mg:188, aa:21, dayNight:'night', difficulty:'hard', viewMode:'3d'
     };
     restartLastGame();
 `, sandbox);
 const restored = vm.runInContext(`({ selectedTank, currentMap, gameMode })`, sandbox);
-assert.deepStrictEqual(JSON.parse(JSON.stringify(restored)), { selectedTank:'niuniu', currentMap:'island', gameMode:'storm' });
-assert.deepStrictEqual(calls, ['reset', 'mode:storm', 'start']);
+assert.deepStrictEqual(JSON.parse(JSON.stringify(restored)), { selectedTank:'niuniu', currentMap:'island', gameMode:'boss' });
+assert.deepStrictEqual(calls, ['reset', 'mode:boss', 'start']);
 assert.strictEqual(elements.ammoSlider.value, 72);
 assert.strictEqual(elements.mgSlider.value, 188);
 assert.strictEqual(elements.aaSlider.value, 21);

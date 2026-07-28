@@ -128,10 +128,10 @@ const ACHIEVEMENTS = {
         icon: '🎮', category: 'mode', difficulty: 'medium',
         condition: (stats) => stats.modesWon.length >= 3 
     },
-    ctfVictor: { 
-        id: 'ctfVictor', name: '🏴‍☠️ 夺旗冠军', desc: '夺旗模式获胜3次', 
-        icon: '🏆', category: 'mode', difficulty: 'medium',
-        condition: (stats) => stats.ctfWins >= 3 
+    escortChampion: {
+        id: 'escortChampion', name: '🚛 钢铁护卫', desc: '护送模式获胜3次',
+        icon: '🚛', category: 'mode', difficulty: 'medium',
+        condition: (stats) => stats.escortWins >= 3
     },
     defenseHero: { 
         id: 'defenseHero', name: '🛡️ 防守英雄', desc: '守点模式成功防守2次', 
@@ -236,15 +236,15 @@ const ACHIEVEMENTS = {
         icon: '🎖️', category: 'mode', difficulty: 'hard',
         condition: (stats) => stats.modesWon.length >= 6 
     },
-    stormSurvivor: { 
-        id: 'stormSurvivor', name: '🌪️ 风暴幸存者', desc: '风暴模式存活到最后', 
-        icon: '🌪️', category: 'mode', difficulty: 'hard',
-        condition: (stats) => stats.stormSurvived >= 1 
+    deathmatchChampion: {
+        id: 'deathmatchChampion', name: '💀 死斗冠军', desc: '死斗模式获胜3次',
+        icon: '💀', category: 'mode', difficulty: 'hard',
+        condition: (stats) => stats.deathmatchWins >= 3
     },
-    infectionCured: { 
-        id: 'infectionCured', name: '💉 感染终结者', desc: '感染模式作为幸存者获胜', 
-        icon: '💉', category: 'mode', difficulty: 'hard',
-        condition: (stats) => stats.infectionSurvivorWins >= 1 
+    bossHunter: {
+        id: 'bossHunter', name: '👑 首领猎手', desc: '首领模式获胜3次',
+        icon: '👑', category: 'mode', difficulty: 'hard',
+        condition: (stats) => stats.bossWins >= 3
     },
     sneakAssassin: { 
         id: 'sneakAssassin', name: '🗡️ 暗夜刺客', desc: '绝地偷袭模式获胜3次', 
@@ -308,7 +308,7 @@ let playerStats = {
     lowHpKills: 0, lowHpSurvives: 0, outpostsCaptured: 0, basesDestroyed: 0,
     shellsFired: 0, mgFired: 0, aaFired: 0, ultimatesUsed: 0,
     smokeGrenadesDeployed: 0, quickSmokeDeploys: 0, damageUpgradesChosen: 0,
-    ctfWins: 0, stormSurvived: 0, infectionSurvivorWins: 0, defenseWins: 0, sneakWins: 0,
+    escortWins: 0, deathmatchWins: 0, bossWins: 0, defenseWins: 0, sneakWins: 0,
     totalWins: 0, comebackWins: 0, maxSpeedReached: 0, ghostKills: 0,
     perfectGames: 0, modesWon: [], tanksUsed: [], seriesUsed: [], oneShotKills: 0,
     unlockedAchievements: [], unlockedTanks: [], tankMastery: {}, matchStartTime: 0,
@@ -389,10 +389,10 @@ function getAchievementProgress(achId) {
         case 'firstWin': return { current: playerStats.totalWins, target: 1, text: `${playerStats.totalWins}/1` };
         case 'modeExplorer': return { current: playerStats.modesWon.length, target: 3, text: `${playerStats.modesWon.length}/3` };
         case 'modeMaster': return { current: playerStats.modesWon.length, target: 6, text: `${playerStats.modesWon.length}/6` };
-        case 'ctfVictor': return { current: playerStats.ctfWins, target: 3, text: `${playerStats.ctfWins}/3` };
+        case 'escortChampion': return { current: playerStats.escortWins, target: 3, text: `${playerStats.escortWins}/3` };
         case 'defenseHero': return { current: playerStats.defenseWins, target: 2, text: `${playerStats.defenseWins}/2` };
-        case 'stormSurvivor': return { current: playerStats.stormSurvived, target: 1, text: `${playerStats.stormSurvived}/1` };
-        case 'infectionCured': return { current: playerStats.infectionSurvivorWins, target: 1, text: `${playerStats.infectionSurvivorWins}/1` };
+        case 'deathmatchChampion': return { current: playerStats.deathmatchWins, target: 3, text: `${playerStats.deathmatchWins}/3` };
+        case 'bossHunter': return { current: playerStats.bossWins, target: 3, text: `${playerStats.bossWins}/3` };
         case 'sneakAssassin': return { current: playerStats.sneakWins, target: 3, text: `${playerStats.sneakWins}/3` };
         case 'survivor': return { current: Math.floor(playerStats.maxSurvivalTime), target: 120, text: `${Math.floor(playerStats.maxSurvivalTime)}s/120s` };
         case 'ironWill': return { current: Math.floor(playerStats.maxSurvivalTime), target: 240, text: `${Math.floor(playerStats.maxSurvivalTime)}s/240s` };
@@ -463,9 +463,9 @@ function endMatchStats(result) {
         playerStats.totalWins++;
         if(!playerStats.modesWon.includes(gameMode)) playerStats.modesWon.push(gameMode);
 
-        if(gameMode === 'ctf') playerStats.ctfWins++;
-        else if(gameMode === 'storm') playerStats.stormSurvived++;
-        else if(gameMode === 'infection') playerStats.infectionSurvivorWins++;
+        if(gameMode === 'escort') playerStats.escortWins++;
+        else if(gameMode === 'deathmatch') playerStats.deathmatchWins++;
+        else if(gameMode === 'boss') playerStats.bossWins++;
         else if(gameMode === 'defense') playerStats.defenseWins++;
         else if(gameMode === 'sneak') playerStats.sneakWins++;
 
@@ -576,8 +576,8 @@ function recordOutpostCapture(team) {
     checkAchievements();
 }
 
-function recordBaseDestroy(team) {
-    if(typeof awardBaseScore === 'function') awardBaseScore(team);
+function recordBaseDestroy(team, contributor = null) {
+    if(typeof awardBaseScore === 'function') awardBaseScore(team, contributor);
     if(team === 'blue') playerStats.basesDestroyed++;
     checkAchievements();
 }
@@ -591,6 +591,8 @@ function recordTankUsed(tankType) {
     if(tankType.startsWith('zuoyan')) series = 'zuoyan';
     else if(tankType.startsWith('xingchen')) series = 'xingchen';
     else if(tankType.startsWith('duoduo')) series = 'duoduo';
+    else if(tankType.startsWith('niuniu')) series = 'niuniu';
+    else if(tankType.startsWith('kimi')) series = 'kimi';
 
     if(series && !playerStats.seriesUsed.includes(series)) {
         playerStats.seriesUsed.push(series);
@@ -690,7 +692,7 @@ function setupAchievementPanel() {
 // ==================== 隐藏坦克解锁系统 ====================
 function checkHiddenTankUnlocks() {
     const unlocks = {
-        'kimi_tank': { achievement: 'tankAce', message: '🎉 解锁隐藏坦克：Kimi主战坦克！' }
+        'kimi_tank': { achievement: 'tankAce', message: '🎉 解锁隐藏坦克：Kimi主战坦克！AI系选车分类已开放' }
     };
 
     for (const [tankId, unlock] of Object.entries(unlocks)) {
@@ -699,6 +701,8 @@ function checkHiddenTankUnlocks() {
             playerStats.unlockedTanks.push(tankId);
             showNotification(unlock.message, '#9c27b0');
             saveStats();
+            if(typeof updateSeriesFilterVisibility === 'function') updateSeriesFilterVisibility();
+            if(typeof renderTankList === 'function') renderTankList();
         }
     }
 }

@@ -106,7 +106,7 @@ function activateUltimate() {
         for(let i = 0; i < ult.cloneCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const dist = 50 + Math.random() * 50;
-            const clone = createTank(TANKS['zuoyan32'], player.x + Math.cos(angle) * dist, player.y + Math.sin(angle) * dist, player.team, false);
+            const clone = createTank(TANKS['zuoyan32'], player.x + Math.cos(angle) * dist, player.y + Math.sin(angle) * dist, player.team, false, 1);
             clone.hp = ult.cloneHp;
             clone.maxHp = ult.cloneHp;
             clone.isClone = true;
@@ -251,7 +251,7 @@ function activateUltimate() {
         const disguise = TANKS[ult.disguiseAs] || TANKS.zuoyan29;
         for(let i = 0; i < ult.cloneCount; i++) {
             const angle = Math.PI * 2 * i / ult.cloneCount;
-            const clone = createTank(disguise, player.x + Math.cos(angle) * 70, player.y + Math.sin(angle) * 70, player.team, false);
+            const clone = createTank(disguise, player.x + Math.cos(angle) * 70, player.y + Math.sin(angle) * 70, player.team, false, 1);
             clone.hp = ult.cloneHp; clone.maxHp = ult.cloneHp;
             clone.isClone = true; clone.cloneOwner = player; clone.cloneTimer = ult.duration;
             allies.push(clone); aiTanks.push(clone);
@@ -611,10 +611,13 @@ function render() {
     }
     if(typeof drawTerrainDebris2D === 'function') drawTerrainDebris2D(ctx);
     
-    if(currentMap !== 'factory' || typeof isFactoryEntityOnVisibleFloor !== 'function' || isFactoryEntityOnVisibleFloor(bases.blue)) drawBase(bases.blue);
-    if(currentMap !== 'factory' || typeof isFactoryEntityOnVisibleFloor !== 'function' || isFactoryEntityOnVisibleFloor(bases.red)) drawBase(bases.red);
+    if(bases.blue && !bases.blue.hidden &&
+       (currentMap !== 'factory' || typeof isFactoryEntityOnVisibleFloor !== 'function' || isFactoryEntityOnVisibleFloor(bases.blue))) drawBase(bases.blue);
+    if(bases.red && !bases.red.hidden &&
+       (currentMap !== 'factory' || typeof isFactoryEntityOnVisibleFloor !== 'function' || isFactoryEntityOnVisibleFloor(bases.red))) drawBase(bases.red);
 
     drawMapElements();
+    if(typeof drawNeutralNPCs2D === 'function') drawNeutralNPCs2D();
     if(typeof drawMapMechanics2D === 'function') drawMapMechanics2D();
     if(typeof drawBattleSystems2D === 'function') drawBattleSystems2D();
     

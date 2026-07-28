@@ -58,15 +58,15 @@ vm.runInContext(`
     player={team:'blue',dead:false,x:bases.blue.x,y:bases.blue.y};
     allies=[];enemies=[];aiTanks=[];gameConfig={difficulty:'normal'};
     initBaseSpawns();
-    updateBaseSpawns(9.9);
+    updateBaseSpawns(14.9);
 `,context);
-assert.strictEqual(vm.runInContext('allies.length+enemies.length',context),0,'neither base should spawn before ten seconds');
+assert.strictEqual(vm.runInContext('allies.length+enemies.length',context),0,'neither base should spawn before fifteen seconds');
 vm.runInContext('updateBaseSpawns(.2)',context);
-assert.strictEqual(vm.runInContext('enemies.length',context),1,'red base should spawn one tank every ten seconds');
-assert.strictEqual(vm.runInContext('allies.length',context),0,'blue base should still be waiting for fifteen seconds');
-vm.runInContext('updateBaseSpawns(4.9)',context);
+assert.strictEqual(vm.runInContext('enemies.length',context),1,'red base should spawn one tank every fifteen seconds');
+assert.strictEqual(vm.runInContext('allies.length',context),1,'blue base should spawn on the same fifteen-second interval');
+vm.runInContext('updateBaseSpawns(14.9)',context);
 assert.strictEqual(vm.runInContext('allies.length',context),1,'blue base should spawn one tank after fifteen seconds');
-assert.strictEqual(vm.runInContext('enemies.length',context),1,'red base should not spawn a second tank before another ten seconds');
+assert.strictEqual(vm.runInContext('enemies.length',context),1,'red base should not spawn a second tank before another fifteen seconds');
 
 const spawnDistances=vm.runInContext(`({
     blue:Math.hypot(allies[0].x-(bases.blue.x+bases.blue.w/2),allies[0].y-(bases.blue.y+bases.blue.h/2)),
@@ -79,5 +79,5 @@ console.log('Map scale and base spawn smoke test passed:',{
     maps:Object.keys(expectedMaps).length,
     islandCount:5,
     blueInterval:15,
-    redInterval:10
+    redInterval:15
 });

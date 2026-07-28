@@ -6,7 +6,12 @@ const CONFIG = {
     gameTime: 300,
     outpostRadius: 240,
     outpostCaptureTime: 5,
-    baseSpawnIntervals: { blue: 15, red: 10 },
+    outpostRecaptureWindow: 10,
+    outpostRecaptureTimeMultiplier: 0.5,
+    outpostLevelInterval: 60,
+    outpostMaxLevel: 5,
+    outpostMinuteScoreBase: 200,
+    baseSpawnIntervals: { blue: 15, red: 15 },
     baseHp: 50000,
     baseSize: 120,
     tankSize: 35,
@@ -71,6 +76,15 @@ const CONFIG = {
     baseRageThreshold: 0.30,
     baseRageDamageMultiplier: 2,
     baseRageFireRateMultiplier: 2,
+    baseShieldRange: 300,
+    baseShieldEnemyThreshold: 3,
+    baseShieldLingerDuration: 6,
+    baseShieldDamageReduction: 0.30,
+    baseShieldBonusHealRate: 0.06,
+    neutralSniperFireInterval: 10,
+    neutralSniperDamage: 150,
+    neutralSniperProjectileSpeed: 45,
+    neutralSniperTowerRadius: 22,
     ricochetMaxGrazingAngle: 15,
     ricochetDamageMultiplier: 0.5,
     ricochetFriendlySpeedBoost: 0.10,
@@ -81,6 +95,12 @@ const CONFIG = {
     aiFlankAngle: Math.PI / 3,
     aiFocusFireRange: 600,
     aiGroupUpRange: 400,
+    aiSquadSeekRange: 2200,
+    aiSquadMaxFollowers: 4,
+    aiSquadFormationSpacing: 105,
+    aiSquadLaneSpacing: 260,
+    aiPathShareRadius: 280,
+    aiPathShareLifetime: 0.65,
     aiSensorRangeBlue: 1400,
     aiSensorRangeRed: 1700,
     aiTargetLockTime: 0.45,
@@ -311,7 +331,7 @@ let exhaustTrails = [];
 let outposts = [];
 let bases = { blue: null, red: null };
 let obstacles = [];
-let baseSpawnTimers = { blue: 15, red: 10 };
+let baseSpawnTimers = { blue: 15, red: 15 };
 let aiTanks = [];
 let trailEffects = [];
 let damageNumbers = [];
@@ -334,12 +354,16 @@ let damageUpgradeState = {
     chosen: []
 };
 
-// 新模式状态变量
-let ctfFlags = { blue: null, red: null };
-let ctfScores = { blue: 0, red: 0 };
-let ctfFlagCarriers = { blue: null, red: null };
-let infectionData = { infected: [], survivors: [], patientZero: null, infectionStartTime: 0 };
-let stormData = { safeZone: { x: 0, y: 0, radius: 0 }, nextSafeZone: { x: 0, y: 0, radius: 0 }, shrinkStartTime: 0, shrinkDuration: 30000, stormDamage: 32, phase: 0 };
+// 特殊模式状态
+let escortData = {
+    vip: null, start: null, end: null, escortRadius: 320, contestRadius: 260,
+    reached: false, destroyed: false, pathRefresh: 0
+};
+let deathmatchData = { kills: { blue: 0, red: 0 }, targetKills: 50 };
+let bossModeData = {
+    boss: null, defeated: false, killerTeam: null, buffTeam: null,
+    buffTimer: 0, buffDuration: 30
+};
 
 let currentWeapon = 'shell';
 let pathGrid = null;
@@ -362,5 +386,6 @@ const AI_BEHAVIOR = {
 // 事件监听器引用（用于清理）
 const eventListeners = [];
 let mapElements = [];
+let neutralNPCs = [];
 let controlsInitialized = false;
 let introModalInitialized = false;

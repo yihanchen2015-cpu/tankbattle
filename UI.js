@@ -324,20 +324,20 @@ function selectMode(mode) {
         badge.textContent = '🌙 绝地偷袭';
         subtitle.textContent = '黑夜奇袭 | 10v30 | 摧毁敌方基地';
         dayNightRow.style.display = 'none';
-    } else if(mode === 'ctf') {
-        badge.className = 'mode-badge ctf';
-        badge.textContent = '🏴 夺旗模式';
-        subtitle.textContent = '夺取敌旗并送回基地 | 率先获得3分';
+    } else if(mode === 'escort') {
+        badge.className = 'mode-badge escort';
+        badge.textContent = '🚛 护送模式';
+        subtitle.textContent = '蓝方护送VIP从A点抵达B点 | 红方阻截';
         dayNightRow.style.display = 'none';
-    } else if(mode === 'infection') {
-        badge.className = 'mode-badge infection';
-        badge.textContent = '🧟 感染模式';
-        subtitle.textContent = '幸存者对抗感染者 | 接触传播';
+    } else if(mode === 'deathmatch') {
+        badge.className = 'mode-badge deathmatch';
+        badge.textContent = '💀 死斗模式';
+        subtitle.textContent = '无据点、无基地、无分数 | 率先50杀';
         dayNightRow.style.display = 'none';
-    } else if(mode === 'storm') {
-        badge.className = 'mode-badge storm';
-        badge.textContent = '🌪 风暴模式';
-        subtitle.textContent = '安全区持续缩小 | 活到最后';
+    } else if(mode === 'boss') {
+        badge.className = 'mode-badge boss';
+        badge.textContent = '👑 首领模式';
+        subtitle.textContent = '争夺巨型BOSS最后一击 | 大量分数与全队增益';
         dayNightRow.style.display = 'none';
     } else if(mode === 'custom') {
         badge.className = 'mode-badge custom';
@@ -371,8 +371,25 @@ function getTankSeries(key) {
     return TANK_SERIES_ORDER.find(series => key.startsWith(series)) || 'other';
 }
 
+function updateSeriesFilterVisibility() {
+    const aiButton = document.getElementById('aiSeriesFilterBtn');
+    if(!aiButton) return false;
+    const aiUnlocked = typeof isTankUnlocked === 'function' && isTankUnlocked('kimi_tank');
+    aiButton.hidden = !aiUnlocked;
+    aiButton.style.display = aiUnlocked ? '' : 'none';
+    aiButton.setAttribute('aria-hidden', aiUnlocked ? 'false' : 'true');
+    if(!aiUnlocked && currentTankFilter === 'kimi') {
+        currentTankFilter = 'all';
+        document.querySelectorAll('.series-btn').forEach(button => button.classList.remove('active'));
+        const allButton = document.querySelector('.series-btn[data-series="all"]');
+        if(allButton) allButton.classList.add('active');
+    }
+    return aiUnlocked;
+}
+
 function filterTanks(series, btn) {
     console.log('[BUTTON] 点击: 系列筛选', series);
+    if(series === 'kimi' && !updateSeriesFilterVisibility()) return;
     currentTankFilter = series;
     document.querySelectorAll('.series-btn').forEach(b => b.classList.remove('active'));
     if(btn) btn.classList.add('active');
@@ -380,6 +397,7 @@ function filterTanks(series, btn) {
 }
 
 function renderTankList() {
+    updateSeriesFilterVisibility();
     console.log('[RENDER_TANKS] 渲染坦克列表, 筛选:', currentTankFilter);
     const tankList = document.getElementById('tankList');
     if(!tankList) {

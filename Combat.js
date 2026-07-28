@@ -46,7 +46,7 @@ function fireBullet(tank, type) {
         vz: type === 'bomb' ? -35 : ((type === 'shell' || type === 'aa') ? baseSpeed * 60 * Math.sin(elevation) : 0),
         damage: (type === 'bomb' ? 340 : (type === 'shell' ? CONFIG.bulletDamage : (type === 'aa' ? CONFIG.aaDamage : (type === 'airmg' ? 18 : CONFIG.mgDamage)))) *
             damageMult * masteryDamageMult * (tank.masteryWeaponDamageMult || 1) *
-            (tank.aiDamageMult || 1) * (tank.masteryAuraDamageMult || 1),
+            (tank.aiDamageMult || 1) * (tank.masteryAuraDamageMult || 1) * (tank.bossBuffAttackMult || 1),
         team: tank.team, type, owner: tank,
         masteryGolden,
         life: maxLife, maxLife, age: 0,
@@ -187,20 +187,23 @@ function updateBullets(dt) {
             b.vz -= (b.type === 'aa' ? CONFIG.aaGravity : CONFIG.shellGravity) * dt;
             b.altitude = b.z;
         }
-        if(Math.random() < 0.4) createParticles(b.x, b.y, 1, b.type === 'shell' ? '#ff8800' : (b.type === 'aa' ? '#ff66ff' : '#ffff44'), 0.4);
+        if(Math.random() < 0.4) {
+            const trailColor = b.neutralSniper ? '#c02cff' : (b.type === 'shell' ? '#ff8800' : (b.type === 'aa' ? '#ff66ff' : '#ffff44'));
+            createParticles(b.x, b.y, b.neutralSniper ? 2 : 1, trailColor, b.neutralSniper ? .75 : .4);
+        }
         if(b.isRocket && (Math.hypot(b.x - b.targetX, b.y - b.targetY) < 35 || b.life <= 0)) {
             explodeRocket(b);
             bullets.splice(i, 1);
             continue;
         }
         if(b.life <= 0 || b.z < -5 || b.x < 0 || b.x > CONFIG.mapWidth || b.y < 0 || b.y > CONFIG.mapHeight) { bullets.splice(i, 1); continue; }
+        if(b.ignoresObstacles) continue;
         if(currentMap === 'factory' && typeof factoryProjectileCrossedSlab === 'function' && factoryProjectileCrossedSlab(b)) {
             createParticles(b.x,b.y,6,'#8d9498',.7);
             bullets.splice(i,1);
             continue;
         }
         if(typeof handleMapMechanicProjectile === 'function' && handleMapMechanicProjectile(b)) { bullets.splice(i, 1); continue; }
-        if(b.ignoresObstacles) continue;
         for(let obs of obstacles) {
             if(typeof factoryObstacleMatchesProjectile === 'function' && !factoryObstacleMatchesProjectile(obs, b)) continue;
             if(obs.type === 'factoryPlatform' && typeof factoryPlatformMatchesProjectile === 'function' && !factoryPlatformMatchesProjectile(obs, b)) continue;
@@ -409,7 +412,11 @@ function applyDirectDamage(tank, damage, source, cause = null, projectile = null
             modeMultiplier = CONFIG.defensePlayerDamageDealtMultiplier;
         }
     }
-    let remaining = damage * modeMultiplier * (tank.masteryAuraDefenseMult || 1) * Math.max(0, 1 - (tank.damageReduction || 0));
+    const baseShieldMultiplier = typeof getBlueBaseShieldDamageMultiplier === 'function'
+        ? getBlueBaseShieldDamageMultiplier(tank)
+        : 1;
+    let remaining = damage * modeMultiplier * baseShieldMultiplier * (tank.masteryAuraDefenseMult || 1) *
+        (tank.bossBuffDefenseMult || 1) * Math.max(0, 1 - (tank.damageReduction || 0));
     if(tank.shieldActive && tank.shieldHp > 0) {
         const absorbed = Math.min(tank.shieldHp, remaining);
         tank.shieldHp -= absorbed;
@@ -440,7 +447,7 @@ function applyDirectDamage(tank, damage, source, cause = null, projectile = null
 }
 
 function getWeaponCause(type) {
-    return ({ shell: '主炮', mg: '机枪', aa: '高射炮', rocket: '火箭', bomb: '垂直炸药包', airmg: '空对空机枪' })[type] || null;
+    return ({ shell: '主炮', mg: '机枪', aa: '高射炮', rocket: '火箭', bomb: '垂直炸药包', airmg: '空对空机枪', sniper: '中立狙击塔' })[type] || null;
 }
 
 function getBombImpactHeight(x, y) {
@@ -524,9 +531,10 @@ function checkCollisions() {
         let forceRemove = false;
         let maxHits = b.maxTargetHits || (b.type === 'mg' ? CONFIG.mgPenetration : 1);
         
-        const nearbyTanks = getNearbyTanks(b.x, b.y, CONFIG.tankSize * 2);
+        const nearbyTanks = getNearbyTanks(b.x, b.y, CONFIG.tankSize * 2.5);
         const potentialTargets = nearbyTanks.filter(t => {
             if(!t || t.dead) return false;
+            if(b.neutralSniperTargetId && t.id !== b.neutralSniperTargetId) return false;
             if(t.team === b.team) return !!b.ricocheted;
             return t.invincible <= 0;
         });
@@ -535,7 +543,7 @@ function checkCollisions() {
             if(hitCount >= maxHits) break;
             if(b.hitTanks && b.hitTanks.has(tank.id)) continue;
             const dist = Math.hypot(b.x - tank.x, b.y - tank.y);
-            if(dist < CONFIG.tankSize) {
+            if(dist < (tank.hitRadius || CONFIG.tankSize)) {
                 // XYZ 三轴同时重叠才命中；XY 擦过但高度不符时继续飞行。
                 if(!projectileMatchesTargetHeight(b, tank)) continue;
                 if(b.ricocheted && tank.team === b.team) {
@@ -605,7 +613,7 @@ function checkCollisions() {
                         applyDirectDamage(other, splash / splashArmor, b.owner, `${getWeaponCause(b.type) || '爆炸'}溅射`, b);
                     });
                 }
-                createParticles(b.x, b.y, 5, '#ff4400', 1);
+                createParticles(b.x, b.y, b.neutralSniper ? 16 : 5, b.neutralSniper ? '#b82cff' : '#ff4400', b.neutralSniper ? 1.8 : 1);
                 showDamageNumber(tank.x, tank.y - 30, Math.floor(damage));
                 if(typeof playWorldSound === 'function') playWorldSound('hit', tank.x, tank.y, tank === player ? 1 : 0.7);
                 hitCount++;
@@ -620,6 +628,7 @@ function checkCollisions() {
         let hitBase = false;
         [bases.blue, bases.red].forEach(base => {
             if(hitBase) return;
+            if(b.neutralSniper) return;
             if(b.type === 'aa' || b.type === 'airmg' || b.type === 'bomb') return;
             if(b.x > base.x && b.x < base.x + base.w && b.y > base.y && b.y < base.y + base.h) {
                 const baseZ = base.z || 0;
@@ -632,7 +641,7 @@ function checkCollisions() {
                     }
                     const wasAlive = base.hp > 0;
                     base.hp -= b.damage;
-                    if(wasAlive && base.hp <= 0) recordBaseDestroy(b.team);
+                    if(wasAlive && base.hp <= 0) recordBaseDestroy(b.team, b.owner || null);
                     createParticles(b.x, b.y, 8, '#ff6600', 1.2); hitBase = true;
                 }
             }
@@ -802,35 +811,86 @@ function resolveTankCollisions() {
 
 // ==================== 据点系统 ====================
 function updateOutposts(dt) {
-    let prevOwners = {}; outposts.forEach(op => prevOwners[op.name] = op.owner);
     const allTanks = [player, ...allies, ...enemies].filter(t => t && !t.dead);
     outposts.forEach(op => {
+        if(!Number.isFinite(op.level)) op.level = op.owner ? 1 : 0;
+        if(!Number.isFinite(op.heldTime)) op.heldTime = 0;
+        if(!Number.isFinite(op.minuteScoreTimer)) op.minuteScoreTimer = CONFIG.outpostLevelInterval;
+        if(!Number.isFinite(op.recaptureTimer)) op.recaptureTimer = 0;
+        if(op.recaptureTimer > 0) {
+            op.recaptureTimer = Math.max(0, op.recaptureTimer - dt);
+            if(op.recaptureTimer <= 0) op.recaptureTeam = null;
+        }
+
+        if(op.owner) {
+            op.heldTime += dt;
+            const nextLevel = Math.min(
+                CONFIG.outpostMaxLevel,
+                1 + Math.floor(op.heldTime / CONFIG.outpostLevelInterval)
+            );
+            if(nextLevel > op.level) {
+                op.level = nextLevel;
+                if(typeof addBattleAnnouncement === 'function') {
+                    addBattleAnnouncement(op.owner, `${op.name}点升级至 Lv.${op.level}`);
+                }
+                createParticles(op.x, op.y, 22, op.owner === 'blue' ? '#61b5ff' : '#ff6b61', 1.8);
+            }
+            op.minuteScoreTimer -= dt;
+            while(op.minuteScoreTimer <= 0) {
+                if(typeof awardOutpostMinuteScore === 'function') {
+                    awardOutpostMinuteScore(op.owner, op.name, op.level);
+                }
+                op.minuteScoreTimer += CONFIG.outpostLevelInterval;
+            }
+        }
+
         let blueIn = false, redIn = false;
         allTanks.forEach(t => {
             if(currentMap === 'factory' && Math.abs((t.z||0)-(op.z||0))>85) return;
             const dist = Math.hypot(t.x - op.x, t.y - op.y);
             if(dist < op.radius) { if(t.team === 'blue') blueIn = true; else redIn = true; }
         });
-        if(blueIn && !redIn) {
-            if(op.capturingTeam !== 'blue') { op.capturingTeam = 'blue'; op.captureProgress = 0; }
+        const soleTeam = blueIn && !redIn ? 'blue' : redIn && !blueIn ? 'red' : null;
+        if(soleTeam && soleTeam !== op.owner) {
+            if(op.capturingTeam !== soleTeam) { op.capturingTeam = soleTeam; op.captureProgress = 0; }
             op.captureProgress += dt;
-        } else if(redIn && !blueIn) {
-            if(op.capturingTeam !== 'red') { op.capturingTeam = 'red'; op.captureProgress = 0; }
-            op.captureProgress += dt;
-        } else op.captureProgress = Math.max(0, op.captureProgress - dt * 0.5);
-        if(op.captureProgress >= CONFIG.outpostCaptureTime) {
+        } else {
+            op.captureProgress = soleTeam === op.owner ? 0 : Math.max(0, op.captureProgress - dt * 0.5);
+            if(soleTeam === op.owner) op.capturingTeam = null;
+        }
+        const captureTime = op.recaptureTimer > 0 && op.capturingTeam === op.recaptureTeam
+            ? CONFIG.outpostCaptureTime * CONFIG.outpostRecaptureTimeMultiplier
+            : CONFIG.outpostCaptureTime;
+        if(op.captureProgress >= captureTime) {
             const oldOwner = op.owner;
             if(oldOwner !== op.capturingTeam) {
                 recordOutpostCapture(op.capturingTeam);
-                if(typeof awardOutpostScore === 'function') awardOutpostScore(op.capturingTeam, op.name);
+                const contributor = allTanks
+                    .filter(tank =>
+                        tank.team === op.capturingTeam &&
+                        (currentMap !== 'factory' || Math.abs((tank.z || 0) - (op.z || 0)) <= 85) &&
+                        Math.hypot(tank.x - op.x, tank.y - op.y) < op.radius
+                    )
+                    .sort((a, b) => Math.hypot(a.x - op.x, a.y - op.y) - Math.hypot(b.x - op.x, b.y - op.y))[0] || null;
+                if(typeof awardOutpostScore === 'function') awardOutpostScore(op.capturingTeam, op.name, contributor);
             }
             op.owner = op.capturingTeam;
             op.captureProgress = 0;
+            op.capturingTeam = null;
             if(oldOwner !== op.owner) {
+                op.level = 1;
+                op.heldTime = 0;
+                op.minuteScoreTimer = CONFIG.outpostLevelInterval;
+                op.recaptureTeam = oldOwner;
+                op.recaptureTimer = oldOwner ? CONFIG.outpostRecaptureWindow : 0;
                 createParticles(op.x, op.y, 30, op.owner === 'blue' ? '#4488ff' : '#ff4444', 2.5);
                 if(typeof playWorldSound === 'function') playWorldSound('capture', op.x, op.y, 1);
-                updateOutpostInfo();
             }
+        }
+        const hudState = `${op.owner}|${op.level}|${op.recaptureTeam}|${Math.ceil(op.recaptureTimer)}`;
+        if(hudState !== op.lastHudState) {
+            op.lastHudState = hudState;
+            if(typeof updateOutpostInfo === 'function') updateOutpostInfo();
         }
     });
 }
@@ -839,7 +899,7 @@ function updateBaseSpawns(dt) {
     ['blue','red'].forEach(team=>{
         const base=bases[team];
         if(!base||base.hp<=0)return;
-        const interval=typeof getBaseSpawnInterval==='function'?getBaseSpawnInterval(team):(team==='blue'?15:10);
+        const interval=typeof getBaseSpawnInterval==='function'?getBaseSpawnInterval(team):15;
         baseSpawnTimers[team]=Math.max(0,(baseSpawnTimers[team]??interval)-dt);
         if(baseSpawnTimers[team]>0)return;
         baseSpawnTimers[team]=interval;
@@ -861,7 +921,8 @@ function spawnBaseTank(team) {
     const deployment=typeof findBaseDeploymentPoint==='function'
         ?findBaseDeploymentPoint(team,teamCount)
         :{x:bases[team].x+bases[team].w/2,y:bases[team].y+bases[team].h/2};
-    const tank = createTank(data, deployment.x, deployment.y, team, false);
+    const masteryLevel = typeof rollTeamAIMasteryLevel === 'function' ? rollTeamAIMasteryLevel(team) : null;
+    const tank = createTank(data, deployment.x, deployment.y, team, false, masteryLevel);
     if(currentMap === 'factory' && typeof getFactoryFloorZ === 'function') {
         tank.factoryFloor = 1;
         tank.z = getFactoryFloorZ(1)+(tank.isFlying?CONFIG.helicopterAltitude:0);
@@ -878,9 +939,9 @@ function spawnBaseTank(team) {
         allies.push(tank);
     } else {
         tank.aiSkillLevel = gameMode === 'defense'
-            ? (gameConfig.difficulty === 'easy' ? 0.8 : gameConfig.difficulty === 'hard' ? 1.3 : 1.0)
-            : (gameConfig.difficulty === 'easy' ? 0.9 : gameConfig.difficulty === 'hard' ? 1.65 : 1.35);
-        tank.aiDamageMult = gameMode === 'defense' ? 1.0 : (gameConfig.difficulty === 'easy' ? 1.03 : gameConfig.difficulty === 'hard' ? 1.16 : 1.10);
+            ? (gameConfig.difficulty === 'easy' ? 0.8 : gameConfig.difficulty === 'hard' ? 1.25 : 1.0)
+            : (gameConfig.difficulty === 'easy' ? 0.88 : gameConfig.difficulty === 'hard' ? 1.4 : 1.08);
+        tank.aiDamageMult = gameMode === 'defense' ? 1.0 : (gameConfig.difficulty === 'easy' ? 1.02 : gameConfig.difficulty === 'hard' ? 1.14 : 1.05);
         enemies.push(tank);
     }
     aiTanks.push(tank);

@@ -23,6 +23,7 @@ const threeView = {
     baseMeshes: [],
     flagMeshes: {},
     stormRing: null,
+    objectiveMarkers: {},
     hiddenOutpostMesh: null,
     snowLine: null,
     raycaster: null,
@@ -213,6 +214,7 @@ function rebuildThreeWorld(force = false) {
     threeView.baseMeshes = [];
     threeView.flagMeshes = {};
     threeView.stormRing = null;
+    threeView.objectiveMarkers = {};
     threeView.hiddenOutpostMesh = null;
     threeView.snowLine = null;
     threeView.waterMaterials = [];
@@ -614,7 +616,7 @@ function syncThreeTerrainDestruction() {
 function buildThreeBasesAndOutposts() {
     ['blue', 'red'].forEach(team => {
         const base = bases[team];
-        if(!base) return;
+        if(!base || base.hidden) return;
         const color = team === 'blue' ? 0x2677d9 : 0xd93636;
         const position = threeWorldPosition(base.x + base.w / 2, base.y + base.h / 2, ((base.z || 0) * THREE_WORLD_SCALE) + 2.0);
         const group = new THREE.Group();
@@ -625,10 +627,35 @@ function buildThreeBasesAndOutposts() {
         tower.position.y = 4.5;
         const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.8, 12, 8), makeStandardMaterial(color, { emissive: color, emissiveIntensity: 1.8 }));
         beacon.position.y = 9;
-        group.add(pad, tower, beacon);
+        const shieldRadius = CONFIG.baseShieldRange * THREE_WORLD_SCALE;
+        const shieldField = new THREE.Mesh(
+            new THREE.SphereGeometry(shieldRadius, 32, 16),
+            new THREE.MeshBasicMaterial({
+                color: 0x42dcff, transparent: true, opacity: 0.12,
+                side: THREE.DoubleSide, depthWrite: false
+            })
+        );
+        shieldField.scale.set(1, 0.28, 1);
+        shieldField.position.y = 1.2;
+        shieldField.visible = false;
+        const shieldRing = new THREE.Mesh(
+            new THREE.TorusGeometry(shieldRadius, 0.34, 10, 72),
+            new THREE.MeshBasicMaterial({
+                color: 0x9af3ff, transparent: true, opacity: 0.82,
+                depthWrite: false
+            })
+        );
+        shieldRing.rotation.x = Math.PI / 2;
+        shieldRing.position.y = 0.35;
+        shieldRing.visible = false;
+        group.add(pad, tower, beacon, shieldField, shieldRing);
         group.traverse(child => { if(child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+        shieldField.castShadow = false;
+        shieldField.receiveShadow = false;
+        shieldRing.castShadow = false;
+        shieldRing.receiveShadow = false;
         threeView.worldRoot.add(group);
-        threeView.baseMeshes.push({ base, group, beacon });
+        threeView.baseMeshes.push({ base, group, beacon, shieldField, shieldRing });
     });
 
     outposts.forEach(op => {
@@ -966,6 +993,33 @@ function createThreeTank(tank) {
         group.userData.masteryAuraInnerRing = auraInnerRing;
         group.userData.masteryAuraNodes = auraNodes;
     }
+    const masteryBuffFx = new THREE.Group();
+    const buffCount = typeof touchControlMode !== 'undefined' && touchControlMode ? 2 : 4;
+    for(let index = 0; index < buffCount; index++) {
+        const item = new THREE.Group();
+        const material = new THREE.MeshBasicMaterial({
+            color: tank.masteryAuraBuffColor || 0x8dffb5,
+            transparent: true,
+            opacity: .62,
+            depthWrite: false
+        });
+        const horizontal = new THREE.Mesh(new THREE.BoxGeometry(1.15, .22, .18), material);
+        const vertical = new THREE.Mesh(new THREE.BoxGeometry(.22, 1.15, .18), material.clone());
+        const airflow = new THREE.Mesh(
+            new THREE.CylinderGeometry(.025, .13, 2.8, 7),
+            material.clone()
+        );
+        airflow.position.y = -1.65;
+        item.add(horizontal, vertical, airflow);
+        item.userData.horizontal = horizontal;
+        item.userData.vertical = vertical;
+        item.userData.airflow = airflow;
+        item.userData.phase = index / buffCount;
+        masteryBuffFx.add(item);
+    }
+    masteryBuffFx.visible = false;
+    group.add(masteryBuffFx);
+    group.userData.masteryBuffFx = masteryBuffFx;
     const markerMaterial = new THREE.MeshBasicMaterial({ color: tank.isPlayer ? 0xffffff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838), transparent: true, opacity: tank.isPlayer ? 0.85 : 0.35, side: THREE.DoubleSide });
     const marker = new THREE.Mesh(new THREE.RingGeometry(3.9, 4.35, 32), markerMaterial);
     marker.rotation.x = -Math.PI / 2;
@@ -991,7 +1045,10 @@ function createThreeTank(tank) {
 }
 
 function syncThreeTanks(now) {
-    const living = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead);
+    const combatNPCs = typeof neutralNPCs !== 'undefined'
+        ? neutralNPCs.filter(npc => npc && npc.isCombatTank && !npc.dead)
+        : [];
+    const living = [player, ...allies, ...enemies, ...combatNPCs].filter(tank => tank && !tank.dead);
     const activeIds = new Set();
     living.forEach(tank => {
         activeIds.add(tank.id);
@@ -1023,10 +1080,11 @@ function syncThreeTanks(now) {
         mesh.userData.lastTankY = tank.y;
         setThreeWorldPosition(mesh, tank.x + recoilX, tank.y + recoilY, baseHeight);
         const flattened=currentMap==='factory'&&!flying&&(tank.flattenedTimer||0)>0;
+        const visualScale = tank.visualScale || 1;
         mesh.scale.set(
-            (flattened ? 1.16 : 1) * spawnScale,
-            (flattened ? .28 : 1) * spawnScale,
-            (flattened ? 1.16 : 1) * spawnScale
+            (flattened ? 1.16 : 1) * spawnScale * visualScale,
+            (flattened ? .28 : 1) * spawnScale * visualScale,
+            (flattened ? 1.16 : 1) * spawnScale * visualScale
         );
         mesh.rotation.y = -tank.angle;
         if(mesh.userData.turretPivot) mesh.userData.turretPivot.rotation.y = -(tank.turretAngle - tank.angle);
@@ -1099,6 +1157,26 @@ function syncThreeTanks(now) {
                 });
             }
         }
+        if(mesh.userData.masteryBuffFx) {
+            const buffFx = mesh.userData.masteryBuffFx;
+            buffFx.visible = !!tank.masteryAuraInspired;
+            if(buffFx.visible) {
+                const buffColor = tank.masteryAuraBuffColor || '#8dffb5';
+                buffFx.rotation.y = now * .00038;
+                buffFx.children.forEach((item, index) => {
+                    const phase = (now * .00042 + item.userData.phase) % 1;
+                    const angle = index / buffFx.children.length * Math.PI * 2;
+                    const radius = 4.7 + (index % 2) * .65;
+                    item.position.set(Math.cos(angle) * radius, 1.1 + phase * 5.3, Math.sin(angle) * radius);
+                    const alpha = Math.sin(phase * Math.PI) * .78;
+                    [item.userData.horizontal, item.userData.vertical, item.userData.airflow].forEach(part => {
+                        part.material.color.set(buffColor);
+                        part.material.opacity = part === item.userData.airflow ? alpha * .34 : alpha;
+                    });
+                    item.userData.airflow.scale.y = .65 + phase * .8;
+                });
+            }
+        }
         if(mesh.userData.rescueShield) {
             mesh.userData.rescueShield.visible = !!(tank.rescueShieldActive && tank.shieldActive && tank.shieldHp > 0);
             mesh.userData.rescueShield.material.opacity = 0.14 + Math.sin(now * 0.012 + tank.x) * 0.05;
@@ -1134,14 +1212,22 @@ function syncThreeTanks(now) {
 }
 
 function createThreeBullet(bullet) {
-    const color = bullet.masteryGolden
+    const color = bullet.neutralSniper
+        ? 0xb126ff
+        : bullet.masteryGolden
         ? 0xffd629
         : bullet.type === 'bomb' ? 0xff6136 : (bullet.type === 'airmg' ? 0x73f2ff : (bullet.type === 'aa' ? 0xff45ff : (bullet.type === 'shell' ? 0xff9a20 : 0xffef65)));
-    const radius = bullet.type === 'bomb' ? .72 : (bullet.type === 'aa' ? 0.62 : (bullet.type === 'shell' ? 0.48 : 0.22));
+    const radius = bullet.bossProjectile ? 1.35 : bullet.neutralSniper ? 1.45 : (bullet.type === 'bomb' ? .72 : (bullet.type === 'aa' ? 0.62 : (bullet.type === 'shell' ? 0.48 : 0.22)));
     const material = makeStandardMaterial(color, { emissive: color, emissiveIntensity: bullet.type === 'mg' || bullet.type === 'airmg' ? 1.2 : 2.4, roughness: 0.25 });
     const group = new THREE.Group();
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(radius, 10, 8), material);
-    if(bullet.masteryGolden) {
+    if(bullet.neutralSniper) {
+        const glow = new THREE.Mesh(
+            new THREE.SphereGeometry(radius * 1.9, 14, 10),
+            new THREE.MeshBasicMaterial({ color: 0xc84cff, transparent: true, opacity: .26, depthWrite: false })
+        );
+        projectile.add(glow);
+    } else if(bullet.masteryGolden) {
         projectile.scale.set(1.22, 1.22, 1.22);
         const glow = new THREE.Mesh(
             new THREE.SphereGeometry(radius * 1.8, 10, 8),
@@ -1260,7 +1346,11 @@ function syncThreeBullets() {
         setThreeWorldPosition(projectile, bullet.x, bullet.y, height);
         const angle = Math.atan2(bullet.vy || 0, bullet.vx || 1);
         projectile.rotation.y = -angle;
-        const pulse = bullet.type === 'aa' ? 1 + Math.sin((bullet.age || 0) * 25) * 0.18 : 1;
+        const pulse = bullet.bossProjectile
+            ? 1.15 + Math.sin((bullet.age || 0) * 14) * .18
+            : bullet.neutralSniper
+            ? 1 + Math.sin((bullet.age || 0) * 18) * .16
+            : bullet.type === 'aa' ? 1 + Math.sin((bullet.age || 0) * 25) * 0.18 : 1;
         projectile.scale.setScalar(pulse);
         if(bullet.type === 'aa' && (bullet.age || 0) - mesh.userData.lastTrailAge >= 0.035) {
             mesh.userData.lastTrailAge = bullet.age || 0;
@@ -1460,6 +1550,42 @@ function syncThreeTrailEffects(now) {
 
 function createThreeTurret(element) {
     const group = new THREE.Group();
+    if(element.type === 'neutralSniperTower') {
+        const base = new THREE.Mesh(
+            new THREE.CylinderGeometry(1.55, 1.9, 1.8, 12),
+            makeStandardMaterial(0x2b2434, { metalness: .48, roughness: .38 })
+        );
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(2.05, .18, 10, 40),
+            makeStandardMaterial(0xb126ff, { emissive: 0x7a12b8, emissiveIntensity: 2.1, metalness: .2 })
+        );
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = 1.05;
+        const turret = new THREE.Mesh(
+            new THREE.CylinderGeometry(1.15, 1.38, 1.55, 10),
+            makeStandardMaterial(0x61307d, { emissive: 0x341047, emissiveIntensity: .75, metalness: .4 })
+        );
+        turret.position.y = 1.65;
+        const gun = new THREE.Mesh(
+            new THREE.BoxGeometry(5.2, .55, .68),
+            makeStandardMaterial(0xd38cff, { emissive: 0x8d20c7, emissiveIntensity: 1.9, metalness: .3 })
+        );
+        gun.position.set(2.65, 2.15, 0);
+        const lens = new THREE.Mesh(
+            new THREE.SphereGeometry(.62, 14, 10),
+            new THREE.MeshBasicMaterial({ color: 0xecb6ff, transparent: true, opacity: .9 })
+        );
+        lens.position.set(0, 2.2, 0);
+        group.add(base, ring, turret, gun, lens);
+        group.userData.sniperRing = ring;
+        group.userData.sniperLens = lens;
+        group.userData.sniperGun = gun;
+        group.position.copy(threeWorldPosition(element.x, element.y, (element.z || 0) * THREE_WORLD_SCALE + 1.2));
+        group.rotation.y = -(element.angle || 0);
+        group.traverse(child => { if(child.isMesh) child.castShadow = true; });
+        threeView.dynamicRoot.add(group);
+        return group;
+    }
     const base = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 2.1, 1.1, 10), makeStandardMaterial(0x4c5358, { metalness: 0.35 }));
     const gun = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.45, 0.55), makeStandardMaterial(0xff6633, { emissive: 0x7a1f00, emissiveIntensity: 0.7 }));
     gun.position.set(2.1, 1.0, 0);
@@ -1471,15 +1597,30 @@ function createThreeTurret(element) {
 }
 
 function syncThreeTurrets() {
-    const active = new Set(mapElements.filter(element => element.type === 'turret'));
+    const neutral = typeof neutralNPCs !== 'undefined' ? neutralNPCs.filter(npc => npc.type === 'neutralSniperTower') : [];
+    const active = new Set([...mapElements.filter(element => element.type === 'turret'), ...neutral]);
     active.forEach(element => {
         let mesh = threeView.turretMeshes.get(element);
         if(!mesh) {
             mesh = createThreeTurret(element);
             threeView.turretMeshes.set(element, mesh);
         }
-        setThreeWorldPosition(mesh, element.x, element.y, 0.6);
+        const height = element.type === 'neutralSniperTower'
+            ? (element.z || 0) * THREE_WORLD_SCALE + 1.2
+            : 0.6;
+        setThreeWorldPosition(mesh, element.x, element.y, height);
         mesh.rotation.y = -(element.angle || 0);
+        if(element.type === 'neutralSniperTower') {
+            const pulse = 1 + Math.sin(performance.now() * .009) * .12;
+            if(mesh.userData.sniperRing) mesh.userData.sniperRing.rotation.z += .018;
+            if(mesh.userData.sniperLens) {
+                mesh.userData.sniperLens.scale.setScalar(pulse);
+                mesh.userData.sniperLens.material.opacity = .72 + pulse * .14;
+            }
+            if(mesh.userData.sniperGun) {
+                mesh.userData.sniperGun.material.emissiveIntensity = (element.muzzleFlashTimer || 0) > 0 ? 4.5 : 1.9;
+            }
+        }
     });
     for(const [element, mesh] of threeView.turretMeshes) {
         if(!active.has(element)) {
@@ -1534,6 +1675,9 @@ function syncThreeOwnership(now) {
         entry.orb.material.color.setHex(color);
         entry.orb.material.emissive.setHex(color);
         entry.orb.material.emissiveIntensity = 1.2 + Math.sin(now * 0.004) * 0.35;
+        const levelScale = 1 + Math.max(0, (entry.op.level || 1) - 1) * .08;
+        entry.orb.scale.setScalar(levelScale);
+        entry.ring.scale.setScalar(levelScale);
     });
     threeView.baseMeshes.forEach(entry => {
         const ratio = Math.max(0, entry.base.hp / entry.base.maxHp);
@@ -1541,6 +1685,18 @@ function syncThreeOwnership(now) {
         entry.beacon.scale.setScalar((0.55 + ratio * 0.45) * ragePulse);
         entry.beacon.material.emissiveIntensity = entry.base.rageActive ? 3.1 + Math.sin(now * 0.025) : 0.4 + ratio * 1.5;
         if(entry.base.rageActive) entry.beacon.material.color.setHex(0xff5a24);
+        const shieldActive = entry.base.team === 'blue' && !!entry.base.shieldActive;
+        if(entry.shieldField) {
+            const pulse = 1 + Math.sin(now * 0.006) * 0.035;
+            entry.shieldField.visible = shieldActive;
+            entry.shieldField.scale.set(pulse, 0.28 * pulse, pulse);
+            entry.shieldField.material.opacity = 0.10 + Math.sin(now * 0.009) * 0.035;
+        }
+        if(entry.shieldRing) {
+            entry.shieldRing.visible = shieldActive;
+            entry.shieldRing.rotation.z = now * 0.00035;
+            entry.shieldRing.material.opacity = 0.68 + Math.sin(now * 0.01) * 0.2;
+        }
     });
 }
 
@@ -1612,6 +1768,46 @@ function syncThreeGameModes(now) {
         });
     } else {
         Object.values(threeView.flagMeshes).forEach(group => group.visible = false);
+    }
+
+    threeView.objectiveMarkers = threeView.objectiveMarkers || {};
+    const syncObjectiveMarker = (key, point, color, label) => {
+        let marker = threeView.objectiveMarkers[key];
+        if(!marker) {
+            marker = new THREE.Group();
+            const ring = new THREE.Mesh(
+                new THREE.TorusGeometry(6.2, .65, 12, 48),
+                new THREE.MeshBasicMaterial({color, transparent: true, opacity: .82, depthWrite: false})
+            );
+            ring.rotation.x = Math.PI / 2;
+            const beam = new THREE.Mesh(
+                new THREE.CylinderGeometry(.18, .58, 16, 10),
+                new THREE.MeshBasicMaterial({color, transparent: true, opacity: .3, depthWrite: false})
+            );
+            beam.position.y = 8;
+            const plate = new THREE.Mesh(
+                new THREE.CylinderGeometry(2.1, 2.1, .7, 24),
+                makeStandardMaterial(color, {emissive: color, emissiveIntensity: 1.5})
+            );
+            plate.position.y = .4;
+            marker.add(ring, beam, plate);
+            marker.userData.ring = ring;
+            marker.userData.label = label;
+            threeView.modeRoot.add(marker);
+            threeView.objectiveMarkers[key] = marker;
+        }
+        marker.visible = !!point;
+        if(point) {
+            setThreeWorldPosition(marker, point.x, point.y, .12);
+            marker.userData.ring.rotation.z = now * .00055;
+            marker.userData.ring.material.opacity = .62 + Math.sin(now * .006) * .18;
+        }
+    };
+    if(gameMode === 'escort') {
+        syncObjectiveMarker('escortA', escortData.start, 0x42aaff, 'A');
+        syncObjectiveMarker('escortB', escortData.end, 0xffb52e, 'B');
+    } else {
+        Object.values(threeView.objectiveMarkers).forEach(marker => { marker.visible = false; });
     }
 }
 
@@ -1814,7 +2010,10 @@ function syncThreeHud() {
     const layer = document.getElementById('threeHudLayer');
     if(!layer || typeof document.createElement !== 'function') return;
 
-    const livingTanks = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead);
+    const combatNPCs = typeof neutralNPCs !== 'undefined'
+        ? neutralNPCs.filter(npc => npc && npc.isCombatTank && !npc.dead)
+        : [];
+    const livingTanks = [player, ...allies, ...enemies, ...combatNPCs].filter(tank => tank && !tank.dead);
     const livingIds = new Set(livingTanks.map(tank => tank.id));
     livingTanks.forEach(tank => {
         let label = threeView.tankLabels.get(tank.id);
@@ -1837,12 +2036,12 @@ function syncThreeHud() {
         const nameLabel = label.querySelector('.three-tank-name');
         const hpFill = label.querySelector('.three-tank-hp-fill');
         if(levelLabel) {
-            levelLabel.textContent = `★ Lv.${level}`;
+            levelLabel.textContent = tank.isBoss ? '👑 BOSS' : `★ Lv.${level}`;
             levelLabel.style.color = '#f2f4f7';
         }
         if(nameLabel) {
-            nameLabel.textContent = tankData ? tankData.name : tank.tankType;
-            nameLabel.style.color = tank.team === 'blue' ? '#55a7ff' : '#ff5555';
+            nameLabel.textContent = tank.isBoss ? '巨型首领坦克' : tank.isEscortVIP ? 'VIP坦克' : (tankData ? tankData.name : tank.tankType);
+            nameLabel.style.color = tank.isBoss ? '#d290ff' : tank.team === 'blue' ? '#55a7ff' : '#ff5555';
         }
         if(hpFill) {
             const hpRatio = Math.max(0, Math.min(1, tank.hp / Math.max(1, tank.maxHp)));
@@ -1879,7 +2078,7 @@ function syncThreeHud() {
         }
     }
 
-    const activeCaptures = new Set(outposts.filter(op => op.captureProgress > 0 && op.captureProgress < CONFIG.outpostCaptureTime &&
+    const activeCaptures = new Set(outposts.filter(op => op.captureProgress > 0 &&
         (currentMap !== 'factory' || isFactoryEntityOnVisibleFloor(op))));
     activeCaptures.forEach(op => {
         let label = threeView.captureLabels.get(op);
@@ -1890,8 +2089,11 @@ function syncThreeHud() {
             layer.appendChild(label);
             threeView.captureLabels.set(op, label);
         }
-        const percent = Math.max(0, Math.min(100, op.captureProgress / CONFIG.outpostCaptureTime * 100));
-        label.querySelector('span').textContent = `据点 ${op.name} ${Math.floor(percent)}%`;
+        const captureTime = op.recaptureTimer > 0 && op.capturingTeam === op.recaptureTeam
+            ? CONFIG.outpostCaptureTime * CONFIG.outpostRecaptureTimeMultiplier
+            : CONFIG.outpostCaptureTime;
+        const percent = Math.max(0, Math.min(100, op.captureProgress / captureTime * 100));
+        label.querySelector('span').textContent = `据点 ${op.name} · Lv.${op.level || 0} ${Math.floor(percent)}%${op.recaptureTimer > 0 ? ' · 反抢' : ''}`;
         const fill = label.querySelector('.three-capture-fill');
         fill.style.width = `${percent}%`;
         fill.style.background = op.capturingTeam === 'blue' ? '#4488ff' : '#ff4444';

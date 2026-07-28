@@ -9,6 +9,9 @@ const achievements = fs.readFileSync('Achievement.js', 'utf8');
 
 assert(ui.includes("['zuoyan', 'xingchen', 'duoduo', 'niuniu', 'kimi']"), 'tank selector should use the requested series order');
 assert(html.includes("data-series=\"niuniu\""), 'Niuniu series filter should be visible');
+assert(html.includes('id="aiSeriesFilterBtn"') && html.includes("filterTanks('kimi', this)"), 'the unlockable AI-series filter should exist');
+assert(ui.includes("isTankUnlocked('kimi_tank')") && ui.includes("aiButton.hidden = !aiUnlocked"),
+    'the AI-series filter should only become visible after Kimi is unlocked');
 assert(ui.includes("'炸药包数量 (个)'"), 'helicopter loadout should rename shell ammunition');
 assert(ui.includes("'空对空机枪弹量 (发)'"), 'helicopter loadout should rename machine-gun ammunition');
 assert(ui.includes("e.code === 'Digit1'") && ui.includes("e.code === 'BracketRight'"), 'direct weapon and elevation shortcuts should be registered');
@@ -21,6 +24,6 @@ assert(combat.includes('const distance = atFeet ? 0 : 95'), 'quick smoke should 
 assert(achievements.includes("id: 'smokeRookie'") && achievements.includes("id: 'quickSmokeExpert'"), 'smoke achievements should exist');
 assert(achievements.includes("id: 'fieldRefit'") && achievements.includes("id: 'battleHardened'"), 'damage-upgrade achievements should exist');
 assert(achievements.includes('function recordSmokeDeployment') && achievements.includes('function recordDamageUpgrade'), 'new achievement progress should be recorded');
-assert(html.includes('Achievement.js?v=quick-smoke-13') && html.includes('Combat.js?v=quick-smoke-13'), 'changed scripts should use fresh cache keys');
+assert(html.includes('Achievement.js?v=new-modes-20') && html.includes('UI.js?v=new-modes-20') && html.includes('Combat.js?v=new-modes-20'), 'changed scripts should use fresh cache keys');
 
 console.log('Latest feature smoke test passed.');

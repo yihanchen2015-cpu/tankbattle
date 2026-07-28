@@ -462,6 +462,18 @@ function drawDamageNumbers() {
 }
 
 function drawTankLevelLabel(tank, x, y) {
+    if(tank.isBoss) {
+        ctx.save();
+        ctx.font = '900 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = '#d59aff';
+        ctx.shadowColor = '#48106f';
+        ctx.shadowBlur = 7;
+        ctx.fillText('👑 WORLD BOSS', x, y);
+        ctx.restore();
+        return;
+    }
     const level = Math.max(1, Math.min(8, Number(tank.masteryLevel) || 1));
     ctx.save();
     ctx.font = '900 11px Arial';
@@ -651,7 +663,8 @@ function drawTank(tank) {
     const animation = getTankVisualAnimation(tank);
     ctx.save();
     ctx.translate(tank.x + animation.recoilX, tankRenderY + animation.recoilY);
-    ctx.scale(animation.spawnScale, animation.spawnScale);
+    const visualScale = tank.visualScale || 1;
+    ctx.scale(animation.spawnScale * visualScale, animation.spawnScale * visualScale);
     if(animation.hitFlash) ctx.filter = `brightness(${1.35 + animation.hitFlash * 1.8}) saturate(1.35)`;
     if(flattened)ctx.scale(1.18,.34);
     ctx.rotate(tank.angle);
@@ -757,7 +770,7 @@ function drawTank(tank) {
     drawMuzzleFlash(tank);
     ctx.save();
     ctx.translate(tank.x + animation.recoilX, tankRenderY + animation.recoilY);
-    ctx.scale(animation.spawnScale, animation.spawnScale);
+    ctx.scale(animation.spawnScale * visualScale, animation.spawnScale * visualScale);
     if(animation.hitFlash) ctx.filter = `brightness(${1.35 + animation.hitFlash * 1.8}) saturate(1.35)`;
     if(flattened)ctx.scale(1.18,.34);
     ctx.rotate(tank.turretAngle);
@@ -823,7 +836,9 @@ function drawTank(tank) {
     drawTankAnimationEffects(tank, tankRenderY);
     
     const hpRatio = Math.max(0, tank.hp / tank.maxHp);
-    const barW = 55, barH = 7, barY = tankRenderY - CONFIG.tankSize - 15;
+    const barW = tank.isBoss ? 130 : tank.isEscortVIP ? 80 : 55;
+    const barH = tank.isBoss ? 10 : 7;
+    const barY = tankRenderY - CONFIG.tankSize * visualScale - 15;
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.beginPath();
     ctx.roundRect(tank.x - barW/2 - 2, barY - 2, barW + 4, barH + 4, 4);
@@ -968,6 +983,36 @@ function drawTankAnimationEffects(tank, renderY) {
         ctx.beginPath();
         ctx.arc(0, 0, CONFIG.tankSize + 19 + Math.sin(now * 3) * 2, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.restore();
+    }
+    if(tank.masteryAuraInspired) {
+        const buffColor = tank.masteryAuraBuffColor || '#8dffb5';
+        const seed = String(tank.id || tank.tankType || '').split('')
+            .reduce((sum, char) => sum + char.charCodeAt(0), 0);
+        const count = (typeof mobileDenseCombatMode !== 'undefined' && mobileDenseCombatMode) ? 2 : 4;
+        ctx.save();
+        ctx.translate(tank.x, renderY);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = buffColor;
+        ctx.fillStyle = buffColor;
+        ctx.shadowColor = buffColor;
+        ctx.shadowBlur = 10;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for(let index = 0; index < count; index++) {
+            const phase = (now * .72 + index / count + seed * .013) % 1;
+            const side = index % 2 ? 1 : -1;
+            const x = side * (CONFIG.tankSize + 12 + (index >> 1) * 10);
+            const y = 24 - phase * 78;
+            ctx.globalAlpha = Math.sin(phase * Math.PI) * .72;
+            ctx.font = `900 ${15 + (index % 2) * 3}px Arial`;
+            ctx.fillText('+', x, y);
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(x * .72, 26);
+            ctx.bezierCurveTo(x * .9, 7, x * .58, -12 - phase * 12, x * .78, y + 8);
+            ctx.stroke();
+        }
         ctx.restore();
     }
     if(tank.masteryBinaryCode) {
@@ -1445,7 +1490,32 @@ function drawCamouflagePattern(pctx, tank, size, detailed = true) {
 }
 
 function drawBase(base) {
+    if(!base || base.hidden) return;
     ctx.save();
+    if(base.team === 'blue' && base.shieldActive) {
+        const centerX = base.x + base.w / 2;
+        const centerY = base.y + base.h / 2;
+        const pulse = 0.82 + Math.sin(Date.now() * 0.008) * 0.12;
+        ctx.fillStyle = `rgba(45,205,255,${0.08 + pulse * 0.04})`;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, CONFIG.baseShieldRange, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(105,235,255,${0.58 + pulse * 0.28})`;
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, CONFIG.baseShieldRange, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(205,250,255,${0.24 + pulse * 0.18})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, CONFIG.baseShieldRange * 0.86, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#aef5ff';
+        ctx.font = 'bold 17px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`基地护盾 · 敌军 ${base.shieldEnemyCount || 0}`, centerX, centerY - CONFIG.baseShieldRange - 8);
+    }
     const ragePulse = base.rageActive ? 0.32 + Math.sin(Date.now() * 0.012) * 0.12 : 0.2;
     const glowColor = base.team === 'blue' ? `rgba(0,140,255,${ragePulse})` : `rgba(255,45,25,${ragePulse})`;
     ctx.fillStyle = glowColor;
@@ -1606,6 +1676,64 @@ function drawMapElements() {
     });
 }
 
+function drawNeutralNPCs2D() {
+    if(typeof neutralNPCs === 'undefined') return;
+    neutralNPCs.forEach(npc => {
+        if(npc.type !== 'neutralSniperTower') return;
+        if(currentMap === 'factory' && typeof isFactoryEntityOnVisibleFloor === 'function' && !isFactoryEntityOnVisibleFloor(npc)) return;
+        const renderY = npc.y - (currentMap === 'factory' ? (npc.z || 0) * ALTITUDE_DRAW_SCALE : 0);
+        const pulse = .72 + Math.sin(Date.now() * .01) * .18;
+        ctx.save();
+        ctx.translate(npc.x, renderY);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = `rgba(193,70,255,${pulse})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, npc.radius || CONFIG.neutralSniperTowerRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(226,168,255,.38)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, (npc.radius || CONFIG.neutralSniperTowerRadius) + 12, Date.now() * .001, Date.now() * .001 + Math.PI * 1.45);
+        ctx.stroke();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#2c2137';
+        ctx.beginPath();
+        ctx.arc(0, 0, 17, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#b53aff';
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        ctx.rotate(npc.angle || 0);
+        ctx.fillStyle = '#6e2b91';
+        ctx.fillRect(0, -6, 38, 12);
+        ctx.fillStyle = '#e7b0ff';
+        ctx.fillRect(24, -3, 20, 6);
+        if((npc.muzzleFlashTimer || 0) > 0) {
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = '#f4c6ff';
+            ctx.beginPath();
+            ctx.arc(47, 0, 10 + pulse * 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.font = 'bold 17px Arial';
+        ctx.fillStyle = '#e5b1ff';
+        ctx.fillText('🎯 中立狙击塔', npc.x, renderY - 48);
+        ctx.font = 'bold 13px Arial';
+        ctx.fillStyle = '#c879ff';
+        const targetText = npc.currentTargetName
+            ? `锁定：${npc.currentTargetName} · ${npc.currentTargetScore || 0}分`
+            : '正在扫描战场';
+        ctx.fillText(targetText, npc.x, renderY - 47);
+        ctx.restore();
+    });
+}
+
 function drawOutpost(op) {
     ctx.save();
     const outerGlow = ctx.createRadialGradient(op.x, op.y, op.radius * 0.5, op.x, op.y, op.radius * 1.3);
@@ -1633,8 +1761,11 @@ function drawOutpost(op) {
     ctx.lineWidth = 1.5;
     ctx.stroke();
     if(op.captureProgress > 0 && op.captureProgress < CONFIG.outpostCaptureTime) {
+        const captureTime = op.recaptureTimer > 0 && op.capturingTeam === op.recaptureTeam
+            ? CONFIG.outpostCaptureTime * CONFIG.outpostRecaptureTimeMultiplier
+            : CONFIG.outpostCaptureTime;
         ctx.beginPath();
-        ctx.arc(op.x, op.y, op.radius - 10, -Math.PI/2, -Math.PI/2 + (op.captureProgress/CONFIG.outpostCaptureTime)*Math.PI*2);
+        ctx.arc(op.x, op.y, op.radius - 10, -Math.PI/2, -Math.PI/2 + (op.captureProgress/captureTime)*Math.PI*2);
         ctx.strokeStyle = op.capturingTeam === 'blue' ? '#4488ff' : '#ff4444';
         ctx.lineWidth = 6;
         ctx.lineCap = 'round';
@@ -1642,7 +1773,7 @@ function drawOutpost(op) {
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'center';
-        const pct = Math.floor((op.captureProgress / CONFIG.outpostCaptureTime) * 100);
+        const pct = Math.floor((op.captureProgress / captureTime) * 100);
         ctx.fillText(`${pct}%`, op.x, op.y - 50);
     }
     ctx.fillStyle = op.owner === 'blue' ? 'rgba(0,60,200,0.3)' : op.owner === 'red' ? 'rgba(200,30,30,0.3)' : 'rgba(60,60,60,0.3)';
@@ -1658,7 +1789,15 @@ function drawOutpost(op) {
     ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0,0,0,0.8)';
     /*shadow*/ctx.shadowBlur = 0;
-    ctx.fillText(op.name, op.x, op.y);
+    ctx.fillText(`${op.name}`, op.x, op.y - 7);
+    ctx.font = 'bold 12px Arial';
+    ctx.fillStyle = op.owner ? (op.owner === 'blue' ? '#9fd3ff' : '#ffaaa5') : '#c7cbd0';
+    ctx.fillText(op.owner ? `Lv.${op.level || 1}` : '中立', op.x, op.y + 13);
+    if(op.recaptureTimer > 0 && op.recaptureTeam) {
+        ctx.fillStyle = '#ffd460';
+        ctx.font = 'bold 13px Arial';
+        ctx.fillText(`${op.recaptureTeam === 'blue' ? '蓝方' : '红方'}反抢 ${Math.ceil(op.recaptureTimer)}s`, op.x, op.y + 62);
+    }
     ctx.shadowBlur = 0;
     if(op.owner) {
         ctx.fillStyle = op.owner === 'blue' ? '#4488ff' : '#ff4444';
@@ -1675,7 +1814,31 @@ function drawOutpost(op) {
 function drawBullet(b) {
     ctx.save();
     const visualAltitude = Math.max(0, b.z || 0);
-    if(b.type === 'bomb') {
+    if(b.neutralSniper) {
+        const drawY = b.y - visualAltitude * ALTITUDE_DRAW_SCALE;
+        const pulse = 1 + Math.sin((b.age || 0) * 18) * .16;
+        ctx.strokeStyle = 'rgba(202,80,255,.55)';
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.moveTo(b.x, drawY);
+        ctx.lineTo(b.x - b.vx * 1.05, drawY - b.vy * 1.05);
+        ctx.stroke();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.shadowColor = '#ad20ff';
+        ctx.shadowBlur = 24;
+        ctx.fillStyle = 'rgba(162,30,255,.32)';
+        ctx.beginPath();
+        ctx.arc(b.x, drawY, 25 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#edc2ff';
+        ctx.beginPath();
+        ctx.arc(b.x, drawY, 13 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#8414c7';
+        ctx.beginPath();
+        ctx.arc(b.x, drawY, 7 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+    } else if(b.type === 'bomb') {
         const altitude = visualAltitude;
         const drawY = b.y - altitude * ALTITUDE_DRAW_SCALE;
         ctx.fillStyle = `rgba(0,0,0,${Math.max(.12, .34 - altitude / 700)})`;
@@ -1700,6 +1863,20 @@ function drawBullet(b) {
         ctx.beginPath(); ctx.arc(b.x, b.y - altitude * ALTITUDE_DRAW_SCALE, 12, 0, Math.PI * 2); ctx.fill();
     } else if(b.type === 'shell') {
         const drawY = b.y - visualAltitude * ALTITUDE_DRAW_SCALE;
+        if(b.bossProjectile) {
+            const pulse = 1 + Math.sin((b.age || 0) * 16) * .14;
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.shadowColor = '#bd43ff';
+            ctx.shadowBlur = 22;
+            ctx.fillStyle = 'rgba(159,48,255,.32)';
+            ctx.beginPath(); ctx.arc(b.x, drawY, 23 * pulse, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#e1a8ff';
+            ctx.beginPath(); ctx.arc(b.x, drawY, 12 * pulse, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#68129e';
+            ctx.beginPath(); ctx.arc(b.x, drawY, 6 * pulse, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            return;
+        }
         const golden = !!b.masteryGolden;
         ctx.shadowColor = b.ricocheted ? '#72f6ff' : (golden ? '#ffd700' : '#ff8800');
         ctx.shadowBlur = golden ? 14 : 0;
@@ -1795,7 +1972,8 @@ function drawMinimap() {
         minimapCtx.fillStyle = obs.type === 'rubble' ? '#76695d' : (obs.type === 'building' ? '#333' : (obs.type === 'factoryPlatform' ? '#a88a34' : (obs.type === 'oilBarrel' ? '#d44822' : '#4b4938')));
         minimapCtx.fillRect(obs.x * scaleX, obs.y * scaleY, Math.max(1, obs.w * scaleX), Math.max(1, obs.h * scaleY));
     });
-    if(currentMap !== 'factory' || typeof isFactoryEntityOnVisibleFloor !== 'function' || isFactoryEntityOnVisibleFloor(bases.blue)) {
+    if(bases.blue && !bases.blue.hidden &&
+       (currentMap !== 'factory' || typeof isFactoryEntityOnVisibleFloor !== 'function' || isFactoryEntityOnVisibleFloor(bases.blue))) {
         minimapCtx.fillStyle = '#0044aa'; minimapCtx.fillRect(bases.blue.x * scaleX, bases.blue.y * scaleY, bases.blue.w * scaleX, bases.blue.h * scaleY);
         minimapCtx.fillStyle = '#aa0000'; minimapCtx.fillRect(bases.red.x * scaleX, bases.red.y * scaleY, bases.red.w * scaleX, bases.red.h * scaleY);
     }
@@ -1812,6 +1990,22 @@ function drawMinimap() {
         minimapCtx.textAlign = 'center';
         minimapCtx.fillText(op.name, op.x * scaleX, op.y * scaleY - 8);
     });
+    if(typeof neutralNPCs !== 'undefined') {
+        neutralNPCs.filter(npc => npc.type === 'neutralSniperTower').forEach(npc => {
+            if(currentMap === 'factory' && typeof isFactoryEntityOnVisibleFloor === 'function' && !isFactoryEntityOnVisibleFloor(npc)) return;
+            const x = npc.x * scaleX, y = npc.y * scaleY;
+            minimapCtx.fillStyle = '#c248ff';
+            minimapCtx.beginPath();
+            minimapCtx.arc(x, y, 5, 0, Math.PI * 2);
+            minimapCtx.fill();
+            minimapCtx.strokeStyle = '#f0c4ff';
+            minimapCtx.lineWidth = 1.5;
+            minimapCtx.beginPath();
+            minimapCtx.moveTo(x - 7, y); minimapCtx.lineTo(x + 7, y);
+            minimapCtx.moveTo(x, y - 7); minimapCtx.lineTo(x, y + 7);
+            minimapCtx.stroke();
+        });
+    }
     const drawDot = (t, color, size) => {
         if(t.dead) return;
         if(currentMap === 'factory' && typeof isFactoryEntityOnVisibleFloor === 'function' && !isFactoryEntityOnVisibleFloor(t)) return;
@@ -1823,8 +2017,15 @@ function drawMinimap() {
     drawDot(player, '#00ffff', 5);
     allies.forEach(t => drawDot(t, '#4488ff', 3));
     enemies.forEach(t => drawDot(t, '#ff4444', 3));
-    minimapCtx.fillStyle = '#ff8800';
-    bullets.forEach(b => { if(b.type === 'shell') minimapCtx.fillRect(b.x * scaleX - 1, b.y * scaleY - 1, 2, 2); });
+    bullets.forEach(b => {
+        if(b.neutralSniper) {
+            minimapCtx.fillStyle = '#d05cff';
+            minimapCtx.fillRect(b.x * scaleX - 2, b.y * scaleY - 2, 4, 4);
+        } else if(b.type === 'shell') {
+            minimapCtx.fillStyle = '#ff8800';
+            minimapCtx.fillRect(b.x * scaleX - 1, b.y * scaleY - 1, 2, 2);
+        }
+    });
     minimapCtx.strokeStyle = 'rgba(255,255,255,0.6)';
     minimapCtx.lineWidth = 1.5;
     const viewSize = getCameraViewSize();
@@ -1992,11 +2193,23 @@ function updateUltimateUI() {
 
 function updateOutpostInfo() {
     const container = document.getElementById('outpostInfo');
+    if(!container) return;
     container.innerHTML = '';
+    if(gameMode === 'deathmatch') {
+        const dot = document.createElement('div');
+        dot.className = 'outpost-dot neutral';
+        dot.textContent = '无据点';
+        container.appendChild(dot);
+        return;
+    }
     outposts.forEach(op => {
         const dot = document.createElement('div');
         dot.className = 'outpost-dot';
-        dot.textContent = op.name;
+        dot.textContent = `${op.name} · Lv.${op.level || 0}`;
+        if(op.recaptureTimer > 0 && op.recaptureTeam) {
+            dot.textContent += ` · 反抢${Math.ceil(op.recaptureTimer)}s`;
+            dot.classList.add('recapture');
+        }
         if(op.owner === 'blue') dot.classList.add('blue');
         else if(op.owner === 'red') dot.classList.add('red');
         else dot.classList.add('neutral');
@@ -2366,16 +2579,288 @@ function renderStormMode() {
     ctx.textAlign = 'left';
 }
 
+function initEscortMode() {
+    const ordered = [...outposts].sort((a, b) => a.x - b.x);
+    const start = ordered[0] || {x: CONFIG.mapWidth * .18, y: CONFIG.mapHeight * .5};
+    const end = ordered[ordered.length - 1] || {x: CONFIG.mapWidth * .82, y: CONFIG.mapHeight * .5};
+    escortData = {
+        vip: null,
+        start: {x: start.x, y: start.y},
+        end: {x: end.x, y: end.y},
+        escortRadius: 320,
+        contestRadius: 260,
+        reached: false,
+        destroyed: false,
+        pathRefresh: 0
+    };
+    const vipTemplate = TANKS.xingchen27b || Object.values(TANKS)[0];
+    const vip = createTank(vipTemplate, start.x, start.y, 'blue', false, 5);
+    vip.id = 'escort-vip';
+    vip.isEscortVIP = true;
+    vip.name = 'VIP坦克';
+    vip.hp = vip.maxHp = Math.max(6500, vip.maxHp * 4);
+    vip.armor = Math.max(2.2, vip.armor);
+    vip.speed = Math.min(vip.speed, 2.8);
+    vip.shells = 0;
+    vip.mg = 0;
+    vip.aa = 0;
+    vip.visualScale = 1.35;
+    vip.hitRadius = 48;
+    vip.invincible = 5;
+    vip.masteryAura = false;
+    vip.masteryAuraRadius = 0;
+    escortData.vip = vip;
+    allies.push(vip);
+    aiTanks.push(vip);
+    if(typeof showNotification === 'function') showNotification('蓝方护送VIP：靠近它并清除红方阻截！', '#ffad32');
+}
+
+function updateEscortVIPTank(vip, dt) {
+    if(!vip || vip.dead) {
+        escortData.destroyed = true;
+        return;
+    }
+    vip.invincible = Math.max(0, (vip.invincible || 0) - dt);
+    if(typeof updateStatusEffects === 'function') updateStatusEffects(vip, dt);
+    if(vip.dead) {
+        escortData.destroyed = true;
+        return;
+    }
+    const blueEscorts = [player, ...allies].filter(tank =>
+        tank && tank !== vip && !tank.dead && tank.team === 'blue' &&
+        Math.hypot(tank.x - vip.x, tank.y - vip.y) <= escortData.escortRadius
+    );
+    const redBlockers = enemies.filter(tank =>
+        tank && !tank.dead && Math.hypot(tank.x - vip.x, tank.y - vip.y) <= escortData.contestRadius
+    );
+    vip.escortActive = blueEscorts.length > 0 && redBlockers.length === 0;
+    vip.escortContested = redBlockers.length > 0;
+    const distanceToEnd = Math.hypot(vip.x - escortData.end.x, vip.y - escortData.end.y);
+    if(distanceToEnd <= 150) {
+        escortData.reached = true;
+        return;
+    }
+    if(!vip.escortActive || !vip.canMove) return;
+    escortData.pathRefresh -= dt;
+    if(escortData.pathRefresh <= 0 || !vip.path || vip.path.length === 0) {
+        const route = aStar({x: vip.x, y: vip.y}, escortData.end, vip.factoryFloor);
+        vip.path = route && route.length > 1 ? simplifyPath(route) : [{x: escortData.end.x, y: escortData.end.y}];
+        escortData.pathRefresh = 1.5;
+    }
+    if(!followPath(vip, dt)) {
+        const angle = Math.atan2(escortData.end.y - vip.y, escortData.end.x - vip.x);
+        vip.angle += normalizeAngle(angle - vip.angle) * Math.min(1, dt * 2.4);
+        const speed = getActualSpeed(vip) * 60 * dt;
+        const nx = vip.x + Math.cos(vip.angle) * speed;
+        const ny = vip.y + Math.sin(vip.angle) * speed;
+        if(!checkObstacleCollision(nx, ny, vip.hitRadius, vip)) {
+            vip.x = nx;
+            vip.y = ny;
+        }
+    }
+    vip.turretAngle = vip.angle;
+}
+
+function initDeathmatchMode() {
+    deathmatchData = { kills: {blue: 0, red: 0}, targetKills: 50 };
+    outposts = [];
+    Object.values(bases).forEach(base => {
+        if(!base) return;
+        base.hidden = true;
+        base.invulnerable = true;
+    });
+    updateScoreHUD();
+}
+
+function initBossMode() {
+    const template = TANKS.duoduo || TANKS.xingchen27b || Object.values(TANKS)[0];
+    const boss = createTank(template, CONFIG.mapWidth / 2, CONFIG.mapHeight / 2, 'boss', false, 8);
+    boss.id = 'world-boss';
+    boss.name = '巨型BOSS坦克';
+    boss.isBoss = true;
+    boss.isCombatTank = true;
+    boss.color = '#43106f';
+    boss.accent = '#c776ff';
+    boss.hp = boss.maxHp = 30000;
+    boss.armor = 2.8;
+    boss.speed = 1.15;
+    boss.turnSpeed = .035;
+    boss.shells = 9999;
+    boss.mg = 0;
+    boss.aa = 0;
+    boss.apsCharges = 0;
+    boss.invincible = 3;
+    boss.visualScale = 2.15;
+    boss.hitRadius = 72;
+    boss.fireCooldown = 2.4;
+    boss.bossHome = {x: boss.x, y: boss.y};
+    neutralNPCs.push(boss);
+    bossModeData = {
+        boss,
+        defeated: false,
+        killerTeam: null,
+        buffTeam: null,
+        buffTimer: 0,
+        buffDuration: 30
+    };
+    if(typeof showNotification === 'function') showNotification('巨型BOSS已在地图中心出现！争夺最后一击！', '#a64cff');
+}
+
+function activateBossTeamBuff(team) {
+    bossModeData.killerTeam = team;
+    bossModeData.buffTeam = team;
+    bossModeData.buffTimer = bossModeData.buffDuration || 30;
+    const teamTanks = team === 'blue' ? [player, ...allies] : enemies;
+    teamTanks.filter(tank => tank && !tank.dead).forEach(tank => {
+        tank.bossBuffAttackMult = 1.25;
+        tank.bossBuffDefenseMult = .75;
+        tank.bossBuffSpeed = .15;
+    });
+    if(typeof showNotification === 'function') {
+        showNotification(`${team === 'blue' ? '蓝方' : '红方'}夺得首领最后一击：全队增益30秒！`, team === 'blue' ? '#3ca6ff' : '#ff4d5e');
+    }
+}
+
+function clearBossTeamBuff() {
+    [player, ...allies, ...enemies].filter(Boolean).forEach(tank => {
+        tank.bossBuffAttackMult = 1;
+        tank.bossBuffDefenseMult = 1;
+        tank.bossBuffSpeed = 0;
+    });
+    bossModeData.buffTeam = null;
+    bossModeData.buffTimer = 0;
+}
+
+function updateBossMode(dt) {
+    const boss = bossModeData.boss;
+    if(bossModeData.buffTimer > 0) {
+        const buffedTanks = bossModeData.buffTeam === 'blue' ? [player, ...allies] : enemies;
+        buffedTanks.filter(tank => tank && !tank.dead).forEach(tank => {
+            tank.bossBuffAttackMult = 1.25;
+            tank.bossBuffDefenseMult = .75;
+            tank.bossBuffSpeed = .15;
+        });
+        bossModeData.buffTimer = Math.max(0, bossModeData.buffTimer - dt);
+        if(bossModeData.buffTimer <= 0) clearBossTeamBuff();
+    }
+    if(!boss || boss.dead) {
+        bossModeData.defeated = !!boss;
+        return;
+    }
+    boss.invincible = Math.max(0, (boss.invincible || 0) - dt);
+    boss.fireCooldown = Math.max(0, (boss.fireCooldown || 0) - dt);
+    const targets = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead && (tank.team === 'blue' || tank.team === 'red'));
+    if(!targets.length) return;
+    const target = targets.reduce((nearest, tank) =>
+        !nearest || Math.hypot(tank.x - boss.x, tank.y - boss.y) < Math.hypot(nearest.x - boss.x, nearest.y - boss.y) ? tank : nearest, null);
+    const angle = Math.atan2(target.y - boss.y, target.x - boss.x);
+    boss.turretAngle += normalizeAngle(angle - boss.turretAngle) * Math.min(1, dt * 2.2);
+    const homeDistance = Math.hypot(boss.x - boss.bossHome.x, boss.y - boss.bossHome.y);
+    if(homeDistance < 720 && Math.hypot(target.x - boss.x, target.y - boss.y) > 430) {
+        boss.angle += normalizeAngle(angle - boss.angle) * Math.min(1, dt * 1.1);
+        const move = getActualSpeed(boss) * 60 * dt;
+        const nx = boss.x + Math.cos(boss.angle) * move;
+        const ny = boss.y + Math.sin(boss.angle) * move;
+        if(!checkObstacleCollision(nx, ny, boss.hitRadius, boss)) {
+            boss.x = nx;
+            boss.y = ny;
+        }
+    }
+    if(boss.fireCooldown <= 0 && Math.abs(normalizeAngle(angle - boss.turretAngle)) < .18) {
+        fireBullet(boss, 'shell');
+        const shot = bullets[bullets.length - 1];
+        if(shot && shot.owner === boss) {
+            shot.damage = 420;
+            shot.bossProjectile = true;
+            shot.maxLife = shot.life = 5.5;
+        }
+        boss.fireCooldown = 2.4;
+    }
+}
+
 function updateGameModes(dt) {
-    if(gameMode === 'ctf') updateCTFMode(dt);
-    else if(gameMode === 'infection') updateInfectionMode(dt);
-    else if(gameMode === 'storm') updateStormMode(dt);
+    if(gameMode === 'escort') {
+        if(!escortData.vip || escortData.vip.dead) escortData.destroyed = true;
+    } else if(gameMode === 'boss') {
+        updateBossMode(dt);
+    }
 }
 
 function renderGameModes() {
-    if(gameMode === 'ctf') renderCTFMode();
-    else if(gameMode === 'infection') renderInfectionMode();
-    else if(gameMode === 'storm') renderStormMode();
+    if(gameMode === 'escort') renderEscortMode();
+    else if(gameMode === 'deathmatch') renderDeathmatchMode();
+    else if(gameMode === 'boss') renderBossMode();
+}
+
+function renderEscortMarker(point, label, color) {
+    if(!point) return;
+    const screen = worldToScreen(point.x, point.y);
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = `${color}33`;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, 38, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, screen.x, screen.y);
+    ctx.restore();
+}
+
+function renderEscortMode() {
+    renderEscortMarker(escortData.start, 'A', '#51b8ff');
+    renderEscortMarker(escortData.end, 'B', '#ffc24d');
+    const vip = escortData.vip;
+    if(!vip || vip.dead) return;
+    const total = Math.max(1, Math.hypot(escortData.end.x - escortData.start.x, escortData.end.y - escortData.start.y));
+    const remaining = Math.hypot(escortData.end.x - vip.x, escortData.end.y - vip.y);
+    const progress = Math.max(0, Math.min(1, 1 - remaining / total));
+    ctx.save();
+    ctx.fillStyle = 'rgba(7,12,20,.78)';
+    ctx.fillRect(canvas.width / 2 - 190, 18, 380, 42);
+    ctx.fillStyle = vip.escortContested ? '#ff5a5a' : vip.escortActive ? '#52d8ff' : '#9aa7b4';
+    ctx.fillRect(canvas.width / 2 - 180, 46, 360 * progress, 7);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 15px Arial';
+    ctx.textAlign = 'center';
+    const status = vip.escortContested ? '红方阻截中' : vip.escortActive ? 'VIP前进中' : '等待蓝方护送';
+    ctx.fillText(`VIP ${Math.ceil(vip.hp)}/${vip.maxHp} · ${status} · ${Math.round(progress * 100)}%`, canvas.width / 2, 38);
+    ctx.restore();
+}
+
+function renderDeathmatchMode() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,5,10,.78)';
+    ctx.fillRect(canvas.width / 2 - 150, 18, 300, 34);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 17px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`蓝 ${deathmatchData.kills.blue} : ${deathmatchData.kills.red} 红 · 目标50杀`, canvas.width / 2, 41);
+    ctx.restore();
+}
+
+function renderBossMode() {
+    const boss = bossModeData.boss;
+    ctx.save();
+    ctx.fillStyle = 'rgba(18,3,28,.82)';
+    ctx.fillRect(canvas.width / 2 - 220, 16, 440, 48);
+    const ratio = boss ? Math.max(0, boss.hp / boss.maxHp) : 0;
+    ctx.fillStyle = '#321147';
+    ctx.fillRect(canvas.width / 2 - 205, 44, 410, 10);
+    ctx.fillStyle = '#b34fff';
+    ctx.fillRect(canvas.width / 2 - 205, 44, 410 * ratio, 10);
+    ctx.fillStyle = '#f0d6ff';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    const buff = bossModeData.buffTeam
+        ? ` · ${bossModeData.buffTeam === 'blue' ? '蓝方' : '红方'}增益 ${Math.ceil(bossModeData.buffTimer)}s`
+        : '';
+    ctx.fillText(boss && !boss.dead ? `巨型BOSS ${Math.ceil(boss.hp)}/${boss.maxHp}${buff}` : `BOSS已被击毁${buff}`, canvas.width / 2, 37);
+    ctx.restore();
 }
 
 function showNotification(text, color) {

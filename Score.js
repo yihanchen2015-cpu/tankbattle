@@ -1,11 +1,18 @@
 // ==================== 团队积分与战况公告 ====================
-const SCORE_RULES = Object.freeze({ normalKill: 250, helicopterKill: 300, outpost: 500, flag: 1000, base: 10000000 });
+const SCORE_RULES = Object.freeze({
+    normalKill: 250,
+    helicopterKill: 300,
+    outpost: 500,
+    outpostMinuteBase: 200,
+    bossLastHit: 5000,
+    base: 10000000
+});
 let teamScores = { blue: 0, red: 0 };
 let battleFeed = [];
 let battleFeedCounter = 0;
 
-function getScoreTeamName(team) { return team === 'blue' ? '蓝方' : '红方'; }
-function getScoreTeamColor(team) { return team === 'blue' ? '#66b7ff' : '#ff7474'; }
+function getScoreTeamName(team) { return team === 'blue' ? '蓝方' : (team === 'red' ? '红方' : '中立'); }
+function getScoreTeamColor(team) { return team === 'blue' ? '#66b7ff' : (team === 'red' ? '#ff7474' : '#cc70ff'); }
 
 function resetTeamScores() {
     teamScores = { blue: 0, red: 0 };
@@ -20,6 +27,13 @@ function addTeamScore(team, amount, message) {
     teamScores[team] = Math.max(0, (teamScores[team] || 0) + amount);
     updateScoreHUD();
     if(message) addBattleAnnouncement(team, `${message}，+${amount.toLocaleString('zh-CN')}分！`);
+}
+
+function addTankBattleScore(tank, amount) {
+    if(!tank || !Number.isFinite(amount) || amount <= 0) return 0;
+    tank.battleScore = Math.max(0, (tank.battleScore || 0) + amount);
+    tank.lastBattleScoreAt = Date.now();
+    return tank.battleScore;
 }
 
 function addBattleAnnouncement(team, text) {
@@ -44,26 +58,55 @@ function renderBattleFeed() {
 
 function updateScoreHUD() {
     const score = document.getElementById('teamScoreDisplay');
-    if(score) score.innerHTML = `<span class="score-blue">蓝 ${teamScores.blue.toLocaleString('zh-CN')}分</span><b>|</b><span class="score-red">红 ${teamScores.red.toLocaleString('zh-CN')}分</span>`;
+    if(!score) return;
+    if(typeof gameMode !== 'undefined' && gameMode === 'deathmatch') {
+        const target = deathmatchData.targetKills || 50;
+        score.innerHTML = `<span class="score-blue">蓝 ${deathmatchData.kills.blue}/${target}击杀</span><b>|</b><span class="score-red">红 ${deathmatchData.kills.red}/${target}击杀</span>`;
+        return;
+    }
+    score.innerHTML = `<span class="score-blue">蓝 ${teamScores.blue.toLocaleString('zh-CN')}分</span><b>|</b><span class="score-red">红 ${teamScores.red.toLocaleString('zh-CN')}分</span>`;
 }
 
 function awardKillScore(killer, target) {
     if(!killer || !target || killer.team === target.team || (killer.team !== 'blue' && killer.team !== 'red')) return;
+    if(typeof gameMode !== 'undefined' && gameMode === 'deathmatch') {
+        deathmatchData.kills[killer.team] = (deathmatchData.kills[killer.team] || 0) + 1;
+        addBattleAnnouncement(killer.team,
+            `${getScoreTeamName(killer.team)}${getReplayTankName(killer)} 击杀 ${getReplayTankName(target)} · ${deathmatchData.kills[killer.team]}/${deathmatchData.targetKills}`);
+        updateScoreHUD();
+        return;
+    }
+    if(target.isBoss) {
+        awardBossLastHit(killer.team, killer);
+        return;
+    }
     const points = target.isFlying ? SCORE_RULES.helicopterKill : SCORE_RULES.normalKill;
     const killerName = getReplayTankName(killer);
     const targetName = getReplayTankName(target);
+    addTankBattleScore(killer, points);
     addTeamScore(killer.team, points, `${getScoreTeamName(killer.team)}${killerName} 击杀 ${getScoreTeamName(target.team)} ${targetName}`);
 }
 
-function awardOutpostScore(team, outpostName) {
+function awardOutpostScore(team, outpostName, contributor = null) {
+    addTankBattleScore(contributor, SCORE_RULES.outpost);
     addTeamScore(team, SCORE_RULES.outpost, `${getScoreTeamName(team)}占领${outpostName}点`);
 }
 
-function awardFlagScore(team, tank) {
-    addTeamScore(team, SCORE_RULES.flag, `${getScoreTeamName(team)}${tank ? getReplayTankName(tank) : ''} 成功夺旗`);
+function awardOutpostMinuteScore(team, outpostName, level) {
+    if(typeof gameMode !== 'undefined' && gameMode === 'deathmatch') return;
+    const amount = (CONFIG.outpostMinuteScoreBase || SCORE_RULES.outpostMinuteBase) * Math.max(1, level || 1);
+    addTeamScore(team, amount, `${getScoreTeamName(team)}${outpostName}点 Lv.${level} 每分钟产出`);
 }
 
-function awardBaseScore(team) {
+function awardBossLastHit(team, tank = null) {
+    if(team !== 'blue' && team !== 'red') return;
+    addTankBattleScore(tank, SCORE_RULES.bossLastHit);
+    addTeamScore(team, SCORE_RULES.bossLastHit, `${getScoreTeamName(team)}夺得首领最后一击`);
+    if(typeof activateBossTeamBuff === 'function') activateBossTeamBuff(team);
+}
+
+function awardBaseScore(team, tank = null) {
+    addTankBattleScore(tank, SCORE_RULES.base);
     addTeamScore(team, SCORE_RULES.base, `${getScoreTeamName(team)}摧毁敌方基地`);
 }
 

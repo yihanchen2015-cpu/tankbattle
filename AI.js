@@ -1,4 +1,151 @@
 // ==================== AI 系统 ====================
+const AI_SQUAD_FORMATIONS = Object.freeze({
+    ironTriangle: Object.freeze({
+        name: '铁三角',
+        offsets: Object.freeze([[-1.0, -1.0], [-1.0, 1.0], [-2.0, 0], [-2.0, -1.7]])
+    }),
+    doubleWind: Object.freeze({
+        name: '双风突袭',
+        offsets: Object.freeze([[-.75, -1.35], [-.75, 1.35], [-1.7, -2.1], [-1.7, 2.1]])
+    }),
+    immortalWall: Object.freeze({
+        name: '不死军团',
+        offsets: Object.freeze([[-1.05, -1.7], [-1.05, -.55], [-1.05, .55], [-1.05, 1.7]])
+    }),
+    punishmentCore: Object.freeze({
+        name: '天罚核心',
+        offsets: Object.freeze([[0, -1.35], [-1.25, 0], [0, 1.35], [-2.15, 0]])
+    }),
+    suicideColumn: Object.freeze({
+        name: '三体自杀',
+        offsets: Object.freeze([[-1.05, 0], [-2.1, 0], [-3.15, 0], [-4.2, 0]])
+    }),
+    lightningHunt: Object.freeze({
+        name: '闪电猎杀',
+        offsets: Object.freeze([[-.9, -.9], [-1.8, -1.8], [-2.7, -2.7], [-3.6, -3.6]])
+    })
+});
+
+function getAISquadTeamUnits(team) {
+    const units = team === 'blue'
+        ? [player, ...allies]
+        : enemies;
+    return units.filter(unit => unit && !unit.dead && unit.team === team && !unit.isFlying);
+}
+
+function getAISquadLeader(tank) {
+    if(!tank || !tank.aiSquadLeaderId) return null;
+    return getAISquadTeamUnits(tank.team).find(unit => unit.id === tank.aiSquadLeaderId && unit.masteryAura) || null;
+}
+
+function chooseAISquadFormation(leader, members) {
+    const types = new Set(members.map(member => member.tankType));
+    if(types.has('duoduo') && types.has('xingchen27b') && types.has('xingchen27s')) return 'ironTriangle';
+    if(types.has('zuoyan29') && types.has('zuoyan30')) return 'doubleWind';
+    if(types.has('zuoyan_x') || (types.has('xingchen27a') && types.has('xingchen27b'))) return 'immortalWall';
+    if(types.has('duoduo_spat')) return 'punishmentCore';
+    if(members.filter(member => member.tankType === 'zuoyan1').length >= 2) return 'suicideColumn';
+    if(types.has('zuoyan29') && (types.has('duoduo_spat') || types.has('duoduo_rocket'))) return 'lightningHunt';
+    const keys = Object.keys(AI_SQUAD_FORMATIONS);
+    const seed = String(leader.id || leader.tankType || '').split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    return keys[seed % keys.length];
+}
+
+function refreshAISquadMembership(tank, dt) {
+    if(!tank || tank.isPlayer || tank.isFlying) return null;
+    tank.aiSquadRefreshTimer = (tank.aiSquadRefreshTimer || 0) - dt;
+    let leader = getAISquadLeader(tank);
+    if(leader && Math.hypot(leader.x - tank.x, leader.y - tank.y) > CONFIG.aiSquadSeekRange * 1.35) leader = null;
+    if(tank.masteryAura && tank.masteryLevel >= 5) leader = tank;
+    if(tank.aiSquadRefreshTimer > 0 && leader) return leader;
+    tank.aiSquadRefreshTimer = .9 + Math.random() * .7;
+
+    const teamUnits = getAISquadTeamUnits(tank.team);
+    if(tank.masteryAura && tank.masteryLevel >= 5) {
+        tank.aiSquadId = `squad-${tank.id}`;
+        tank.aiSquadLeaderId = tank.id;
+        tank.aiSquadSlot = -1;
+        const members = teamUnits.filter(unit => unit === tank || unit.aiSquadLeaderId === tank.id);
+        tank.aiSquadFormation = chooseAISquadFormation(tank, members);
+        tank.aiSquadName = AI_SQUAD_FORMATIONS[tank.aiSquadFormation].name;
+        return tank;
+    }
+
+    const leaders = teamUnits
+        .filter(unit => unit.masteryAura && unit.masteryLevel >= 5)
+        .filter(unit => typeof areEntitiesOnSameFactoryFloor !== 'function' || areEntitiesOnSameFactoryFloor(unit, tank))
+        .map(unit => {
+            const followers = teamUnits.filter(member => member !== unit && member.aiSquadLeaderId === unit.id);
+            return {
+                unit,
+                followers,
+                distance: Math.hypot(unit.x - tank.x, unit.y - tank.y)
+            };
+        })
+        .filter(entry => entry.distance <= CONFIG.aiSquadSeekRange &&
+            (entry.followers.length < CONFIG.aiSquadMaxFollowers || entry.followers.includes(tank)))
+        .sort((a, b) => (a.distance + a.followers.length * 260) - (b.distance + b.followers.length * 260));
+    const chosen = leaders[0];
+    if(!chosen) {
+        tank.aiSquadId = null;
+        tank.aiSquadLeaderId = null;
+        tank.aiSquadSlot = -1;
+        tank.aiSquadFormation = null;
+        tank.aiSquadName = null;
+        return null;
+    }
+
+    leader = chosen.unit;
+    leader.aiSquadId = `squad-${leader.id}`;
+    leader.aiSquadLeaderId = leader.id;
+    leader.aiSquadSlot = -1;
+    const occupied = new Set(chosen.followers.filter(member => member !== tank).map(member => member.aiSquadSlot));
+    let slot = Number.isInteger(tank.aiSquadSlot) && tank.aiSquadLeaderId === leader.id ? tank.aiSquadSlot : 0;
+    while(occupied.has(slot) && slot < CONFIG.aiSquadMaxFollowers) slot++;
+    tank.aiSquadId = `squad-${leader.id}`;
+    tank.aiSquadLeaderId = leader.id;
+    tank.aiSquadSlot = Math.min(slot, CONFIG.aiSquadMaxFollowers - 1);
+    const members = [leader, ...chosen.followers.filter(member => member !== tank), tank];
+    leader.aiSquadFormation = chooseAISquadFormation(leader, members);
+    leader.aiSquadName = AI_SQUAD_FORMATIONS[leader.aiSquadFormation].name;
+    tank.aiSquadFormation = leader.aiSquadFormation;
+    tank.aiSquadName = leader.aiSquadName;
+    return leader;
+}
+
+function getAISquadFormationTarget(tank, leader) {
+    const formationKey = leader.aiSquadFormation || tank.aiSquadFormation || 'ironTriangle';
+    const formation = AI_SQUAD_FORMATIONS[formationKey] || AI_SQUAD_FORMATIONS.ironTriangle;
+    const offsets = formation.offsets[Math.max(0, tank.aiSquadSlot || 0) % formation.offsets.length];
+    const spacing = CONFIG.aiSquadFormationSpacing;
+    const nextRoutePoint = leader.path && leader.path.length ? leader.path[0] : null;
+    const heading = nextRoutePoint
+        ? Math.atan2(nextRoutePoint.y - leader.y, nextRoutePoint.x - leader.x)
+        : leader.angle;
+    const forward = offsets[0] * spacing;
+    const lateral = offsets[1] * spacing;
+    return {
+        x: leader.x + Math.cos(heading) * forward - Math.sin(heading) * lateral,
+        y: leader.y + Math.sin(heading) * forward + Math.cos(heading) * lateral
+    };
+}
+
+function applyAISquadLaneOffset(tank, targetX, targetY) {
+    if(!tank || tank.aiSquadLeaderId !== tank.id) return {x: targetX, y: targetY};
+    const leaders = getAISquadTeamUnits(tank.team)
+        .filter(unit => unit.masteryAura && unit.aiSquadLeaderId === unit.id)
+        .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    if(leaders.length <= 1) return {x: targetX, y: targetY};
+    const index = leaders.indexOf(tank);
+    if(index < 0) return {x: targetX, y: targetY};
+    const lane = (index - (leaders.length - 1) / 2) * CONFIG.aiSquadLaneSpacing;
+    const heading = Math.atan2(targetY - tank.y, targetX - tank.x);
+    return {
+        x: targetX - Math.sin(heading) * lane,
+        y: targetY + Math.cos(heading) * lane
+    };
+}
+
 function solveAIGunElevation(tank, target, weaponType) {
     if(!tank || !target || (weaponType !== 'shell' && weaponType !== 'aa')) return;
     const horizontalDistance = Math.max(1, Math.hypot(target.x - tank.x, target.y - tank.y));
@@ -16,6 +163,10 @@ function solveAIGunElevation(tank, target, weaponType) {
 
 function updateAITank(tank, dt) {
     if(tank.dead) return;
+    if(gameMode === 'escort' && tank.isEscortVIP && typeof updateEscortVIPTank === 'function') {
+        updateEscortVIPTank(tank, dt);
+        return;
+    }
     if(tank.invincible > 0) tank.invincible -= dt;
     
     if (tank.fireCooldown > 0) tank.fireCooldown -= dt;
@@ -43,7 +194,10 @@ function updateAITank(tank, dt) {
     
     const canAcquireMasteryTarget = target => typeof shouldAIAcquireMasteryTarget !== 'function' ||
         shouldAIAcquireMasteryTarget(tank, target);
-    const enemyList = (tank.team === 'blue' ? enemies.filter(e => !e.dead) : [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])])
+    const bossTargets = gameMode === 'boss' && bossModeData.boss && !bossModeData.boss.dead
+        ? [bossModeData.boss]
+        : [];
+    const enemyList = (tank.team === 'blue' ? [...enemies.filter(e => !e.dead), ...bossTargets] : [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : []), ...bossTargets])
         .filter(e => e !== tank && e.team !== tank.team)
         .filter(canAcquireMasteryTarget)
         .filter(e => typeof areEntitiesOnSameFactoryFloor !== 'function' || areEntitiesOnSameFactoryFloor(tank, e));
@@ -55,6 +209,7 @@ function updateAITank(tank, dt) {
     const myBaseAccessible = !!myBase && (currentMap !== 'factory' || areEntitiesOnSameFactoryFloor(tank, myBase));
     const myTeamList = tank.team === 'blue' ? [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])] : enemies.filter(e => !e.dead);
     const isRedAI = tank.team === 'red' || tank.team === 'infected';
+    const squadLeader = refreshAISquadMembership(tank, dt);
 
     // AI 回到基地后真正维修和补给，避免残血/空弹单位永久卡在撤退状态。
     if(myBaseAccessible) {
@@ -86,6 +241,8 @@ function updateAITank(tank, dt) {
         if(d < 800) score += 100;
         else if(d < 1500) score += 50;
         if(e.isPlayer) score += 80;
+        if(e.isBoss) score += 260;
+        if(isRedAI && e.isEscortVIP) score += 320;
         const assignedAttackers = myTeamList.filter(other =>
             other !== tank && !other.dead &&
             (other.aiAimTarget === e || other.aiFocusFireTarget === e)
@@ -113,15 +270,14 @@ function updateAITank(tank, dt) {
             if(d < sensorRange && d < minEnemyDist) { minEnemyDist = d; nearestEnemy = e; }
         });
     }
-    if(!nearestEnemy && isRedAI && gameMode === 'infection' && enemyList.length > 0) {
-        nearestEnemy = enemyList.reduce((closest, enemy) =>
-            Math.hypot(enemy.x - tank.x, enemy.y - tank.y) < Math.hypot(closest.x - tank.x, closest.y - tank.y) ? enemy : closest
-        );
-        minEnemyDist = Math.hypot(nearestEnemy.x - tank.x, nearestEnemy.y - tank.y);
-    }
     if(bestTarget) {
         nearestEnemy = bestTarget;
         minEnemyDist = Math.hypot(bestTarget.x - tank.x, bestTarget.y - tank.y);
+    }
+    if(gameMode === 'escort' && isRedAI && escortData.vip && !escortData.vip.dead &&
+       (!nearestEnemy || minEnemyDist > 900)) {
+        nearestEnemy = escortData.vip;
+        minEnemyDist = Math.hypot(nearestEnemy.x - tank.x, nearestEnemy.y - tank.y);
     }
 
     if(nearestEnemy && tank.hp < tank.maxHp * .42 && (tank.smoke || 0) > 0 &&
@@ -197,12 +353,18 @@ function updateAITank(tank, dt) {
             tank.aiState = 'retreating';
             tank.aiStateTimer = 15;
         }
-        else if(gameMode === 'ctf') {
-            tank.aiState = 'ctf'; tank.aiStateTimer = 8;
+        else if(gameMode === 'deathmatch') {
+            tank.aiState = nearestEnemy ? 'combat' : 'patrol';
+            tank.aiStateTimer = nearestEnemy ? 3 : 6;
         }
-        else if(gameMode === 'storm' && stormData.safeZone &&
-            Math.hypot(tank.x - stormData.safeZone.x, tank.y - stormData.safeZone.y) > stormData.safeZone.radius * 0.82) {
-            tank.aiState = 'stormCenter'; tank.aiStateTimer = 2;
+        else if(gameMode === 'escort' && tank.team === 'blue' && escortData.vip && !escortData.vip.dead &&
+                (!nearestEnemy || minEnemyDist > 750)) {
+            tank.aiState = 'escortVIP';
+            tank.aiStateTimer = 4;
+        }
+        else if(gameMode === 'escort' && isRedAI && escortData.vip && !escortData.vip.dead) {
+            tank.aiState = 'combat';
+            tank.aiStateTimer = 4;
         }
         else if(tank.team === 'red' && gameMode === 'defense') {
             if(tank.hp < tank.maxHp * 0.3 && minEnemyDist < 300) { tank.aiState = 'retreating'; tank.aiStateTimer = 4; }
@@ -222,7 +384,7 @@ function updateAITank(tank, dt) {
             tank.aiState = 'capturing'; tank.aiCaptureTarget = capturableOutpost; tank.aiStateTimer = 15;
         } else if(nearestOutpost && nearestOutpost.owner === tank.team && minEnemyDist < 800 && gameMode !== 'sneak') {
             tank.aiState = 'defending'; tank.aiStateTimer = 8;
-        } else if(isRedAI && !['sneak', 'infection', 'storm'].includes(gameMode) && enemyBaseAccessible) {
+        } else if(isRedAI && !['sneak', 'escort', 'deathmatch', 'boss'].includes(gameMode) && enemyBaseAccessible) {
             tank.aiState = 'attackBase'; tank.aiStateTimer = 12;
         } else {
             tank.aiState = 'patrol'; if(!tank.patrolCenter) tank.patrolCenter = {x: tank.x, y: tank.y}; tank.aiStateTimer = 10;
@@ -240,32 +402,18 @@ function updateAITank(tank, dt) {
     }
     
     switch(tank.aiState) {
-        case 'ctf': {
-            const enemyTeam = tank.team === 'blue' ? 'red' : 'blue';
-            const enemyFlag = ctfFlags[enemyTeam];
-            const myFlag = ctfFlags[tank.team];
-            const carrying = enemyFlag && enemyFlag.carrier === tank;
-            const objective = carrying ? myFlag : enemyFlag;
-            if(objective) {
-                targetX = objective.dropped ? objective.dropX : objective.x;
-                targetY = objective.dropped ? objective.dropY : objective.y;
-                stopDist = 10;
+        case 'escortVIP': {
+            const vip = escortData.vip;
+            if(vip && !vip.dead) {
+                const slot = Math.max(0, aiTanks.filter(unit => unit.team === 'blue').indexOf(tank));
+                const angle = vip.angle + Math.PI + (slot % 5 - 2) * .42;
+                const radius = 105 + Math.floor(slot / 5) * 70;
+                targetX = vip.x + Math.cos(angle) * radius;
+                targetY = vip.y + Math.sin(angle) * radius;
+                stopDist = 45;
                 usePathfinding = true;
             }
-            if(nearestEnemy && minEnemyDist < 650) shouldFire = true;
-            break;
-        }
-        case 'stormCenter': {
-            targetX = stormData.safeZone.x;
-            targetY = stormData.safeZone.y;
-            stopDist = Math.max(80, stormData.safeZone.radius * 0.35);
-            usePathfinding = true;
-            if(nearestEnemy && minEnemyDist < 900) {
-                shouldFire = true;
-                targetX = nearestEnemy.x;
-                targetY = nearestEnemy.y;
-                stopDist = 280;
-            }
+            if(nearestEnemy && minEnemyDist < 850) shouldFire = true;
             break;
         }
         case 'combat':
@@ -375,6 +523,30 @@ function updateAITank(tank, dt) {
             usePathfinding = true; 
             break;
     }
+
+    // 低等级 AI 会主动靠拢带光环的“大哥”。遇到贴脸威胁时允许临场闪避，
+    // 其余时间回到编队槽位；多个战队的领队则使用平行行军通道，避免挤成一团。
+    if(squadLeader && squadLeader !== tank && !['retreating', 'escortVIP'].includes(tank.aiState)) {
+        const leaderDistance = Math.hypot(squadLeader.x - tank.x, squadLeader.y - tank.y);
+        const auraRadius = squadLeader.masteryAuraRadius ||
+            (typeof MASTERY_AURA_RADIUS !== 'undefined' ? MASTERY_AURA_RADIUS : 300);
+        const urgentCloseCombat = nearestEnemy && minEnemyDist < 280 && leaderDistance < auraRadius * .82;
+        if(!urgentCloseCombat) {
+            const formationTarget = getAISquadFormationTarget(tank, squadLeader);
+            targetX = formationTarget.x;
+            targetY = formationTarget.y;
+            stopDist = 38;
+            usePathfinding = true;
+        }
+        if(squadLeader.aiAimTarget && !squadLeader.aiAimTarget.dead) {
+            tank.aiFocusFireTarget = squadLeader.aiAimTarget;
+        }
+    } else if(squadLeader === tank && usePathfinding && (!nearestEnemy || minEnemyDist > 700)) {
+        const laneTarget = applyAISquadLaneOffset(tank, targetX, targetY);
+        targetX = laneTarget.x;
+        targetY = laneTarget.y;
+    }
+    tank.aiNavigationGoal = {x: targetX, y: targetY};
 
     // 直升机不再像地面坦克一样在目标附近横射：对地时压到目标正上方，对空时先对齐高度。
     if(tank.isFlying && nearestEnemy) {
@@ -547,7 +719,9 @@ function updateAITank(tank, dt) {
         
         const shouldUseAStar = usePathfinding && ((tank.stuckTimer || 0) > 0.5 || (tank.pathRefreshTimer || 0) <= 0 || !tank.path || tank.path.length === 0);
         if(shouldUseAStar && dist > stopDist + 100) {
-            const newPath = aStar({x: tank.x, y: tank.y}, {x: targetX, y: targetY}, tank.factoryFloor);
+            const newPath = typeof getSharedAIPath === 'function'
+                ? getSharedAIPath(tank, {x: targetX, y: targetY})
+                : aStar({x: tank.x, y: tank.y}, {x: targetX, y: targetY}, tank.factoryFloor);
             if(newPath && newPath.length > 1) { 
                 tank.path = simplifyPath(newPath); 
                 tank.pathRefreshTimer = CONFIG.pathRefreshInterval; 
@@ -761,7 +935,7 @@ function updateAIUltimate(tank, dt) {
             for(let i = 0; i < tank.ultimateData.cloneCount; i++) {
                 const angle = Math.random() * Math.PI * 2;
                 const dist = 50 + Math.random() * 50;
-                const clone = createTank(TANKS['zuoyan32'], tank.x + Math.cos(angle) * dist, tank.y + Math.sin(angle) * dist, tank.team, false);
+                const clone = createTank(TANKS['zuoyan32'], tank.x + Math.cos(angle) * dist, tank.y + Math.sin(angle) * dist, tank.team, false, 1);
                 clone.hp = tank.ultimateData.cloneHp; clone.maxHp = tank.ultimateData.cloneHp;
                 clone.isClone = true; clone.cloneOwner = tank; clone.cloneTimer = tank.ultimateData.duration;
                 if(tank.team === 'blue') allies.push(clone); else enemies.push(clone);

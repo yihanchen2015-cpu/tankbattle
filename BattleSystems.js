@@ -77,7 +77,8 @@ function spawnSneakRescueReinforcements() {
         const data = TANKS[type];
         if(!data || typeof createTank !== 'function') return;
         const entry = findBlueEdgeEntry(index);
-        const tank = createTank(data, entry.x, entry.y, 'blue', false);
+        const masteryLevel = typeof rollTeamAIMasteryLevel === 'function' ? rollTeamAIMasteryLevel('blue') : null;
+        const tank = createTank(data, entry.x, entry.y, 'blue', false, masteryLevel);
         tank.shells = Math.ceil(data.maxShells * 0.75);
         tank.mg = Math.ceil(data.maxMG * 0.75);
         tank.aa = Math.ceil((data.maxAA ?? 15) * 0.6);

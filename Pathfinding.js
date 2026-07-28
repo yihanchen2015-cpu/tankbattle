@@ -1,5 +1,15 @@
 // ==================== A* 寻路系统 ====================
+let aiSharedPathCache = [];
+let aiSharedPathStats = { solved: 0, reused: 0 };
+
+function resetAISharedPathCache() {
+    aiSharedPathCache.length = 0;
+    aiSharedPathStats.solved = 0;
+    aiSharedPathStats.reused = 0;
+}
+
 function initPathGrid() {
+    resetAISharedPathCache();
     pathGridWidth = Math.ceil(CONFIG.mapWidth / CONFIG.pathGridSize);
     pathGridHeight = Math.ceil(CONFIG.mapHeight / CONFIG.pathGridSize);
     pathGrid = new Array(pathGridWidth * pathGridHeight).fill(false);
@@ -67,6 +77,108 @@ function initPathGrid() {
         });
         pathGrid = factoryPathGrids[1];
     }
+}
+
+function getAIPathSituationSignature(tank) {
+    const sampleRadius = CONFIG.tankSize * 2.8;
+    let obstacleMask = 0;
+    if(typeof checkObstacleCollision === 'function' && !tank.canPassObstacles) {
+        for(let index = 0; index < 8; index++) {
+            const angle = index * Math.PI / 4;
+            const x = tank.x + Math.cos(angle) * sampleRadius;
+            const y = tank.y + Math.sin(angle) * sampleRadius;
+            if(checkObstacleCollision(x, y, CONFIG.tankSize, tank)) obstacleMask |= 1 << index;
+        }
+    }
+
+    const candidates = typeof getNearbyTanks === 'function'
+        ? getNearbyTanks(tank.x, tank.y, 520)
+        : (typeof aiTanks !== 'undefined' ? aiTanks : []);
+    let enemyMask = 0;
+    let closestEnemy = Infinity;
+    candidates.forEach(other => {
+        if(!other || other === tank || other.dead || other.team === tank.team) return;
+        if(typeof areEntitiesOnSameFactoryFloor === 'function' && !areEntitiesOnSameFactoryFloor(tank, other)) return;
+        const dx = other.x - tank.x;
+        const dy = other.y - tank.y;
+        const distance = Math.hypot(dx, dy);
+        if(distance > 520) return;
+        closestEnemy = Math.min(closestEnemy, distance);
+        const sector = Math.round((Math.atan2(dy, dx) + Math.PI) / (Math.PI / 4)) & 7;
+        enemyMask |= 1 << sector;
+    });
+    const enemyDistanceBand = closestEnemy === Infinity ? 0 : closestEnemy < 220 ? 1 : closestEnemy < 380 ? 2 : 3;
+    const targetId = tank.aiFocusFireTarget && !tank.aiFocusFireTarget.dead
+        ? (tank.aiFocusFireTarget.id || tank.aiFocusFireTarget.tankType || 'enemy')
+        : 'none';
+    return [
+        tank.team,
+        Number.isInteger(tank.factoryFloor) ? tank.factoryFloor : '-',
+        tank.aiState || 'move',
+        tank.aiBehavior || 0,
+        tank.canPassObstacles ? 1 : 0,
+        obstacleMask,
+        enemyMask,
+        enemyDistanceBand,
+        targetId
+    ].join('|');
+}
+
+function cloneAIPath(path) {
+    return path ? path.map(point => ({x: point.x, y: point.y})) : null;
+}
+
+function getSharedAIPath(tank, goal) {
+    const now = Date.now() * .001;
+    const lifetime = CONFIG.aiPathShareLifetime || .65;
+    aiSharedPathCache = aiSharedPathCache.filter(entry => now - entry.createdAt <= lifetime);
+    const situation = getAIPathSituationSignature(tank);
+    const squadId = tank.aiSquadId || null;
+    const exactGoal = worldToGrid(goal.x, goal.y);
+    const goalTolerance = squadId ? CONFIG.aiSquadFormationSpacing * 4.6 : CONFIG.pathGridSize * .65;
+    const shared = aiSharedPathCache.find(entry =>
+        entry.team === tank.team &&
+        entry.floor === tank.factoryFloor &&
+        entry.situation === situation &&
+        entry.squadId === squadId &&
+        Math.hypot(entry.start.x - tank.x, entry.start.y - tank.y) <= CONFIG.aiPathShareRadius &&
+        Math.hypot(entry.goal.x - goal.x, entry.goal.y - goal.y) <= goalTolerance
+    );
+    if(shared) {
+        const path = cloneAIPath(shared.path);
+        if(path && path.length) {
+            while(path.length > 2 &&
+                Math.hypot(path[1].x - tank.x, path[1].y - tank.y) <
+                Math.hypot(path[0].x - tank.x, path[0].y - tank.y)) {
+                path.shift();
+            }
+            path[path.length - 1] = {x: goal.x, y: goal.y};
+        }
+        tank.aiSharedPathReused = true;
+        tank.aiSharedPathContext = situation;
+        aiSharedPathStats.reused++;
+        return path;
+    }
+
+    const path = aStar({x: tank.x, y: tank.y}, goal, tank.factoryFloor);
+    tank.aiSharedPathReused = false;
+    tank.aiSharedPathContext = situation;
+    aiSharedPathStats.solved++;
+    if(path && path.length) {
+        aiSharedPathCache.push({
+            team: tank.team,
+            floor: tank.factoryFloor,
+            squadId,
+            situation,
+            start: {x: tank.x, y: tank.y},
+            goal: {x: goal.x, y: goal.y},
+            goalGrid: exactGoal,
+            createdAt: now,
+            path: cloneAIPath(path)
+        });
+        if(aiSharedPathCache.length > 80) aiSharedPathCache.splice(0, aiSharedPathCache.length - 80);
+    }
+    return path;
 }
 
 function worldToGrid(wx, wy) {
@@ -348,7 +460,8 @@ function getActualSpeed(tank) {
         return 0;
     }
     let speed = tank.speed;
-    let totalSpeedBoost = (tank.speedBoost || 0) + (tank.mapSpeedBoost || 0) + (tank.speedBuffFromCommander || 0) + (tank.ricochetSpeedBoost || 0);
+    let totalSpeedBoost = (tank.speedBoost || 0) + (tank.mapSpeedBoost || 0) + (tank.speedBuffFromCommander || 0) +
+        (tank.ricochetSpeedBoost || 0) + (tank.bossBuffSpeed || 0);
     if(totalSpeedBoost > 0) speed *= (1 + totalSpeedBoost);
 
     // 重量系统：基础重量 + 弹药重量

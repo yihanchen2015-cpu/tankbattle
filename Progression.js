@@ -4,10 +4,10 @@ const TANK_MASTERY_LEVELS = Object.freeze([
     { level: 2, xp: 300,   legacyMatches: 3,   name: '斥候', reward: '战地迷彩：敌方锁定概率 -10%' },
     { level: 3, xp: 800,   legacyMatches: 8,   name: '精英', reward: '金色描边：主炮弹变为金色，威力 +20%' },
     { level: 4, xp: 1500,  legacyMatches: 15,  name: '老兵', reward: '灼热尾焰；Kimi 解锁二进制环绕特效' },
-    { level: 5, xp: 3000,  legacyMatches: 30,  name: '王牌', reward: '王牌光环；死亡留下紫色火焰' },
-    { level: 6, xp: 5000,  legacyMatches: 50,  name: '战术王牌', reward: '速度 +8%，转向 +10%；死亡火焰升级为橙色' },
-    { level: 7, xp: 7500,  legacyMatches: 75,  name: '传奇', reward: '生命 +12%，装甲 +0.15；死亡火焰升级为红色' },
-    { level: 8, xp: 11000, legacyMatches: 110, name: '战神', reward: '常规武器伤害 +10%；死亡火焰升级为金色' }
+    { level: 5, xp: 3000,  legacyMatches: 30,  name: '王牌', reward: '300范围王牌光环（攻防 +15%）；死亡留下紫色火焰' },
+    { level: 6, xp: 5000,  legacyMatches: 50,  name: '战术王牌', reward: '340范围光环（攻防 +17%）；速度 +8%，转向 +10%；橙色死亡火焰' },
+    { level: 7, xp: 7500,  legacyMatches: 75,  name: '传奇', reward: '380范围光环（攻防 +20%）；生命 +12%，装甲 +0.15；红色死亡火焰' },
+    { level: 8, xp: 11000, legacyMatches: 110, name: '战神', reward: '430范围光环（攻防 +24%）；常规武器伤害 +10%；金色死亡火焰' }
 ]);
 
 const TANK_MASTERY_MAX_LEVEL = 8;
@@ -17,6 +17,12 @@ const MASTERY_TRAIL_DAMAGE_PER_SECOND = 55;
 const MASTERY_AURA_RADIUS = 300;
 const MASTERY_AURA_ATTACK_MULT = 1.15;
 const MASTERY_AURA_DEFENSE_MULT = 0.85;
+const MASTERY_AURA_LEVELS = Object.freeze({
+    5: Object.freeze({ radius: 300, attackMult: 1.15, defenseMult: 0.85 }),
+    6: Object.freeze({ radius: 340, attackMult: 1.17, defenseMult: 0.83 }),
+    7: Object.freeze({ radius: 380, attackMult: 1.20, defenseMult: 0.80 }),
+    8: Object.freeze({ radius: 430, attackMult: 1.24, defenseMult: 0.76 })
+});
 const MASTERY_TACTICAL_SPEED_MULT = 1.08;
 const MASTERY_TACTICAL_TURN_MULT = 1.10;
 const MASTERY_LEGENDARY_HP_MULT = 1.12;
@@ -74,6 +80,11 @@ function getMasteryAuraColor(level) {
     return MASTERY_AURA_COLORS[normalizedLevel];
 }
 
+function getMasteryAuraConfig(level) {
+    const normalizedLevel = Math.max(5, Math.min(8, Math.floor(Number(level) || 5)));
+    return MASTERY_AURA_LEVELS[normalizedLevel];
+}
+
 function getMasteryDeathFlameConfig(level) {
     const normalizedLevel = Math.floor(Number(level) || 0);
     return MASTERY_DEATH_FLAME_LEVELS[normalizedLevel] || null;
@@ -87,6 +98,29 @@ function rollAIMasteryLevel(randomValue = Math.random()) {
         if(roll < 0) return index + 1;
     }
     return 1;
+}
+
+function chooseAIMasteryLevelForTeam(team, rolledLevel, rosterOverride = null) {
+    const roster = Array.isArray(rosterOverride)
+        ? rosterOverride
+        : (team === 'blue' ? [player, ...allies] : enemies)
+            .filter(tank => tank && !tank.dead && !tank.isClone && tank.team === team);
+    const nextCount = roster.length + 1;
+    const highCount = roster.filter(tank => (tank.masteryLevel || 1) >= 5).length;
+    const lowCount = roster.filter(tank => (tank.masteryLevel || 1) <= 2).length;
+    const highCap = Math.floor(nextCount * .30 + 1e-9);
+    const lowMinimum = Math.ceil(nextCount * .30 - 1e-9);
+    const normalizedRoll = Math.max(1, Math.min(8, Math.floor(Number(rolledLevel) || 1)));
+
+    // 先补足低等级底盘，再限制高等级名额；被高等级上限拦下时降为 Lv.3–4，
+    // 保留中坚单位，而不是把整队都压成新兵。
+    if(lowCount < lowMinimum) return normalizedRoll % 2 === 0 ? 2 : 1;
+    if(normalizedRoll >= 5 && highCount >= highCap) return normalizedRoll % 2 === 0 ? 4 : 3;
+    return normalizedRoll;
+}
+
+function rollTeamAIMasteryLevel(team, rosterOverride = null, randomValue = Math.random()) {
+    return chooseAIMasteryLevelForTeam(team, rollAIMasteryLevel(randomValue), rosterOverride);
 }
 
 function getTankMasteryProfile(tankType) {
@@ -233,7 +267,9 @@ function getTankMasteryVisual(tankType, levelOverride = null) {
         trailColor: profile.level >= 4 ? accent : null,
         aura: profile.level >= 5,
         auraColor: profile.level >= 5 ? getMasteryAuraColor(profile.level) : null,
-        auraRadius: profile.level >= 5 ? MASTERY_AURA_RADIUS : 0,
+        auraRadius: profile.level >= 5 ? getMasteryAuraConfig(profile.level).radius : 0,
+        auraAttackMult: profile.level >= 5 ? getMasteryAuraConfig(profile.level).attackMult : 1,
+        auraDefenseMult: profile.level >= 5 ? getMasteryAuraConfig(profile.level).defenseMult : 1,
         binaryCode: tankType === 'kimi_tank' && profile.level >= 4,
         deathFlame: getMasteryDeathFlameConfig(profile.level),
         speedMult: profile.level >= 6 ? MASTERY_TACTICAL_SPEED_MULT : 1,
@@ -297,18 +333,26 @@ function updateMasteryBattleEffects() {
         tank.masteryAuraDamageMult = 1;
         tank.masteryAuraDefenseMult = 1;
         tank.masteryAuraInspired = false;
+        tank.masteryAuraSourceId = null;
+        tank.masteryAuraBuffColor = null;
     });
     const auraSources = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead && tank.masteryAura);
     if(auraSources.length === 0) return;
     aiUnits.forEach(tank => {
-        const source = auraSources.find(auraTank => {
-            if(typeof areEntitiesOnSameFactoryFloor === 'function' && !areEntitiesOnSameFactoryFloor(auraTank, tank)) return false;
-            return Math.hypot(tank.x - auraTank.x, tank.y - auraTank.y) <= MASTERY_AURA_RADIUS;
-        });
+        const source = auraSources
+            .filter(auraTank => {
+                if(typeof areEntitiesOnSameFactoryFloor === 'function' && !areEntitiesOnSameFactoryFloor(auraTank, tank)) return false;
+                const config = getMasteryAuraConfig(auraTank.masteryLevel);
+                return Math.hypot(tank.x - auraTank.x, tank.y - auraTank.y) <= (auraTank.masteryAuraRadius || config.radius);
+            })
+            .sort((a, b) => getMasteryAuraConfig(b.masteryLevel).attackMult - getMasteryAuraConfig(a.masteryLevel).attackMult)[0];
         if(!source) return;
-        tank.masteryAuraDamageMult = MASTERY_AURA_ATTACK_MULT;
-        tank.masteryAuraDefenseMult = MASTERY_AURA_DEFENSE_MULT;
+        const auraConfig = getMasteryAuraConfig(source.masteryLevel);
+        tank.masteryAuraDamageMult = source.masteryAuraAttackMult || auraConfig.attackMult;
+        tank.masteryAuraDefenseMult = source.masteryAuraDefenseMult || auraConfig.defenseMult;
         tank.masteryAuraInspired = true;
+        tank.masteryAuraSourceId = source.id || null;
+        tank.masteryAuraBuffColor = source.masteryAuraColor || getMasteryAuraColor(source.masteryLevel);
         tank.aiState = 'combat';
         tank.aiStateTimer = Math.max(tank.aiStateTimer || 0, 0.35);
     });
@@ -359,8 +403,8 @@ const CUSTOM_ROOM_DEFAULTS = Object.freeze({
     durationMinutes: 6,
     outpostCount: 3,
     reinforcements: true,
-    blueSpawnInterval: 18,
-    redSpawnInterval: 18,
+    blueSpawnInterval: 15,
+    redSpawnInterval: 15,
     scoreTarget: 5000,
     baseHp: 10000,
     aiAmmoPercent: 70,

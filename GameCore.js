@@ -19,7 +19,7 @@ function startGame() {
     const aa = parseInt(document.getElementById('aaSlider').value);
     let dayNight = 'day';
     if(gameMode === 'sneak') dayNight = 'night';
-    else if(['ctf', 'infection', 'storm'].includes(gameMode)) dayNight = 'day';
+    else if(['escort', 'deathmatch', 'boss'].includes(gameMode)) dayNight = 'day';
     else dayNight = document.getElementById('dayNight').value;
     const difficulty = document.getElementById('difficulty').value;
     const viewMode = document.getElementById('viewMode') ? document.getElementById('viewMode').value : '2d';
@@ -41,9 +41,9 @@ function startGame() {
     const specialModeInfo = document.getElementById('specialModeInfo');
     if(specialModeInfo) {
         const labels = {
-            ctf: '🏴 夺旗模式 - 率先获得 3 分',
-            infection: '🧟 感染模式 - 生存或感染所有敌人',
-            storm: '🌪 风暴模式 - 留在安全区并活到最后',
+            escort: '🚛 护送模式 - 保护或摧毁VIP坦克',
+            deathmatch: '💀 死斗模式 - 率先取得50次击杀',
+            boss: '👑 首领模式 - 争夺巨型BOSS最后一击',
             custom: '🧰 自定义房间 - 规则、队伍与坦克池由房主定义'
         };
         specialModeInfo.textContent = labels[gameMode] || '';
@@ -65,14 +65,14 @@ function startGame() {
     camera.x = player.x - initialView.width / 2;
     camera.y = player.y - initialView.height / 2;
 
-    if(gameMode === 'ctf') initCTFMode();
-    else if(gameMode === 'infection') initInfectionMode();
-    else if(gameMode === 'storm') initStormMode();
+    if(gameMode === 'escort') initEscortMode();
+    else if(gameMode === 'deathmatch') initDeathmatchMode();
+    else if(gameMode === 'boss') initBossMode();
 
     gameState = 'playing';
     if(gameMode === 'custom' && customConfig) gameTime = customConfig.durationMinutes * 60;
     else if(gameMode === 'defense') gameTime = 180;
-    else if(['ctf', 'infection', 'storm'].includes(gameMode)) gameTime = 300;
+    else if(['escort', 'deathmatch', 'boss'].includes(gameMode)) gameTime = 300;
     else gameTime = CONFIG.gameTime;
     lastTime = performance.now();
     exhaustTrails = [];
@@ -232,7 +232,8 @@ function generateMap() {
         x: baseOffset, y: CONFIG.mapHeight/2 - CONFIG.baseSize/2,
         w: CONFIG.baseSize, h: CONFIG.baseSize,
         hp: CONFIG.baseHp, maxHp: CONFIG.baseHp, team: 'blue',
-        defenseCooldown: 0, rageActive: false, rageAnnounced: false
+        defenseCooldown: 0, rageActive: false, rageAnnounced: false,
+        shieldActive: false, shieldTimer: 0, shieldEnemyCount: 0
     };
     bases.red = {
         x: CONFIG.mapWidth - baseOffset - CONFIG.baseSize, y: CONFIG.mapHeight/2 - CONFIG.baseSize/2,
@@ -253,10 +254,24 @@ function generateMap() {
         x: pos.x, y: pos.y, name: pos.name || String.fromCharCode(65 + i),
         factoryFloor: Number.isInteger(pos.floor) ? pos.floor : null,
         z: Number.isInteger(pos.floor) && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(pos.floor) : 0,
-        owner: null, captureProgress: 0, capturingTeam: null, radius: CONFIG.outpostRadius
+        owner: null, captureProgress: 0, capturingTeam: null, radius: CONFIG.outpostRadius,
+        level: 0, heldTime: 0, minuteScoreTimer: CONFIG.outpostLevelInterval,
+        recaptureTeam: null, recaptureTimer: 0, lastHudState: ''
     }));
-    if(gameMode === 'defense') outposts.forEach(op => op.owner = 'red');
-    if(['sneak', 'ctf', 'infection', 'storm'].includes(gameMode)) outposts = [];
+    if(gameMode === 'defense') outposts.forEach(op => {
+        op.owner = 'red';
+        op.level = 1;
+    });
+    if(gameMode === 'deathmatch') {
+        outposts = [];
+        Object.values(bases).forEach(base => {
+            if(!base) return;
+            base.hidden = true;
+            base.invulnerable = true;
+        });
+    } else if(['escort', 'boss'].includes(gameMode)) {
+        Object.values(bases).forEach(base => { if(base) base.invulnerable = true; });
+    }
 
     if(currentMap === 'island') generateIslandTerrain();
 
@@ -265,6 +280,100 @@ function generateMap() {
     if(typeof initializeDestructibleTerrain === 'function') initializeDestructibleTerrain();
     generateMapElements();
     if(typeof finalizeMapMechanicsElements === 'function') finalizeMapMechanicsElements();
+    if(gameMode !== 'boss') initializeNeutralSniperTower();
+}
+
+function initializeNeutralSniperTower() {
+    const centerX = CONFIG.mapWidth / 2;
+    const centerY = CONFIG.mapHeight / 2;
+    const factoryFloor = currentMap === 'factory' ? 1 : null;
+    const z = factoryFloor !== null && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(factoryFloor) : 0;
+    neutralNPCs = [{
+        id: 'neutral-sniper-tower',
+        type: 'neutralSniperTower',
+        name: '中立狙击塔',
+        team: 'neutral',
+        x: centerX,
+        y: centerY,
+        z,
+        factoryFloor,
+        radius: CONFIG.neutralSniperTowerRadius,
+        capturePassThrough: true,
+        blocksMovement: false,
+        angle: -Math.PI / 2,
+        fireCooldown: CONFIG.neutralSniperFireInterval,
+        muzzleFlashTimer: 0,
+        currentTargetId: null,
+        currentTargetName: '',
+        currentTargetScore: 0
+    }];
+    if(typeof addBattleAnnouncement === 'function') {
+        addBattleAnnouncement('neutral', '🎯 中立狙击塔已部署：每10秒攻击个人分数最高的坦克，炮弹可被障碍物拦截');
+    }
+    return neutralNPCs[0];
+}
+
+function getNeutralSniperTarget() {
+    const living = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead);
+    if(!living.length) return null;
+    const highestScore = Math.max(...living.map(tank => tank.battleScore || 0));
+    const scoreLeaders = living.filter(tank => (tank.battleScore || 0) === highestScore);
+    const latestScoreTime = Math.max(...scoreLeaders.map(tank => tank.lastBattleScoreAt || 0));
+    const latestLeaders = scoreLeaders.filter(tank => (tank.lastBattleScoreAt || 0) === latestScoreTime);
+    return latestLeaders[Math.floor(Math.random() * latestLeaders.length)] || null;
+}
+
+function fireNeutralSniperTower(tower, target) {
+    if(!tower || !target || target.dead) return false;
+    const angle = Math.atan2(target.y - tower.y, target.x - tower.x);
+    const speed = CONFIG.neutralSniperProjectileSpeed;
+    const distance = Math.hypot(target.x - tower.x, target.y - tower.y);
+    tower.angle = angle;
+    tower.muzzleFlashTimer = .28;
+    bullets.push({
+        x: tower.x + Math.cos(angle) * 62,
+        y: tower.y + Math.sin(angle) * 62,
+        z: (target.z || 0) + (target.isFlying ? 8 : 22),
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        vz: 0,
+        damage: CONFIG.neutralSniperDamage,
+        team: 'neutral',
+        type: 'sniper',
+        owner: null,
+        life: Math.max(2, distance / (speed * 60) + 1),
+        hitTanks: new Set(),
+        maxTargetHits: 1,
+        armorIgnore: true,
+        ignoresObstacles: false,
+        neutralSniper: true,
+        neutralSniperTargetId: target.id
+    });
+    createParticles(tower.x + Math.cos(angle) * 55, tower.y + Math.sin(angle) * 55, 22, '#b22cff', 2.2);
+    if(typeof playWorldSound === 'function') playWorldSound('aa', tower.x, tower.y, target === player ? 1.15 : .75);
+    if(target === player && typeof showMessage === 'function') {
+        showMessage('🎯 中立狙击塔锁定你：紫色重炮来袭！', '#d982ff');
+    }
+    return true;
+}
+
+function updateNeutralNPCs(dt) {
+    neutralNPCs.forEach(npc => {
+        if(npc.type !== 'neutralSniperTower') return;
+        npc.fireCooldown = Math.max(0, (npc.fireCooldown || 0) - Math.max(0, dt));
+        npc.muzzleFlashTimer = Math.max(0, (npc.muzzleFlashTimer || 0) - Math.max(0, dt));
+        const target = getNeutralSniperTarget();
+        npc.currentTargetId = target ? target.id : null;
+        npc.currentTargetName = target && typeof getReplayTankName === 'function'
+            ? getReplayTankName(target)
+            : target ? target.tankType : '';
+        npc.currentTargetScore = target ? target.battleScore || 0 : 0;
+        if(target) npc.angle = Math.atan2(target.y - npc.y, target.x - npc.x);
+        if(target && npc.fireCooldown <= 0) {
+            fireNeutralSniperTower(npc, target);
+            npc.fireCooldown = CONFIG.neutralSniperFireInterval;
+        }
+    });
 }
 
 function generateIslandTerrain() {
@@ -495,7 +604,8 @@ function spawnTanks(tankData, ammo, mg, aa) {
         const deployment=gameMode==='sneak'
             ?{x:blueBaseX+(Math.random()-.5)*300,y:blueBaseY+(Math.random()-.5)*300}
             :findBaseDeploymentPoint('blue',i+1);
-        const tank = createTank(t, deployment.x, deployment.y, 'blue', false);
+        const masteryLevel = typeof rollTeamAIMasteryLevel === 'function' ? rollTeamAIMasteryLevel('blue') : null;
+        const tank = createTank(t, deployment.x, deployment.y, 'blue', false, masteryLevel);
         tank.shells = aAmmo; tank.mg = aMG; 
         tank.aa = Math.floor((t.maxAA ?? 15) * (customConfig ? customConfig.aiAmmoPercent / 100 : 0.5));
         tank.apsCharges = CONFIG.apsCharges;
@@ -549,7 +659,8 @@ function spawnTanks(tankData, ammo, mg, aa) {
             ex=deployment.x;
             ey=deployment.y;
         }
-        const tank = createTank(t, ex, ey, 'red', false);
+        const masteryLevel = typeof rollTeamAIMasteryLevel === 'function' ? rollTeamAIMasteryLevel('red') : null;
+        const tank = createTank(t, ex, ey, 'red', false, masteryLevel);
         tank.hp = Math.floor(tank.hp * diffMult);
         tank.maxHp = tank.hp;
         tank.shells = eAmmo; tank.mg = eMG; 
@@ -564,15 +675,15 @@ function spawnTanks(tankData, ammo, mg, aa) {
         tank.aiTeamCoord = Math.random() * Math.PI * 2;
         tank.aiReactionDelay = 0.05 + Math.random() * 0.2;
         const baseSkill = gameConfig.difficulty === 'easy' ? 0.6 : gameConfig.difficulty === 'hard' ? 1.5 : 1.0;
-        let redSkillMult = 1.4;
-        if (gameMode === 'sneak') redSkillMult = 1.6;
-        else if (gameMode === 'defense') redSkillMult = 1.10;
-        else if (gameMode === 'ctf') redSkillMult = 1.3;
-        else if (gameMode === 'infection') redSkillMult = 1.8;
-        else if (gameMode === 'storm') redSkillMult = 1.2;
+        let redSkillMult = 1.08;
+        if (gameMode === 'sneak') redSkillMult = 1.35;
+        else if (gameMode === 'defense') redSkillMult = 1.05;
+        else if (gameMode === 'escort') redSkillMult = 1.10;
+        else if (gameMode === 'deathmatch') redSkillMult = 1.08;
+        else if (gameMode === 'boss') redSkillMult = 1.05;
         tank.aiSkillLevel = baseSkill * redSkillMult;
-        tank.aiDamageMult = gameMode === 'defense' ? 1.0 : (gameConfig.difficulty === 'easy' ? 1.03 : gameConfig.difficulty === 'hard' ? 1.16 : 1.10);
-        tank.hp = Math.floor(tank.hp * (gameMode === 'defense' ? 1.05 : 1.25));
+        tank.aiDamageMult = gameMode === 'defense' ? 1.0 : (gameConfig.difficulty === 'easy' ? 1.02 : gameConfig.difficulty === 'hard' ? 1.14 : 1.05);
+        tank.hp = Math.floor(tank.hp * (gameMode === 'defense' ? 1.05 : (gameConfig.difficulty === 'hard' ? 1.18 : 1.08)));
         tank.maxHp = tank.hp;
         tank.aiBehavior = AI_BEHAVIOR.NONE;
         tank.aiBehaviorTimer = 0;
@@ -582,15 +693,17 @@ function spawnTanks(tankData, ammo, mg, aa) {
     aiTanks = [...allies, ...enemies];
 }
 
-function createTank(data, x, y, team, isPlayer) {
+function createTank(data, x, y, team, isPlayer, masteryLevelOverride = null) {
     console.log('[CREATE_TANK] Creating tank:', data.name, 'at x:', x, 'y:', y, 'team:', team, 'isPlayer:', isPlayer);
     if(x === undefined || y === undefined || isNaN(x) || isNaN(y)) {
         console.error('[CREATE_TANK] Invalid position! x:', x, 'y:', y);
     }
     const id = Math.random().toString(36).substr(2, 9);
     const tankType = Object.keys(TANKS).find(key => TANKS[key].name === data.name) || 'xingchen27a';
-    const aiMasteryLevel = !isPlayer && typeof rollAIMasteryLevel === 'function'
-        ? rollAIMasteryLevel()
+    const aiMasteryLevel = !isPlayer
+        ? (masteryLevelOverride === null
+            ? (typeof rollAIMasteryLevel === 'function' ? rollAIMasteryLevel() : null)
+            : Math.max(1, Math.min(8, Math.floor(Number(masteryLevelOverride) || 1))))
         : null;
     const masteryVisual = typeof getTankMasteryVisual === 'function'
         ? getTankMasteryVisual(tankType, aiMasteryLevel)
@@ -633,11 +746,15 @@ function createTank(data, x, y, team, isPlayer) {
         masteryAura: masteryVisual ? masteryVisual.aura : false,
         masteryAuraColor: masteryVisual ? masteryVisual.auraColor : null,
         masteryAuraRadius: masteryVisual ? masteryVisual.auraRadius : 0,
+        masteryAuraAttackMult: masteryVisual ? masteryVisual.auraAttackMult : 1,
+        masteryAuraDefenseMult: masteryVisual ? masteryVisual.auraDefenseMult : 1,
         masteryBinaryCode: masteryVisual ? masteryVisual.binaryCode : false,
         masteryDeathFlame: masteryVisual ? masteryVisual.deathFlame : null,
         masteryDeathFlameSpawned: false,
         masteryWeaponDamageMult: masteryVisual ? masteryVisual.weaponDamageMult : 1,
         masteryTrailZoneTimer: 0,
+        battleScore: 0,
+        lastBattleScoreAt: 0,
         weight: data.weight || 1.0,
         isFlying: !!data.isFlying,
         canPassObstacles: !!data.canPassObstacles,
@@ -694,6 +811,12 @@ function createTank(data, x, y, team, isPlayer) {
         masteryAuraDefenseMult: 1,
         masteryAuraInspired: false,
         aiTrackedTarget: null, aiTargetLockTimer: 0,
+        aiSquadId: null,
+        aiSquadLeaderId: null,
+        aiSquadSlot: -1,
+        aiSquadFormation: null,
+        aiSquadRefreshTimer: 0,
+        aiSharedPathReused: false,
         turretJamTimer: 0,
         trackDamageTimer: 0,
         trackRepairMultiplier: 1,
@@ -753,7 +876,7 @@ function getBaseSpawnInterval(team) {
         return team === 'blue' ? customRoomConfig.blueSpawnInterval : customRoomConfig.redSpawnInterval;
     }
     const configured=CONFIG.baseSpawnIntervals&&CONFIG.baseSpawnIntervals[team];
-    return Number.isFinite(configured)?configured:(team==='blue'?15:10);
+    return Number.isFinite(configured)?configured:15;
 }
 
 function initBaseSpawns() {
@@ -777,7 +900,10 @@ function getSpatialKey(x, y) {
 function updateSpatialGrid() {
     spatialGrid.clear();
     spatialGridKeys.length = 0;
-    const allTanks = [player, ...allies, ...enemies].filter(t => t && !t.dead);
+    const combatNPCs = typeof neutralNPCs !== 'undefined'
+        ? neutralNPCs.filter(npc => npc && npc.isCombatTank && !npc.dead)
+        : [];
+    const allTanks = [player, ...allies, ...enemies, ...combatNPCs].filter(t => t && !t.dead);
     allTanks.forEach(tank => {
         const key = getSpatialKey(tank.x, tank.y);
         if(!spatialGrid.has(key)) {
@@ -877,16 +1003,13 @@ function update(dt) {
             return;
         }
         if(gameMode === 'defense') endGame('defenseVictory');
-        else if(gameMode === 'ctf') endGame(ctfScores.blue >= ctfScores.red ? 'victory' : 'playerDead');
-        else if(gameMode === 'storm') {
-            const blueAlive = [player, ...allies].filter(t => t && !t.dead).length;
-            const redAlive = enemies.filter(t => t && !t.dead).length;
-            endGame(blueAlive >= redAlive && player && !player.dead ? 'victory' : 'playerDead');
+        else if(gameMode === 'escort') endGame('escortRedWin');
+        else if(gameMode === 'deathmatch') {
+            const blueKills = deathmatchData.kills.blue || 0;
+            const redKills = deathmatchData.kills.red || 0;
+            endGame(blueKills === redKills ? 'deathmatchDraw' : blueKills > redKills ? 'deathmatchBlueWin' : 'deathmatchRedWin');
         }
-        else if(gameMode === 'infection') {
-            const survivors = [player, ...allies].filter(t => t && !t.dead && !t.isInfected).length;
-            endGame(survivors > 0 || (player && player.isInfected && !player.dead) ? 'victory' : 'playerDead');
-        }
+        else if(gameMode === 'boss') endGame('bossTime');
         else if(gameMode === 'custom') {
             const scoreWinner = typeof getWinningScoreTeam === 'function' ? getWinningScoreTeam() : 'draw';
             endGame(scoreWinner === 'blue' ? 'victory' : scoreWinner === 'red' ? 'baseDestroyed' : 'time');
@@ -898,9 +1021,11 @@ function update(dt) {
     updateSpatialGrid();
     
     updateOutposts(dt);
-    if(gameMode==='classic'||gameMode==='defense'||
+    if(['classic','defense','escort','deathmatch','boss'].includes(gameMode)||
        (gameMode==='custom'&&typeof customRoomConfig!=='undefined'&&customRoomConfig.reinforcements)) updateBaseSpawns(dt);
-    if(!['ctf', 'infection', 'storm'].includes(gameMode)) updateBaseDefense(dt);
+    if(!['escort','deathmatch','boss'].includes(gameMode)) updateBlueBaseShield(dt);
+    updateNeutralNPCs(dt);
+    if(!['escort', 'deathmatch', 'boss'].includes(gameMode)) updateBaseDefense(dt);
     
     updateMinimapJam(dt);
 
@@ -929,6 +1054,7 @@ function update(dt) {
     if(typeof updateCombatReplayBuffer === 'function') updateCombatReplayBuffer(dt);
     updateMapElements(dt);
     if(updatePendingDamageUpgrade(dt)) return;
+    updateGameModes(dt);
     checkWinCondition();
     if(gameState !== 'playing') return;
     updateUltimates(dt);
@@ -936,7 +1062,6 @@ function update(dt) {
     updateTimer();
     updateCoordDisplay();
     updateUltimateUI();
-    updateGameModes(dt);
 }
 
 function updateMinimapJam(dt) {
@@ -1116,6 +1241,71 @@ function updateBaseDefense(dt) {
             base.defenseCooldown = CONFIG.baseDefenseCooldown / (base.rageActive ? CONFIG.baseRageFireRateMultiplier : 1);
         }
     });
+}
+
+function isTankInsideBlueBaseShield(tank) {
+    const base = bases.blue;
+    if(!base || !tank || tank.dead || tank.team !== 'blue' || base.hp <= 0) return false;
+    if(currentMap === 'factory' && typeof areEntitiesOnSameFactoryFloor === 'function' && !areEntitiesOnSameFactoryFloor(base, tank)) return false;
+    const centerX = base.x + base.w / 2;
+    const centerY = base.y + base.h / 2;
+    return Math.hypot(tank.x - centerX, tank.y - centerY) <= CONFIG.baseShieldRange;
+}
+
+function getBlueBaseShieldDamageMultiplier(tank) {
+    return bases.blue && bases.blue.shieldActive && isTankInsideBlueBaseShield(tank)
+        ? 1 - CONFIG.baseShieldDamageReduction
+        : 1;
+}
+
+function updateBlueBaseShield(dt) {
+    const base = bases.blue;
+    if(!base || base.hp <= 0) {
+        if(base) {
+            base.shieldActive = false;
+            base.shieldTimer = 0;
+            base.shieldEnemyCount = 0;
+        }
+        [player, ...allies].forEach(tank => {
+            if(tank) tank.baseShieldProtected = false;
+        });
+        return false;
+    }
+    const centerX = base.x + base.w / 2;
+    const centerY = base.y + base.h / 2;
+    const nearbyRedAI = enemies.filter(tank => {
+        if(!tank || tank.dead || tank.isPlayer || tank.team !== 'red') return false;
+        if(currentMap === 'factory' && typeof areEntitiesOnSameFactoryFloor === 'function' && !areEntitiesOnSameFactoryFloor(base, tank)) return false;
+        return Math.hypot(tank.x - centerX, tank.y - centerY) <= CONFIG.baseShieldRange;
+    });
+    const wasActive = !!base.shieldActive;
+    base.shieldEnemyCount = nearbyRedAI.length;
+    if(nearbyRedAI.length > CONFIG.baseShieldEnemyThreshold) {
+        base.shieldTimer = CONFIG.baseShieldLingerDuration;
+    } else {
+        base.shieldTimer = Math.max(0, (base.shieldTimer || 0) - Math.max(0, dt));
+    }
+    base.shieldActive = base.shieldTimer > 0;
+
+    if(base.shieldActive && !wasActive) {
+        createParticles(centerX, centerY, 48, '#4fdcff', 2.8);
+        if(typeof addBattleAnnouncement === 'function') {
+            addBattleAnnouncement('blue', '🛡 蓝方基地遭到围攻：基地护盾启动！');
+        }
+        if(typeof showNotification === 'function') {
+            showNotification('🛡 基地护盾：范围内蓝方坦克减伤30%，回血加速', '#5fe7ff');
+        }
+        if(typeof playWorldSound === 'function') playWorldSound('capture', centerX, centerY, 1.2);
+    }
+
+    const blueTanks = [player, ...allies].filter(tank => tank && !tank.dead && tank.team === 'blue');
+    blueTanks.forEach(tank => {
+        tank.baseShieldProtected = base.shieldActive && isTankInsideBlueBaseShield(tank);
+        if(tank.baseShieldProtected && tank.hp < tank.maxHp) {
+            tank.hp = Math.min(tank.maxHp, tank.hp + tank.maxHp * CONFIG.baseShieldBonusHealRate * Math.max(0, dt));
+        }
+    });
+    return base.shieldActive;
 }
 
 function updateTank(tank, dt) {
@@ -1599,65 +1789,21 @@ function checkWinCondition() {
         if(bases.red.hp <= 0) { endGame('victory'); return; }
         return;
     }
-    // [修复] 感染模式：没有基地，胜利条件是消灭所有感染者或所有幸存者被感染
-    if(gameMode === 'infection') {
-        const blueSurvivors = [...allies, player].filter(t => t && !t.dead && !t.isInfected);
-        const aliveInfected = [...enemies, ...allies].filter(t => t && !t.dead && t.isInfected);
-        // 所有幸存者被感染或死亡
-        if(blueSurvivors.length === 0) {
-            if(player && player.isInfected && !player.dead) {
-                endGame('victory'); // 玩家被感染且存活，感染者胜利
-            } else {
-                endGame('playerDead'); // 玩家死亡且未被感染
-            }
+    if(gameMode === 'escort') {
+        const vip = escortData.vip;
+        if(!vip || vip.dead || vip.hp <= 0 || escortData.destroyed) {
+            endGame('escortRedWin');
             return;
         }
-        // 所有感染者被消灭
-        if(aliveInfected.length === 0) {
-            endGame('victory'); // 幸存者胜利
-            return;
-        }
+        if(escortData.reached) endGame('escortBlueWin');
         return;
     }
-    // [修复] 风暴模式：没有基地，胜利条件是活到最后
-    if(gameMode === 'storm') {
-        const aliveBlue = [player, ...allies].filter(t => t && !t.dead);
-        const aliveRed = enemies.filter(t => t && !t.dead);
-        // 玩家死亡
-        if(player && player.dead) {
-            endGame('playerDead');
-            return;
-        }
-        // 只有玩家一方存活
-        if(aliveRed.length === 0 && aliveBlue.length > 0) {
-            endGame('victory');
-            return;
-        }
-        // 时间到，按存活人数判断
-        if(gameTime <= 0) {
-            if(aliveBlue.length >= aliveRed.length) {
-                endGame('victory');
-            } else {
-                endGame('playerDead');
-            }
-            return;
-        }
+    if(gameMode === 'deathmatch') {
+        if(deathmatchData.kills.blue >= deathmatchData.targetKills) endGame('deathmatchBlueWin');
+        else if(deathmatchData.kills.red >= deathmatchData.targetKills) endGame('deathmatchRedWin');
         return;
     }
-    // [修复] 夺旗模式：没有基地，胜利条件是先得3分
-    if(gameMode === 'ctf') {
-        if(player && player.dead) {
-            endGame('playerDead');
-            return;
-        }
-        if(ctfScores.blue >= 3) {
-            endGame('victory');
-            return;
-        }
-        if(ctfScores.red >= 3) {
-            endGame('playerDead');
-            return;
-        }
+    if(gameMode === 'boss') {
         return;
     }
     // 经典模式
@@ -1675,19 +1821,31 @@ function endGame(reason) {
 function finishEndGame(reason) {
     if(gameState === 'ended') return;
     const customBaseResult = gameMode === 'custom' && typeof customRoomConfig !== 'undefined' && customRoomConfig.rule === 'base';
-    const winner = customBaseResult && (reason === 'victory' || reason === 'baseDestroyed')
+    const explicitWinner = ({
+        escortBlueWin: 'blue',
+        escortRedWin: 'red',
+        deathmatchBlueWin: 'blue',
+        deathmatchRedWin: 'red',
+        deathmatchDraw: 'draw'
+    })[reason];
+    const winner = explicitWinner || (customBaseResult && (reason === 'victory' || reason === 'baseDestroyed')
         ? (reason === 'victory' ? 'blue' : 'red')
         : typeof getWinningScoreTeam === 'function'
         ? getWinningScoreTeam()
-        : (reason === 'victory' ? 'blue' : 'red');
+        : (reason === 'victory' ? 'blue' : 'red'));
     gameState = 'ended';
     if(typeof stopEngineAudio === 'function') stopEngineAudio();
     const overlay = document.getElementById('matchResultOverlay');
     const title = document.getElementById('matchResultTitle');
     const blueScore = document.getElementById('resultBlueScore');
     const redScore = document.getElementById('resultRedScore');
-    if(blueScore) blueScore.textContent = teamScores.blue.toLocaleString('zh-CN');
-    if(redScore) redScore.textContent = teamScores.red.toLocaleString('zh-CN');
+    if(gameMode === 'deathmatch') {
+        if(blueScore) blueScore.textContent = `${deathmatchData.kills.blue} 击杀`;
+        if(redScore) redScore.textContent = `${deathmatchData.kills.red} 击杀`;
+    } else {
+        if(blueScore) blueScore.textContent = teamScores.blue.toLocaleString('zh-CN');
+        if(redScore) redScore.textContent = teamScores.red.toLocaleString('zh-CN');
+    }
     if(title) {
         title.textContent = winner === 'draw' ? '平局' : winner === 'blue' ? '蓝方胜利' : '红方胜利';
         title.style.color = winner === 'draw' ? '#ffd86b' : winner === 'blue' ? '#66b7ff' : '#ff7474';
@@ -1738,7 +1896,10 @@ function resetGame() {
     smokeClouds = [];
     damageUpgradeState = { active: false, pending: false, delayTimer: 0, deaths: 0, offered: [], chosen: [] };
     allies = []; enemies = []; bullets = []; particles = []; exhaustTrails = [];
-    trailEffects = []; damageNumbers = []; outposts = []; aiTanks = []; player = null;
+    trailEffects = []; damageNumbers = []; outposts = []; neutralNPCs = []; aiTanks = []; player = null;
+    escortData = { vip: null, start: null, end: null, escortRadius: 320, contestRadius: 260, reached: false, destroyed: false, pathRefresh: 0 };
+    deathmatchData = { kills: { blue: 0, red: 0 }, targetKills: 50 };
+    bossModeData = { boss: null, defeated: false, killerTeam: null, buffTeam: null, buffTimer: 0, buffDuration: 30 };
 
     // 重置画布
     if(canvas) {

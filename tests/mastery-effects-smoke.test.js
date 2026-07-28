@@ -163,10 +163,16 @@ const result = vm.runInContext(`(() => {
         id:'hostile', team:'red', dead:false, isPlayer:false, x:200, y:0,
         aiState:'retreat', aiStateTimer:0
     };
-    player = { id:'ace', team:'blue', dead:false, x:0, y:0, masteryAura:true };
+    player = { id:'ace', team:'blue', dead:false, x:0, y:0, masteryAura:true, masteryLevel:5, masteryAuraRadius:300 };
     allies = [inspired, outside];
     enemies = [hostile];
     updateMasteryBattleEffects();
+    const quotaRoster=[];
+    const quotaLevels=Array.from({length:10},()=>{
+        const level=chooseAIMasteryLevelForTeam('blue',8,quotaRoster);
+        quotaRoster.push({team:'blue',dead:false,isClone:false,masteryLevel:level});
+        return level;
+    });
 
     return {
         matchesAfterStart,
@@ -176,6 +182,10 @@ const result = vm.runInContext(`(() => {
         xpAfterDuplicateResult: profileAfterDuplicateResult.xp,
         performanceXp,
         auraColors: [5,6,7,8].map(getMasteryAuraColor),
+        auraConfigs: [5,6,7,8].map(getMasteryAuraConfig),
+        quotaLevels,
+        quotaHigh:quotaLevels.filter(level=>level>=5).length,
+        quotaLow:quotaLevels.filter(level=>level<=2).length,
         deathFlameConfigs: [5,6,7,8].map(getMasteryDeathFlameConfig),
         kimiBinaryVisual: kimiVisual.binaryCode,
         kimiBinaryTank: kimiTank.masteryBinaryCode,
@@ -228,6 +238,22 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(result.performanceXp)), {
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.auraColors)), [
     '#a000ff', '#ff7a00', '#ff1744', '#ffd700'
 ], 'level-five-to-eight battle auras should come from independent pure-color constants');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(result.auraConfigs)), [
+    {radius:300,attackMult:1.15,defenseMult:.85},
+    {radius:340,attackMult:1.17,defenseMult:.83},
+    {radius:380,attackMult:1.20,defenseMult:.80},
+    {radius:430,attackMult:1.24,defenseMult:.76}
+], 'higher mastery auras should grow in both radius and combat strength');
+assert.strictEqual(result.quotaHigh, 3, 'Lv.5+ tanks should occupy no more than 30% of a ten-tank team');
+assert.strictEqual(result.quotaLow, 3, 'Lv.1-2 tanks should occupy at least 30% of a ten-tank team');
+result.quotaLevels.forEach((level, index) => {
+    const prefix=result.quotaLevels.slice(0,index+1);
+    assert(prefix.filter(item=>item>=5).length<=Math.floor(prefix.length*.3),
+        'the high-level cap should hold during incremental spawns');
+    assert(prefix.filter(item=>item<=2).length>=Math.ceil(prefix.length*.3),
+        'the low-level floor should hold during incremental spawns');
+});
+assert.strictEqual(result.maxVisual.auraRadius, 430, 'level-eight aura should be larger than level five');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.deathFlameConfigs)), [
     {color:'#a000ff',damagePerSecond:45,duration:4,radius:90},
     {color:'#ff7a00',damagePerSecond:65,duration:5,radius:105},

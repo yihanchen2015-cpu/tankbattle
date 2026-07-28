@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>坦克大战 - 据点争夺</title>
-    <link rel="stylesheet" href="style.css?v=mastery-xp-9">
+    <link rel="stylesheet" href="style.css?v=new-modes-20">
     <base target="_blank">
 </head>
 <body>
@@ -25,19 +25,19 @@
                 </button>
                 <button class="mode-btn mode-sneak" id="btnModeSneak" onclick="selectMode('sneak')">
                     <span class="mode-name">🌙 绝地偷袭</span>
-                    <span class="mode-desc">10v30黑夜奇袭 | 无据点纯刺杀 | 潜入敌后摧毁基地 | 高风险高回报</span>
+                    <span class="mode-desc">10v30黑夜奇袭 | 可争夺成长据点 | 潜入敌后摧毁基地 | 高风险高回报</span>
                 </button>
-                <button class="mode-btn mode-ctf" id="btnModeCTF" onclick="selectMode('ctf')">
-                    <span class="mode-name">🏴 夺旗模式</span>
-                    <span class="mode-desc">夺取敌旗并送回基地 | 率先获得3分 | 团队机动作战</span>
+                <button class="mode-btn mode-escort" id="btnModeEscort" onclick="selectMode('escort')">
+                    <span class="mode-name">🚛 护送模式</span>
+                    <span class="mode-desc">蓝方护送VIP坦克从A点抵达B点 | 红方阻截并摧毁VIP</span>
                 </button>
-                <button class="mode-btn mode-infection" id="btnModeInfection" onclick="selectMode('infection')">
-                    <span class="mode-name">🧟 感染模式</span>
-                    <span class="mode-desc">幸存者对抗感染者 | 接触传播 | 阵营动态变化</span>
+                <button class="mode-btn mode-deathmatch" id="btnModeDeathmatch" onclick="selectMode('deathmatch')">
+                    <span class="mode-name">💀 死斗模式</span>
+                    <span class="mode-desc">没有据点和基地 | 纯击杀竞赛 | 率先达到50杀</span>
                 </button>
-                <button class="mode-btn mode-storm" id="btnModeStorm" onclick="selectMode('storm')">
-                    <span class="mode-name">🌪 风暴模式</span>
-                    <span class="mode-desc">安全区持续缩小 | 淘汰所有敌人 | 活到最后</span>
+                <button class="mode-btn mode-boss" id="btnModeBoss" onclick="selectMode('boss')">
+                    <span class="mode-name">👑 首领模式</span>
+                    <span class="mode-desc">争夺中央巨型BOSS最后一击 | 获得大量分数与全队增益</span>
                 </button>
                 <button class="mode-btn mode-custom" id="btnModeCustom" onclick="selectMode('custom')">
                     <span class="mode-name">🧰 自定义房间</span>
@@ -136,7 +136,7 @@
                 <div class="tutorial-step" data-step="5">
                     <h3>🏰 据点、基地与胜利条件</h3>
                     <p><strong style="color:#ffd700">据点</strong> - 地图上的菱形标记，停留可占领并获得团队积分；据点不再生成援军。</p>
-                    <p><strong style="color:#00d4ff">基地增援</strong> - 蓝方基地每 15 秒部署一辆坦克，红方基地每 10 秒部署一辆坦克；基地被摧毁后停止部署。</p>
+                    <p><strong style="color:#00d4ff">基地增援</strong> - 蓝红双方基地均每 15 秒部署一辆坦克；基地被摧毁后停止部署。</p>
                     <p><strong style="color:#ff4444">基地</strong> - 双方各有基地，摧毁敌方基地即可获胜！</p>
                     <p>胜利条件：摧毁敌方基地 / 时间结束时据点更多 / 全歼敌人</p>
                     <div class="tutorial-tip-box">
@@ -170,7 +170,7 @@
                     <h3>🎮 游戏模式</h3>
                     <div class="mode-intro-box classic">
                         <h4>🏛 经典模式</h4>
-                        <p>蓝方10辆坦克 vs 红方10辆坦克，在缩小后的紧凑地图争夺3个据点（海岛为5个）。据点负责计分，援军改由基地持续部署：蓝方每15秒一辆，红方每10秒一辆。</p>
+                        <p>蓝方10辆坦克 vs 红方10辆坦克，在缩小后的紧凑地图争夺3个据点（海岛为5个）。据点会随持有时间升级并每分钟产分，双方基地均每15秒部署一辆援军。</p>
                     </div>
                     <div class="mode-intro-box defense">
                         <h4>🛡 守点模式</h4>
@@ -178,19 +178,19 @@
                     </div>
                     <div class="mode-intro-box sneak">
                         <h4>🌙 绝地偷袭</h4>
-                        <p>蓝方10辆坦克深入敌后，面对红方30辆重兵把守。全程黑夜模式，无据点可占，唯一目标：摧毁红方基地。</p>
+                        <p>蓝方10辆坦克深入敌后，面对红方30辆重兵把守。全程黑夜模式，也可利用成长据点获取持续分数；主要目标仍是摧毁红方基地。</p>
                     </div>
-                    <div class="mode-intro-box">
-                        <h4>🏴 夺旗模式</h4>
-                        <p>夺取敌方旗帜并带回己方旗帜点。成功夺旗会贡献大量团队积分，对局结束后仍由总分决定胜负。</p>
+                    <div class="mode-intro-box escort">
+                        <h4>🚛 护送模式</h4>
+                        <p>蓝方靠近VIP并清除附近红军，护送它从A点驶向B点。VIP抵达终点蓝方胜利；VIP被摧毁则红方胜利。</p>
                     </div>
-                    <div class="mode-intro-box">
-                        <h4>🧟 感染模式</h4>
-                        <p>幸存者避免与感染者近距离接触；被感染后将加入感染阵营。</p>
+                    <div class="mode-intro-box deathmatch">
+                        <h4>💀 死斗模式</h4>
+                        <p>没有据点、没有基地、也不计算团队分数。双方持续增援，率先取得50次击杀的阵营立即获胜。</p>
                     </div>
-                    <div class="mode-intro-box">
-                        <h4>🌪 风暴模式</h4>
-                        <p>安全区不断缩小，毒圈外每秒至少受到 32 点伤害，离安全区越远伤害越高。</p>
+                    <div class="mode-intro-box boss">
+                        <h4>👑 首领模式</h4>
+                        <p>地图中心出现巨型BOSS坦克。拿到最后一击的阵营获得5,000分，并得到30秒全队攻防与机动增益。</p>
                     </div>
                 </div>
 
@@ -201,7 +201,8 @@
                         <li>击毁普通地面单位：<strong>+250 分</strong></li>
                         <li>击毁牛牛直升机：<strong>+300 分</strong></li>
                         <li>占领据点：<strong>+500 分</strong></li>
-                        <li>成功夺旗：<strong>+1,000 分</strong></li>
+                        <li>据点每持有1分钟：<strong>每级 +200 分</strong>，并自动升级</li>
+                        <li>首领最后一击：<strong>+5,000 分</strong></li>
                         <li>摧毁敌方基地：<strong>+10,000,000 分</strong></li>
                     </ul>
                     <p>HUD 实时显示“蓝 多少分 | 红 多少分”，下方公告栏会播报击杀、占点、夺旗和摧毁基地事件。</p>
@@ -228,6 +229,8 @@
                         <li><strong>地图对空惩罚</strong>：经典图防空雷达增幅高射伤害；沙漠有沙尘侧风；城市有楼群乱流；雪地会旋翼结冰；海岛有强海风且高射伤害更高；火山热气流会强制抬升；工厂钢架乱流会降低飞行速度。</li>
                         <li><strong>APS</strong>：每辆载具仅 4 次拦截，每次启动后需冷却 15 秒才能再次拦截。</li>
                         <li><strong>基地防御</strong>：基地拥有 50,000 HP，自动炮塔通常每 2 秒发射一枚基础伤害 120 的炮弹。</li>
+                        <li><strong>基地护盾</strong>：超过 3 辆红方 AI 进入蓝方基地 300 范围后启动；范围内蓝方坦克减伤 30%，并额外恢复每秒 6% 最大生命。围攻解除后护盾保留 6 秒。</li>
+                        <li><strong>中立狙击塔</strong>：地图中心固定生成 1 座，每 10 秒用大型紫色炮弹攻击当前个人分数最高的存活坦克，单发伤害 150；炮弹会被建筑、岩石等障碍物挡住。</li>
                         <li><strong>空投补给</strong>：战场会定期空投带降落伞的补给箱，任何阵营均可拾取，可修复生命并补充弹药和 1 次 APS。</li>
                         <li><strong>工程维修</strong>：多多号工程车按 R 可维修 175 范围内最残血的存活队友，不能维修自己。</li>
                         <li><strong>弹药架殉爆</strong>：车辆被击毁时，剩余弹药越多越可能殉爆；爆风会造成范围伤害，<strong>敌我不分</strong>并可能引发连锁殉爆。</li>
@@ -635,6 +638,7 @@
                 <button class="series-btn" data-series="xingchen" onclick="filterTanks('xingchen', this)">🟢 星辰系</button>
                 <button class="series-btn" data-series="duoduo" onclick="filterTanks('duoduo', this)">🟠 多多系</button>
                 <button class="series-btn" data-series="niuniu" onclick="filterTanks('niuniu', this)">🩵 牛牛系</button>
+                <button class="series-btn" id="aiSeriesFilterBtn" data-series="kimi" onclick="filterTanks('kimi', this)" hidden style="display:none">🟣 AI系</button>
             </div>
             <div class="tank-list" id="tankList"></div>
             </div>
@@ -736,13 +740,13 @@
                         </div>
                         <div class="config-row custom-reinforcement-row">
                             <label>蓝方增援间隔</label>
-                            <input type="range" id="customBlueSpawn" min="5" max="90" value="18">
-                            <span class="value-display" id="customBlueSpawnValue">18</span><span class="custom-unit">秒</span>
+                            <input type="range" id="customBlueSpawn" min="5" max="90" value="15">
+                            <span class="value-display" id="customBlueSpawnValue">15</span><span class="custom-unit">秒</span>
                         </div>
                         <div class="config-row custom-reinforcement-row">
                             <label>红方增援间隔</label>
-                            <input type="range" id="customRedSpawn" min="5" max="90" value="18">
-                            <span class="value-display" id="customRedSpawnValue">18</span><span class="custom-unit">秒</span>
+                            <input type="range" id="customRedSpawn" min="5" max="90" value="15">
+                            <span class="value-display" id="customRedSpawnValue">15</span><span class="custom-unit">秒</span>
                         </div>
                     </div>
                     <div class="custom-pool-head">
@@ -783,10 +787,10 @@
                     <span>Lv.2 · 300 XP：迷彩 / 被锁定 -10%</span>
                     <span>Lv.3 · 800 XP：金色炮弹 / 威力 +20%</span>
                     <span>Lv.4 · 1500 XP：灼热尾焰；Kimi 环绕 0/1 字样</span>
-                    <span>Lv.5 · 3000 XP：300范围光环；紫焰 45/秒，持续4秒</span>
-                    <span>Lv.6 · 5000 XP：速度+8% / 转向+10%；橙焰 65/秒，持续5秒</span>
-                    <span>Lv.7 · 7500 XP：生命+12% / 装甲+0.15；红焰 90/秒，持续6秒</span>
-                    <span>Lv.8 · 11000 XP：常规伤害+10%；金焰 120/秒，持续8秒</span>
+                    <span>Lv.5 · 3000 XP：300范围光环（攻+15% / 减伤15%）；紫焰 45/秒，持续4秒</span>
+                    <span>Lv.6 · 5000 XP：340范围光环（攻+17% / 减伤17%）；速度+8% / 转向+10%；橙焰 65/秒</span>
+                    <span>Lv.7 · 7500 XP：380范围光环（攻+20% / 减伤20%）；生命+12% / 装甲+0.15；红焰 90/秒</span>
+                    <span>Lv.8 · 11000 XP：430范围光环（攻+24% / 减伤24%）；常规伤害+10%；金焰 120/秒</span>
                 </div>
                 <div id="masteryList"></div>
                 <button type="button" class="mastery-close" onclick="document.getElementById('masteryPanel').style.display='none'">返回</button>
@@ -893,23 +897,23 @@
 
     <script src="vendor/three.min.js"></script>
     <script src="vendor/ammo.wasm.js"></script>
-    <script src="Config.js?v=death-delay-12"></script>
+    <script src="Config.js?v=new-modes-20"></script>
     <script src="Audio.js"></script>
-    <script src="Score.js"></script>
+    <script src="Score.js?v=new-modes-20"></script>
     <script src="Replay.js"></script>
-    <script src="BattleSystems.js"></script>
+    <script src="BattleSystems.js?v=mastery-quota-17"></script>
     <script src="TerrainDestruction.js"></script>
-    <script src="Achievement.js?v=quick-smoke-13"></script>
-    <script src="Progression.js?v=mastery-fx-11"></script>
-    <script src="Pathfinding.js?v=mastery-custom-2"></script>
-    <script src="UI.js?v=quick-smoke-13"></script>
-    <script src="Ultimate.js?v=mastery-fx-11"></script>
-    <script src="GameCore.js?v=quick-smoke-13"></script>
+    <script src="Achievement.js?v=new-modes-20"></script>
+    <script src="Progression.js?v=mastery-quota-17"></script>
+    <script src="Pathfinding.js?v=new-modes-20"></script>
+    <script src="UI.js?v=new-modes-20"></script>
+    <script src="Ultimate.js?v=new-modes-20"></script>
+    <script src="GameCore.js?v=new-modes-20"></script>
     <script src="MapMechanics.js?v=mastery-custom-2"></script>
     <script src="FactoryPhysics.js?v=mastery-custom-2"></script>
-    <script src="AI.js?v=mastery-effects-8"></script>
-    <script src="Combat.js?v=quick-smoke-13"></script>
-    <script src="Render.js?v=death-delay-12"></script>
-    <script src="ThreeRender.js?v=mastery-fx-11"></script>
+    <script src="AI.js?v=new-modes-20"></script>
+    <script src="Combat.js?v=new-modes-20"></script>
+    <script src="Render.js?v=new-modes-20"></script>
+    <script src="ThreeRender.js?v=new-modes-20"></script>
 </body>
 </html>
