@@ -274,8 +274,7 @@ function updateAITank(tank, dt) {
         nearestEnemy = bestTarget;
         minEnemyDist = Math.hypot(bestTarget.x - tank.x, bestTarget.y - tank.y);
     }
-    if(gameMode === 'escort' && isRedAI && escortData.vip && !escortData.vip.dead &&
-       (!nearestEnemy || minEnemyDist > 900)) {
+    if(gameMode === 'escort' && isRedAI && escortData.vip && !escortData.vip.dead) {
         nearestEnemy = escortData.vip;
         minEnemyDist = Math.hypot(nearestEnemy.x - tank.x, nearestEnemy.y - tank.y);
     }
@@ -349,22 +348,23 @@ function updateAITank(tank, dt) {
     if(tank.aiStateTimer <= 0) {
         tank.aiLastState = tank.aiState;
         
-        if (!hasAmmo && tank.aiState !== 'retreating') {
+        if(gameMode === 'escort' && tank.team === 'blue' && escortData.vip && !escortData.vip.dead) {
+            tank.aiState = 'escortRush';
+            tank.escortRushSpeedBoost = .18;
+            tank.aiStateTimer = 4;
+        }
+        else if(gameMode === 'escort' && isRedAI && escortData.vip && !escortData.vip.dead) {
+            tank.aiState = 'escortBlock';
+            tank.escortRushSpeedBoost = .12;
+            tank.aiStateTimer = 4;
+        }
+        else if (!hasAmmo && tank.aiState !== 'retreating') {
             tank.aiState = 'retreating';
             tank.aiStateTimer = 15;
         }
         else if(gameMode === 'deathmatch') {
             tank.aiState = nearestEnemy ? 'combat' : 'patrol';
             tank.aiStateTimer = nearestEnemy ? 3 : 6;
-        }
-        else if(gameMode === 'escort' && tank.team === 'blue' && escortData.vip && !escortData.vip.dead &&
-                (!nearestEnemy || minEnemyDist > 750)) {
-            tank.aiState = 'escortVIP';
-            tank.aiStateTimer = 4;
-        }
-        else if(gameMode === 'escort' && isRedAI && escortData.vip && !escortData.vip.dead) {
-            tank.aiState = 'combat';
-            tank.aiStateTimer = 4;
         }
         else if(tank.team === 'red' && gameMode === 'defense') {
             if(tank.hp < tank.maxHp * 0.3 && minEnemyDist < 300) { tank.aiState = 'retreating'; tank.aiStateTimer = 4; }
@@ -402,18 +402,46 @@ function updateAITank(tank, dt) {
     }
     
     switch(tank.aiState) {
-        case 'escortVIP': {
+        case 'escortRush': {
             const vip = escortData.vip;
             if(vip && !vip.dead) {
                 const slot = Math.max(0, aiTanks.filter(unit => unit.team === 'blue').indexOf(tank));
-                const angle = vip.angle + Math.PI + (slot % 5 - 2) * .42;
-                const radius = 105 + Math.floor(slot / 5) * 70;
-                targetX = vip.x + Math.cos(angle) * radius;
-                targetY = vip.y + Math.sin(angle) * radius;
-                stopDist = 45;
+                const routeAngle = Math.atan2(escortData.end.y - escortData.start.y, escortData.end.x - escortData.start.x);
+                const column = slot % 5 - 2;
+                const rank = Math.floor(slot / 5);
+                const forward = 155 - rank * 115;
+                const lateral = column * 105;
+                targetX = vip.x + Math.cos(routeAngle) * forward - Math.sin(routeAngle) * lateral;
+                targetY = vip.y + Math.sin(routeAngle) * forward + Math.cos(routeAngle) * lateral;
+                stopDist = 32;
                 usePathfinding = true;
             }
-            if(nearestEnemy && minEnemyDist < 850) shouldFire = true;
+            if(nearestEnemy && minEnemyDist < 1050) shouldFire = true;
+            break;
+        }
+        case 'escortBlock': {
+            const vip = escortData.vip;
+            if(vip && !vip.dead) {
+                const redUnits = aiTanks.filter(unit => unit.team === 'red');
+                const slot = Math.max(0, redUnits.indexOf(tank));
+                const routeAngle = Math.atan2(escortData.end.y - escortData.start.y, escortData.end.x - escortData.start.x);
+                const column = slot % 6 - 2.5;
+                const rank = Math.floor(slot / 6);
+                const remaining = Math.hypot(escortData.end.x - vip.x, escortData.end.y - vip.y);
+                const intercept = Math.min(Math.max(180, remaining - 120), 360 + rank * 150);
+                const lateral = column * 125;
+                targetX = vip.x + Math.cos(routeAngle) * intercept - Math.sin(routeAngle) * lateral;
+                targetY = vip.y + Math.sin(routeAngle) * intercept + Math.cos(routeAngle) * lateral;
+                if(minEnemyDist < 520) {
+                    targetX = vip.x;
+                    targetY = vip.y;
+                    stopDist = 210;
+                } else {
+                    stopDist = 45;
+                }
+                usePathfinding = true;
+                shouldFire = minEnemyDist < 1450;
+            }
             break;
         }
         case 'combat':
@@ -526,7 +554,7 @@ function updateAITank(tank, dt) {
 
     // 低等级 AI 会主动靠拢带光环的“大哥”。遇到贴脸威胁时允许临场闪避，
     // 其余时间回到编队槽位；多个战队的领队则使用平行行军通道，避免挤成一团。
-    if(squadLeader && squadLeader !== tank && !['retreating', 'escortVIP'].includes(tank.aiState)) {
+    if(squadLeader && squadLeader !== tank && !['retreating', 'escortRush', 'escortBlock'].includes(tank.aiState)) {
         const leaderDistance = Math.hypot(squadLeader.x - tank.x, squadLeader.y - tank.y);
         const auraRadius = squadLeader.masteryAuraRadius ||
             (typeof MASTERY_AURA_RADIUS !== 'undefined' ? MASTERY_AURA_RADIUS : 300);
@@ -703,7 +731,7 @@ function updateAITank(tank, dt) {
         }
     }
 
-    if (!hasAmmo && tank.aiState !== 'retreating' && tank.aiState !== 'capturing') {
+    if (gameMode !== 'escort' && !hasAmmo && tank.aiState !== 'retreating' && tank.aiState !== 'capturing') {
         const myBase2 = tank.team === 'blue' ? bases.blue : bases.red;
         if (myBase2) {
             tank.aiState = 'retreating';

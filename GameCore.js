@@ -41,7 +41,7 @@ function startGame() {
     const specialModeInfo = document.getElementById('specialModeInfo');
     if(specialModeInfo) {
         const labels = {
-            escort: '🚛 护送模式 - 保护或摧毁VIP坦克',
+            escort: '🚛 护送模式 - 黄金VIP与蓝军全力突击至B端',
             deathmatch: '💀 死斗模式 - 率先取得50次击杀',
             boss: '👑 首领模式 - 争夺巨型BOSS最后一击',
             custom: '🧰 自定义房间 - 规则、队伍与坦克池由房主定义'
@@ -262,14 +262,14 @@ function generateMap() {
         op.owner = 'red';
         op.level = 1;
     });
-    if(gameMode === 'deathmatch') {
+    if(['deathmatch', 'escort'].includes(gameMode)) {
         outposts = [];
         Object.values(bases).forEach(base => {
             if(!base) return;
             base.hidden = true;
             base.invulnerable = true;
         });
-    } else if(['escort', 'boss'].includes(gameMode)) {
+    } else if(gameMode === 'boss') {
         Object.values(bases).forEach(base => { if(base) base.invulnerable = true; });
     }
 
@@ -280,7 +280,26 @@ function generateMap() {
     if(typeof initializeDestructibleTerrain === 'function') initializeDestructibleTerrain();
     generateMapElements();
     if(typeof finalizeMapMechanicsElements === 'function') finalizeMapMechanicsElements();
-    if(gameMode !== 'boss') initializeNeutralSniperTower();
+    if(gameMode === 'escort') {
+        const endpoints = getEscortRouteEndpoints();
+        const safeRadius = Math.max(300, CONFIG.outpostRadius + 80);
+        obstacles = obstacles.filter(obstacle =>
+            Math.hypot(obstacle.x + obstacle.w / 2 - endpoints.start.x, obstacle.y + obstacle.h / 2 - endpoints.start.y) > safeRadius &&
+            Math.hypot(obstacle.x + obstacle.w / 2 - endpoints.end.x, obstacle.y + obstacle.h / 2 - endpoints.end.y) > safeRadius
+        );
+    }
+    if(!['boss', 'escort'].includes(gameMode)) initializeNeutralSniperTower();
+}
+
+function getEscortRouteEndpoints() {
+    const fallbackY = CONFIG.mapHeight / 2;
+    const baseCenter = (base, fallbackX) => base
+        ? {x: base.x + base.w / 2, y: base.y + base.h / 2}
+        : {x: fallbackX, y: fallbackY};
+    return {
+        start: baseCenter(bases.blue, Math.max(280, CONFIG.mapWidth * .06)),
+        end: baseCenter(bases.red, Math.min(CONFIG.mapWidth - 280, CONFIG.mapWidth * .94))
+    };
 }
 
 function initializeNeutralSniperTower() {

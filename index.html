@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>坦克大战 - 据点争夺</title>
-    <link rel="stylesheet" href="style.css?v=new-modes-20">
+    <link rel="stylesheet" href="style.css?v=mobile-scroll-23">
     <base target="_blank">
 </head>
 <body>
@@ -29,7 +29,7 @@
                 </button>
                 <button class="mode-btn mode-escort" id="btnModeEscort" onclick="selectMode('escort')">
                     <span class="mode-name">🚛 护送模式</span>
-                    <span class="mode-desc">蓝方护送VIP坦克从A点抵达B点 | 红方阻截并摧毁VIP</span>
+                    <span class="mode-desc">无基地突击战 | 黄金巨型VIP从地图A端冲向B端 | 蓝方强攻、红方全力阻截</span>
                 </button>
                 <button class="mode-btn mode-deathmatch" id="btnModeDeathmatch" onclick="selectMode('deathmatch')">
                     <span class="mode-name">💀 死斗模式</span>
@@ -56,6 +56,7 @@
             <button class="start-btn-secondary" id="btnTutorial" style="margin-top:8px;" onclick="startTutorial()">🎓 新手教程</button>
             <button class="start-btn-secondary" id="btnAchievements" style="margin-top:8px;" onclick="showAchievementPanel()">🏆 成就系统</button>
             <button class="start-btn-secondary" id="btnMastery" style="margin-top:8px;" onclick="showMasteryPanel()">★ 坦克熟练度</button>
+            <button class="start-btn-secondary" id="btnDailyTasks" style="margin-top:8px;" onclick="showDailyTasksPanel()">📅 每日任务 0/4</button>
         </div>
 
         <!-- ========== 新手教程弹窗 ========== -->
@@ -182,7 +183,7 @@
                     </div>
                     <div class="mode-intro-box escort">
                         <h4>🚛 护送模式</h4>
-                        <p>蓝方靠近VIP并清除附近红军，护送它从A点驶向B点。VIP抵达终点蓝方胜利；VIP被摧毁则红方胜利。</p>
+                        <p>地图不设基地和普通据点，A、B分别位于地图两端。巨型全金VIP会持续向B点突击，蓝方AI围绕它全力推进，红方AI在前方组成阻击线；红军贴近会让VIP减速，但不会令它停车。</p>
                     </div>
                     <div class="mode-intro-box deathmatch">
                         <h4>💀 死斗模式</h4>
@@ -796,6 +797,16 @@
                 <button type="button" class="mastery-close" onclick="document.getElementById('masteryPanel').style.display='none'">返回</button>
             </div>
         </div>
+        <div id="dailyTasksPanel" style="display:none;">
+            <div class="daily-tasks-panel-content">
+                <h2>📅 每日任务</h2>
+                <p id="dailyTaskSummary"></p>
+                <div id="dailySignInControls"></div>
+                <div id="dailyTaskList"></div>
+                <p class="daily-task-note">战斗任务达成后会自动发放经验；刷新页面不会重复领取。</p>
+                <button type="button" class="daily-task-close" onclick="document.getElementById('dailyTasksPanel').style.display='none'">返回</button>
+            </div>
+        </div>
         <div id="gameUI">
             <div id="hud">
                 <div>HP: <div class="hp-bar"><div class="hp-fill" id="playerHp" style="width:100%"></div></div></div>
@@ -903,17 +914,18 @@
     <script src="Replay.js"></script>
     <script src="BattleSystems.js?v=mastery-quota-17"></script>
     <script src="TerrainDestruction.js"></script>
-    <script src="Achievement.js?v=new-modes-20"></script>
+    <script src="Achievement.js?v=daily-tasks-22"></script>
     <script src="Progression.js?v=mastery-quota-17"></script>
-    <script src="Pathfinding.js?v=new-modes-20"></script>
-    <script src="UI.js?v=new-modes-20"></script>
+    <script src="DailyTasks.js?v=daily-tasks-22"></script>
+    <script src="Pathfinding.js?v=escort-rush-21"></script>
+    <script src="UI.js?v=daily-tasks-22"></script>
     <script src="Ultimate.js?v=new-modes-20"></script>
-    <script src="GameCore.js?v=new-modes-20"></script>
+    <script src="GameCore.js?v=escort-rush-21"></script>
     <script src="MapMechanics.js?v=mastery-custom-2"></script>
     <script src="FactoryPhysics.js?v=mastery-custom-2"></script>
-    <script src="AI.js?v=new-modes-20"></script>
+    <script src="AI.js?v=escort-rush-21"></script>
     <script src="Combat.js?v=new-modes-20"></script>
-    <script src="Render.js?v=new-modes-20"></script>
-    <script src="ThreeRender.js?v=new-modes-20"></script>
+    <script src="Render.js?v=escort-rush-21"></script>
+    <script src="ThreeRender.js?v=escort-rush-21"></script>
 </body>
 </html>

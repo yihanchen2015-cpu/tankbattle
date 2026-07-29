@@ -24,6 +24,6 @@ assert(combat.includes('const distance = atFeet ? 0 : 95'), 'quick smoke should 
 assert(achievements.includes("id: 'smokeRookie'") && achievements.includes("id: 'quickSmokeExpert'"), 'smoke achievements should exist');
 assert(achievements.includes("id: 'fieldRefit'") && achievements.includes("id: 'battleHardened'"), 'damage-upgrade achievements should exist');
 assert(achievements.includes('function recordSmokeDeployment') && achievements.includes('function recordDamageUpgrade'), 'new achievement progress should be recorded');
-assert(html.includes('Achievement.js?v=new-modes-20') && html.includes('UI.js?v=new-modes-20') && html.includes('Combat.js?v=new-modes-20'), 'changed scripts should use fresh cache keys');
+assert(html.includes('Achievement.js?v=daily-tasks-22') && html.includes('UI.js?v=daily-tasks-22') && html.includes('Combat.js?v=new-modes-20'), 'changed scripts should use fresh cache keys');
 
 console.log('Latest feature smoke test passed.');

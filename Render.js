@@ -486,6 +486,128 @@ function drawTankLevelLabel(tank, x, y) {
     ctx.restore();
 }
 
+function drawEscortVIPTank(tank) {
+    const altitudeOffset = Math.max(0, tank.z || 0) * ALTITUDE_DRAW_SCALE;
+    const renderY = tank.y - altitudeOffset;
+    const size = CONFIG.tankSize * (tank.visualScale || 2.2);
+    const pulse = .72 + Math.sin(Date.now() * .006) * .16;
+    const hitFlash = Math.min(1, Math.max(0, (tank.hitFlashTimer || 0) / .18));
+
+    ctx.save();
+    ctx.translate(tank.x, renderY);
+    ctx.rotate(tank.angle || 0);
+    if(hitFlash > 0) ctx.filter = `brightness(${1.25 + hitFlash * 1.4})`;
+
+    ctx.fillStyle = 'rgba(255,205,25,.12)';
+    ctx.strokeStyle = `rgba(255,226,75,${pulse})`;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, size * 1.35, size * .92, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(65,42,0,.36)';
+    ctx.beginPath();
+    ctx.ellipse(10, 12, size * 1.03, size * .68, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const darkGold = '#a86e00';
+    const midGold = '#e7a900';
+    const brightGold = '#ffd21f';
+    const paleGold = '#fff2a1';
+    ctx.fillStyle = darkGold;
+    ctx.strokeStyle = paleGold;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(-size * .92, -size * .69, size * 1.88, size * .28, 9); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(-size * .92, size * .41, size * 1.88, size * .28, 9); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#f5bd12';
+    for(let x = -size * .82; x <= size * .82; x += size * .22) {
+        ctx.fillRect(x, -size * .66, size * .08, size * .22);
+        ctx.fillRect(x, size * .44, size * .08, size * .22);
+    }
+
+    const hullGradient = ctx.createLinearGradient(-size, -size * .6, size, size * .6);
+    hullGradient.addColorStop(0, midGold);
+    hullGradient.addColorStop(.42, paleGold);
+    hullGradient.addColorStop(.65, brightGold);
+    hullGradient.addColorStop(1, '#b77900');
+    ctx.fillStyle = hullGradient;
+    ctx.strokeStyle = '#fff6bd';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(size * 1.03, 0);
+    ctx.lineTo(size * .72, -size * .58);
+    ctx.lineTo(-size * .68, -size * .62);
+    ctx.lineTo(-size * .92, 0);
+    ctx.lineTo(-size * .68, size * .62);
+    ctx.lineTo(size * .72, size * .58);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(126,77,0,.32)';
+    ctx.beginPath(); ctx.roundRect(-size * .45, -size * .42, size * 1.02, size * .2, 7); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(-size * .45, size * .22, size * 1.02, size * .2, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,225,.65)';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-size * .55, 0); ctx.lineTo(size * .75, 0); ctx.stroke();
+
+    ctx.save();
+    ctx.rotate((tank.turretAngle || 0) - (tank.angle || 0));
+    const barrelLength = size * 1.18;
+    const barrelGradient = ctx.createLinearGradient(0, -8, barrelLength, 8);
+    barrelGradient.addColorStop(0, '#c88700');
+    barrelGradient.addColorStop(.55, '#ffe46a');
+    barrelGradient.addColorStop(1, '#ba7600');
+    ctx.fillStyle = barrelGradient;
+    ctx.strokeStyle = '#fff3a6';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(0, -size * .085, barrelLength, size * .17, 6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#8b5900';
+    ctx.beginPath(); ctx.roundRect(barrelLength - size * .06, -size * .14, size * .25, size * .28, 5); ctx.fill(); ctx.stroke();
+
+    const turretGradient = ctx.createRadialGradient(-size * .15, -size * .18, 2, 0, 0, size * .52);
+    turretGradient.addColorStop(0, '#fff6b8');
+    turretGradient.addColorStop(.5, '#ffd21f');
+    turretGradient.addColorStop(1, '#a96d00');
+    ctx.fillStyle = turretGradient;
+    ctx.strokeStyle = '#fff8c9';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, size * .55, size * .43, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = paleGold;
+    ctx.beginPath(); ctx.arc(-size * .08, -size * .08, size * .15, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = '#fff4a8';
+    ctx.font = `900 ${Math.max(18, size * .28)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('VIP', -size * .18, 1);
+    ctx.restore();
+
+    const hpRatio = Math.max(0, tank.hp / Math.max(1, tank.maxHp));
+    const barW = 150;
+    const barY = renderY - size * .82;
+    ctx.fillStyle = 'rgba(28,18,0,.82)';
+    ctx.beginPath(); ctx.roundRect(tank.x - barW / 2 - 3, barY - 3, barW + 6, 14, 7); ctx.fill();
+    const hpGradient = ctx.createLinearGradient(tank.x - barW / 2, 0, tank.x + barW / 2, 0);
+    hpGradient.addColorStop(0, '#d99000');
+    hpGradient.addColorStop(1, '#fff178');
+    ctx.fillStyle = hpGradient;
+    ctx.beginPath(); ctx.roundRect(tank.x - barW / 2, barY, barW * hpRatio, 8, 4); ctx.fill();
+    ctx.fillStyle = '#ffe66d';
+    ctx.font = '900 15px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.shadowColor = '#5c3600';
+    ctx.shadowBlur = 6;
+    ctx.fillText(`👑 黄金VIP · Lv.${tank.masteryLevel || 5}`, tank.x, barY - 8);
+    ctx.shadowBlur = 0;
+}
+
 
 function drawHelicopter(tank) {
     const altitudeOffset = (tank.z || 0) * ALTITUDE_DRAW_SCALE;
@@ -651,6 +773,10 @@ function drawHelicopter(tank) {
 }
 
 function drawTank(tank) {
+    if(tank.isEscortVIP) {
+        drawEscortVIPTank(tank);
+        return;
+    }
     if(tank.shape === 'helicopter') {
         drawHelicopter(tank);
         drawMuzzleFlash(tank);
@@ -2195,10 +2321,10 @@ function updateOutpostInfo() {
     const container = document.getElementById('outpostInfo');
     if(!container) return;
     container.innerHTML = '';
-    if(gameMode === 'deathmatch') {
+    if(gameMode === 'deathmatch' || gameMode === 'escort') {
         const dot = document.createElement('div');
         dot.className = 'outpost-dot neutral';
-        dot.textContent = '无据点';
+        dot.textContent = gameMode === 'escort' ? 'A → B · 护送突击' : '无据点';
         container.appendChild(dot);
         return;
     }
@@ -2580,9 +2706,14 @@ function renderStormMode() {
 }
 
 function initEscortMode() {
-    const ordered = [...outposts].sort((a, b) => a.x - b.x);
-    const start = ordered[0] || {x: CONFIG.mapWidth * .18, y: CONFIG.mapHeight * .5};
-    const end = ordered[ordered.length - 1] || {x: CONFIG.mapWidth * .82, y: CONFIG.mapHeight * .5};
+    const endpoints = typeof getEscortRouteEndpoints === 'function'
+        ? getEscortRouteEndpoints()
+        : {
+            start: {x: Math.max(280, CONFIG.mapWidth * .06), y: CONFIG.mapHeight * .5},
+            end: {x: Math.min(CONFIG.mapWidth - 280, CONFIG.mapWidth * .94), y: CONFIG.mapHeight * .5}
+        };
+    const start = endpoints.start;
+    const end = endpoints.end;
     escortData = {
         vip: null,
         start: {x: start.x, y: start.y},
@@ -2598,21 +2729,26 @@ function initEscortMode() {
     vip.id = 'escort-vip';
     vip.isEscortVIP = true;
     vip.name = 'VIP坦克';
-    vip.hp = vip.maxHp = Math.max(6500, vip.maxHp * 4);
-    vip.armor = Math.max(2.2, vip.armor);
-    vip.speed = Math.min(vip.speed, 2.8);
+    vip.hp = vip.maxHp = Math.max(12000, vip.maxHp * 5);
+    vip.armor = Math.max(2.6, vip.armor);
+    vip.speed = 3.2;
     vip.shells = 0;
     vip.mg = 0;
     vip.aa = 0;
-    vip.visualScale = 1.35;
-    vip.hitRadius = 48;
+    vip.color = '#ffd21f';
+    vip.accent = '#fff1a0';
+    vip.baseColor = '#ffd21f';
+    vip.baseAccent = '#fff1a0';
+    vip.exhaustColor = '#ffd84a';
+    vip.visualScale = 2.2;
+    vip.hitRadius = 74;
     vip.invincible = 5;
     vip.masteryAura = false;
     vip.masteryAuraRadius = 0;
     escortData.vip = vip;
     allies.push(vip);
     aiTanks.push(vip);
-    if(typeof showNotification === 'function') showNotification('蓝方护送VIP：靠近它并清除红方阻截！', '#ffad32');
+    if(typeof showNotification === 'function') showNotification('护送突击开始：金色VIP与蓝军全力冲向B点！', '#ffd21f');
 }
 
 function updateEscortVIPTank(vip, dt) {
@@ -2633,14 +2769,17 @@ function updateEscortVIPTank(vip, dt) {
     const redBlockers = enemies.filter(tank =>
         tank && !tank.dead && Math.hypot(tank.x - vip.x, tank.y - vip.y) <= escortData.contestRadius
     );
-    vip.escortActive = blueEscorts.length > 0 && redBlockers.length === 0;
+    vip.escortActive = blueEscorts.length > 0;
     vip.escortContested = redBlockers.length > 0;
     const distanceToEnd = Math.hypot(vip.x - escortData.end.x, vip.y - escortData.end.y);
     if(distanceToEnd <= 150) {
         escortData.reached = true;
         return;
     }
-    if(!vip.escortActive || !vip.canMove) return;
+    if(!vip.canMove) return;
+    const speedFactor = vip.escortContested ? .45 : (vip.escortActive ? 1.15 : .82);
+    const normalSpeed = vip.speed;
+    vip.speed = normalSpeed * speedFactor;
     escortData.pathRefresh -= dt;
     if(escortData.pathRefresh <= 0 || !vip.path || vip.path.length === 0) {
         const route = aStar({x: vip.x, y: vip.y}, escortData.end, vip.factoryFloor);
@@ -2658,6 +2797,7 @@ function updateEscortVIPTank(vip, dt) {
             vip.y = ny;
         }
     }
+    vip.speed = normalSpeed;
     vip.turretAngle = vip.angle;
 }
 
@@ -2827,7 +2967,7 @@ function renderEscortMode() {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 15px Arial';
     ctx.textAlign = 'center';
-    const status = vip.escortContested ? '红方阻截中' : vip.escortActive ? 'VIP前进中' : '等待蓝方护送';
+    const status = vip.escortContested ? '强行突破中（减速）' : vip.escortActive ? '蓝方全速推进' : 'VIP自主推进';
     ctx.fillText(`VIP ${Math.ceil(vip.hp)}/${vip.maxHp} · ${status} · ${Math.round(progress * 100)}%`, canvas.width / 2, 38);
     ctx.restore();
 }

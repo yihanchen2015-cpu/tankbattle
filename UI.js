@@ -42,15 +42,18 @@ function closeInfoPanels(exceptId = '') {
     const tutorial = document.getElementById('tutorialOverlay');
     const achievements = document.getElementById('achievementPanel');
     const mastery = document.getElementById('masteryPanel');
+    const dailyTasks = document.getElementById('dailyTasksPanel');
     if(intro && exceptId !== 'introModal') intro.classList.remove('active');
     if(tutorial && exceptId !== 'tutorialOverlay') tutorial.classList.remove('active');
     if(achievements && exceptId !== 'achievementPanel') achievements.style.display = 'none';
     if(mastery && exceptId !== 'masteryPanel') mastery.style.display = 'none';
+    if(dailyTasks && exceptId !== 'dailyTasksPanel') dailyTasks.style.display = 'none';
 }
 
 function init() {
     console.log('[INIT] 游戏初始化开始');
     loadStats();
+    if(typeof initializeDailyTasks === 'function') initializeDailyTasks();
     checkHiddenTankUnlocks();
     setupAchievementPanel();
     console.log('[INIT] 游戏初始化完成');
@@ -327,7 +330,7 @@ function selectMode(mode) {
     } else if(mode === 'escort') {
         badge.className = 'mode-badge escort';
         badge.textContent = '🚛 护送模式';
-        subtitle.textContent = '蓝方护送VIP从A点抵达B点 | 红方阻截';
+        subtitle.textContent = '无基地 | 黄金巨型VIP从地图A端强攻至B端 | 红方全力阻截';
         dayNightRow.style.display = 'none';
     } else if(mode === 'deathmatch') {
         badge.className = 'mode-badge deathmatch';

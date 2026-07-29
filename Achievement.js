@@ -311,7 +311,7 @@ let playerStats = {
     escortWins: 0, deathmatchWins: 0, bossWins: 0, defenseWins: 0, sneakWins: 0,
     totalWins: 0, comebackWins: 0, maxSpeedReached: 0, ghostKills: 0,
     perfectGames: 0, modesWon: [], tanksUsed: [], seriesUsed: [], oneShotKills: 0,
-    unlockedAchievements: [], unlockedTanks: [], tankMastery: {}, matchStartTime: 0,
+    unlockedAchievements: [], unlockedTanks: [], tankMastery: {}, dailyTasks: null, matchStartTime: 0,
     currentLowHpTime: 0, currentMatchLowHpAwarded: false
 };
 let currentMatchMasterySettled = false;
@@ -331,6 +331,7 @@ function loadStats() {
     if(!playerStats.tankMastery || typeof playerStats.tankMastery !== 'object' || Array.isArray(playerStats.tankMastery)) {
         playerStats.tankMastery = {};
     }
+    if(playerStats.dailyTasks && typeof playerStats.dailyTasks !== 'object') playerStats.dailyTasks = null;
 }
 
 function saveStats() {
@@ -495,6 +496,12 @@ function endMatchStats(result) {
                 recordTankMasteryResult(selectedTank, result === 'victory');
             }
         }
+        if(typeof recordDailyTaskMatchResult === 'function') {
+            recordDailyTaskMatchResult(selectedTank, {
+                victory: result === 'victory',
+                survivalSeconds: matchTime
+            });
+        }
     }
     const masteryXp = document.getElementById('resultMasteryXp');
     if(masteryXp) {
@@ -528,6 +535,7 @@ function recordKill(tank, target, hitInfo = null) {
         }
 
         if(typeof recordTankMasteryKill === 'function') recordTankMasteryKill(tank.tankType);
+        if(typeof recordDailyTaskKill === 'function') recordDailyTaskKill(tank.tankType);
         checkAchievements();
     }
 }

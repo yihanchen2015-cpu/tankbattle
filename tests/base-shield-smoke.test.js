@@ -106,6 +106,6 @@ const threeRender = fs.readFileSync('ThreeRender.js', 'utf8');
 const html = fs.readFileSync('index.html', 'utf8');
 assert(render.includes('基地护盾 · 敌军'), '2D mode should render the base shield range and attacker count');
 assert(threeRender.includes('shieldField') && threeRender.includes('shieldRing'), '3D mode should render a shield field and ring');
-assert(html.includes('Config.js?v=new-modes-20') && html.includes('ThreeRender.js?v=new-modes-20'), 'changed scripts should use fresh cache keys');
+assert(html.includes('Config.js?v=new-modes-20') && html.includes('ThreeRender.js?v=escort-rush-21'), 'changed scripts should use fresh cache keys');
 
 console.log('Base shield smoke test passed:', result);

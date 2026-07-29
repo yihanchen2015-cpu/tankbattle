@@ -1034,8 +1034,37 @@ function createThreeTank(tank) {
     rescueShield.visible = false;
     group.add(rescueShield);
     group.userData.rescueShield = rescueShield;
+    if(tank.isEscortVIP) {
+        const crown = new THREE.Group();
+        const crownMaterial = makeStandardMaterial(0xffd21f, {
+            emissive: 0x9a5f00,
+            emissiveIntensity: 1.8,
+            metalness: .7,
+            roughness: .2
+        });
+        const crownBase = new THREE.Mesh(new THREE.TorusGeometry(1.5, .28, 10, 32), crownMaterial);
+        crownBase.rotation.x = Math.PI / 2;
+        for(let index = 0; index < 5; index++) {
+            const spike = new THREE.Mesh(new THREE.ConeGeometry(.34, 1.8, 8), crownMaterial.clone());
+            const angle = index / 5 * Math.PI * 2;
+            spike.position.set(Math.cos(angle) * 1.15, 1.0, Math.sin(angle) * 1.15);
+            crown.add(spike);
+        }
+        crown.add(crownBase);
+        crown.position.y = 4.4;
+        group.add(crown);
+        group.userData.vipCrown = crown;
+    }
     group.traverse(child => {
         if(!child.isMesh) return;
+        if(tank.isEscortVIP && child.material && child.material.isMeshStandardMaterial) {
+            child.material = child.material.clone();
+            child.material.color.setHex(0xffd21f);
+            child.material.emissive.setHex(0x7a4700);
+            child.material.emissiveIntensity = Math.max(1.05, child.material.emissiveIntensity || 0);
+            child.material.metalness = Math.max(.58, child.material.metalness || 0);
+            child.material.roughness = Math.min(.3, child.material.roughness || .3);
+        }
         child.castShadow = true;
         child.receiveShadow = true;
         child.userData.baseOpacity = child.material.opacity;
@@ -1103,6 +1132,11 @@ function syncThreeTanks(now) {
             }
         }
         if(mesh.userData.rotor) mesh.userData.rotor.rotation.y = now * 0.022;
+        if(mesh.userData.vipCrown) {
+            mesh.userData.vipCrown.rotation.y = now * .0012;
+            const crownPulse = 1 + Math.sin(now * .006) * .08;
+            mesh.userData.vipCrown.scale.setScalar(crownPulse);
+        }
         if(mesh.userData.fire) {
             mesh.userData.fire.visible = !!tank.helicopterOnFire;
             if(tank.helicopterOnFire) {
@@ -2036,12 +2070,12 @@ function syncThreeHud() {
         const nameLabel = label.querySelector('.three-tank-name');
         const hpFill = label.querySelector('.three-tank-hp-fill');
         if(levelLabel) {
-            levelLabel.textContent = tank.isBoss ? '👑 BOSS' : `★ Lv.${level}`;
-            levelLabel.style.color = '#f2f4f7';
+            levelLabel.textContent = tank.isBoss ? '👑 BOSS' : tank.isEscortVIP ? '👑 VIP' : `★ Lv.${level}`;
+            levelLabel.style.color = tank.isEscortVIP ? '#ffd84a' : '#f2f4f7';
         }
         if(nameLabel) {
-            nameLabel.textContent = tank.isBoss ? '巨型首领坦克' : tank.isEscortVIP ? 'VIP坦克' : (tankData ? tankData.name : tank.tankType);
-            nameLabel.style.color = tank.isBoss ? '#d290ff' : tank.team === 'blue' ? '#55a7ff' : '#ff5555';
+            nameLabel.textContent = tank.isBoss ? '巨型首领坦克' : tank.isEscortVIP ? '黄金VIP坦克' : (tankData ? tankData.name : tank.tankType);
+            nameLabel.style.color = tank.isBoss ? '#d290ff' : tank.isEscortVIP ? '#ffe36a' : tank.team === 'blue' ? '#55a7ff' : '#ff5555';
         }
         if(hpFill) {
             const hpRatio = Math.max(0, Math.min(1, tank.hp / Math.max(1, tank.maxHp)));
@@ -2049,7 +2083,11 @@ function syncThreeHud() {
             hpFill.style.background = hpRatio > .6 ? '#00e98a' : hpRatio > .3 ? '#ffad2e' : '#ff4655';
         }
         const hiddenGhost = tank.team !== player.team && tank.ghostActive && !tank.ghostRevealed;
-        const point = hiddenGhost ? null : projectThreeHudPoint(tank.x, tank.y, (tank.z || 0) + (tank.isFlying ? 76 : 68));
+        const point = hiddenGhost ? null : projectThreeHudPoint(
+            tank.x,
+            tank.y,
+            (tank.z || 0) + (tank.isFlying ? 76 : tank.isEscortVIP ? 125 : tank.isBoss ? 118 : 68)
+        );
         positionThreeHudElement(label, point, tank === player ? 1 : 0.9);
     });
     for(const [id, label] of threeView.tankLabels) {
