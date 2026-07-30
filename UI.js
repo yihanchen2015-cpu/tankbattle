@@ -609,7 +609,6 @@ function setupControls() {
         if(e.code === 'BracketRight' && !e.repeat) adjustGunElevation(CONFIG.gunElevationStep);
         if(e.code === 'KeyG') activateUltimate();
         if(e.code === 'KeyR' && !e.repeat && typeof attemptEngineerRepair === 'function') attemptEngineerRepair(player, true);
-        if(e.code === 'KeyV' && !e.repeat) toggleViewMode();
         if(e.code === 'KeyY' && player) {
             toggleAutoAim(player);
         }
@@ -775,7 +774,7 @@ let juiceCueTimer = 0;
 let juiceCueLastAt = 0;
 let juiceCueStreak = 0;
 
-function showJuiceCue(title, subtitle = '', color = '#ff9a3d', intensity = 1) {
+function showJuiceCue(title, subtitle = '', color = '#ff9a3d', intensity = 1, kickerText = '') {
     const cue = document.getElementById('juiceCue');
     if(!cue || (typeof gameState !== 'undefined' && gameState !== 'playing')) return false;
     const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
@@ -784,7 +783,7 @@ function showJuiceCue(title, subtitle = '', color = '#ff9a3d', intensity = 1) {
     const kicker = document.getElementById('juiceCueKicker');
     const titleElement = document.getElementById('juiceCueTitle');
     const subtitleElement = document.getElementById('juiceCueSubtitle');
-    if(kicker) kicker.textContent = juiceCueStreak > 1 ? `物理连击 ×${juiceCueStreak}` : '工厂暴力美学';
+    if(kicker) kicker.textContent = kickerText || (juiceCueStreak > 1 ? `物理连击 ×${juiceCueStreak}` : '工厂暴力美学');
     if(titleElement) titleElement.textContent = title;
     if(subtitleElement) subtitleElement.textContent = subtitle;
     cue.style.setProperty('--juice-color', color);

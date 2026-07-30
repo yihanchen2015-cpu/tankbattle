@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>坦克大战 - 据点争夺</title>
-    <link rel="stylesheet" href="style.css?v=mobile-scroll-23">
+    <link rel="stylesheet" href="style.css?v=three-only-26">
     <base target="_blank">
 </head>
 <body>
@@ -12,9 +12,23 @@
     <div id="gameContainer">
         <!-- ========== 开始页面 ========== -->
         <div id="startScreen">
-            <div class="start-title">坦克大战</div>
-            <div class="mode-select-title">⚔ 选择游戏模式 ⚔</div>
-            <div class="mode-buttons">
+            <header class="start-hero">
+                <div class="start-kicker">THREE.JS · 3D 战术装甲对抗</div>
+                <div class="start-title">坦克大战</div>
+                <p class="start-subtitle">选择战役，驾驶你的专属坦克冲入战场</p>
+                <div class="start-highlights" aria-label="游戏特色">
+                    <span>◈ 真 3D 战场</span>
+                    <span>⚡ 强化升级</span>
+                    <span>💥 连续击杀反馈</span>
+                </div>
+            </header>
+
+            <main class="start-mode-panel">
+                <div class="mode-select-title">
+                    <span>选择战役</span>
+                    <small>7 种可用模式</small>
+                </div>
+                <div class="mode-buttons">
                 <button class="mode-btn mode-classic" id="btnModeClassic" onclick="selectMode('classic')">
                     <span class="mode-name">🏛 经典模式</span>
                     <span class="mode-desc">10v10据点争夺战 | 占领据点、摧毁敌方基地 | 标准对战体验</span>
@@ -43,20 +57,16 @@
                     <span class="mode-name">🧰 自定义房间</span>
                     <span class="mode-desc">自由设置地图、胜利规则、队伍规模、坦克池、弹药与增援</span>
                 </button>
-                <button class="mode-btn mode-pvp" id="btnModePVP" disabled>
-                    <span class="mode-name">🌐 PvP联机（开发中）</span>
-                    <span class="mode-desc">当前版本不包含网络服务器，不作为可用模式展示</span>
-                </button>
-                <button class="mode-btn mode-party" id="btnModeParty" disabled>
-                    <span class="mode-name">🎉 好友聚会（开发中）</span>
-                    <span class="mode-desc">当前版本不包含WebRTC房间服务</span>
-                </button>
-                  </div>
-            <button class="start-btn-secondary" id="btnGameIntro" onclick="showIntroPanel()">📖 游戏介绍</button>
-            <button class="start-btn-secondary" id="btnTutorial" style="margin-top:8px;" onclick="startTutorial()">🎓 新手教程</button>
-            <button class="start-btn-secondary" id="btnAchievements" style="margin-top:8px;" onclick="showAchievementPanel()">🏆 成就系统</button>
-            <button class="start-btn-secondary" id="btnMastery" style="margin-top:8px;" onclick="showMasteryPanel()">★ 坦克熟练度</button>
-            <button class="start-btn-secondary" id="btnDailyTasks" style="margin-top:8px;" onclick="showDailyTasksPanel()">📅 每日任务 0/4</button>
+                </div>
+            </main>
+
+            <nav class="start-actions" aria-label="档案与帮助">
+                <button class="start-btn-secondary" id="btnTutorial" onclick="startTutorial()">🎓 新手教程</button>
+                <button class="start-btn-secondary" id="btnMastery" onclick="showMasteryPanel()">★ 坦克熟练度</button>
+                <button class="start-btn-secondary" id="btnDailyTasks" onclick="showDailyTasksPanel()">📅 每日任务 0/4</button>
+                <button class="start-btn-secondary" id="btnAchievements" onclick="showAchievementPanel()">🏆 成就系统</button>
+                <button class="start-btn-secondary" id="btnGameIntro" onclick="showIntroPanel()">📖 游戏介绍</button>
+            </nav>
         </div>
 
         <!-- ========== 新手教程弹窗 ========== -->
@@ -250,7 +260,7 @@
                         <li><strong>1 / 2 / 3 / 4</strong>：直接选择武器；<strong>Q 键</strong>：地面载具在脚下快速展开烟雾弹；<strong>[ / ]</strong>：降低 / 提高主炮或高射炮仰角（机枪仰角固定）</li>
                         <li><strong>G 键 / 大招按钮</strong>：释放终极技能</li>
                         <li><strong>R 键 / 维修按钮</strong>：工程车维修范围内队友</li>
-                        <li><strong>V 键</strong>：实时切换 2D 俯视 / 3D 战术视角</li>
+                        <li><strong>战术视角</strong>：游戏统一使用 Three.js 真 3D 战场</li>
                         <li><strong>直升机高度</strong>：E / 空格上升，Q / Shift 下降</li>
                         <li><strong>移动端 / 平板</strong>：按触控能力显示摇杆，不再按屏幕宽度判断；直升机另有上升/下降按钮</li>
                         <li><strong>阵亡回放</strong>：使用独立 Three.js 3D 导演镜头，从致命炮弹发射开始以 0.3× 慢放跟随弹道；接近目标时镜头拉远，命中后环绕展示车体解体。</li>
@@ -260,7 +270,7 @@
 
                 <div class="intro-section">
                     <h3>◈ Three.js 真 3D 战场</h3>
-                    <p>在战斗前可选择 <strong>3D 战术视角</strong>，或在战斗中按 <strong>V</strong> 随时切换。3D 模式由 <strong>Three.js + WebGL</strong> 独立渲染，采用锁定地图北方的战术相机：镜头只平移、不会随坦克转弯旋转，W/S/A/D 始终对应屏幕上下左右。模式同时提供敌我名称牌、伤害飘字、据点进度和直升机预警。直升机与高射弹在战斗数据中都具有真实 Z 高度，高射弹使用垂直速度和重力计算弹道。</p>
+                    <p>战斗统一使用 <strong>Three.js + WebGL 真 3D 战场</strong>，采用锁定地图北方的战术相机：镜头只平移、不会随坦克转弯旋转，W/S/A/D 始终对应屏幕上下左右。战场同时提供敌我名称牌、玩家定位信标、伤害飘字、据点进度和直升机预警。直升机与高射弹在战斗数据中都具有真实 Z 高度，高射弹使用垂直速度和重力计算弹道。</p>
                 </div>
 
                 <div class="intro-section">
@@ -675,13 +685,6 @@
                     </select>
                 </div>
                 <div class="config-row">
-                    <label>🎥 画面视角</label>
-                    <select id="viewMode">
-                        <option value="2d">🗺 2D 俯视</option>
-                        <option value="3d">◈ 3D 战术视角</option>
-                    </select>
-                </div>
-                <div class="config-row">
                     <label>困难程度</label>
                     <select id="difficulty">
                         <option value="easy">简单</option>
@@ -785,13 +788,13 @@
                 <p id="masterySummary"></p>
                 <div class="mastery-unlock-guide">
                     <span>Lv.1 新兵：基础涂装</span>
-                    <span>Lv.2 · 300 XP：迷彩 / 被锁定 -10%</span>
-                    <span>Lv.3 · 800 XP：金色炮弹 / 威力 +20%</span>
+                    <span>Lv.2 · 300 XP：迷彩 / 被锁定 -18%</span>
+                    <span>Lv.3 · 800 XP：金色炮弹 / 威力 +35%</span>
                     <span>Lv.4 · 1500 XP：灼热尾焰；Kimi 环绕 0/1 字样</span>
-                    <span>Lv.5 · 3000 XP：300范围光环（攻+15% / 减伤15%）；紫焰 45/秒，持续4秒</span>
-                    <span>Lv.6 · 5000 XP：340范围光环（攻+17% / 减伤17%）；速度+8% / 转向+10%；橙焰 65/秒</span>
-                    <span>Lv.7 · 7500 XP：380范围光环（攻+20% / 减伤20%）；生命+12% / 装甲+0.15；红焰 90/秒</span>
-                    <span>Lv.8 · 11000 XP：430范围光环（攻+24% / 减伤24%）；常规伤害+10%；金焰 120/秒</span>
+                    <span>Lv.5 · 3000 XP：300范围光环（攻+22% / 减伤22%）；紫焰 70/秒，持续5秒</span>
+                    <span>Lv.6 · 5000 XP：340范围光环（攻+27% / 减伤27%）；速度+15% / 转向+18%；橙焰 100/秒</span>
+                    <span>Lv.7 · 7500 XP：380范围光环（攻+32% / 减伤32%）；生命+25% / 装甲+0.30；红焰 140/秒</span>
+                    <span>Lv.8 · 11000 XP：430范围光环（攻+40% / 减伤40%）；常规伤害+20%；金焰 190/秒</span>
                 </div>
                 <div id="masteryList"></div>
                 <button type="button" class="mastery-close" onclick="document.getElementById('masteryPanel').style.display='none'">返回</button>
@@ -808,30 +811,37 @@
             </div>
         </div>
         <div id="gameUI">
-            <div id="hud">
-                <div>HP: <div class="hp-bar"><div class="hp-fill" id="playerHp" style="width:100%"></div></div></div>
-                <div>武器: <span id="currentWeapon" style="color:#ffd700">主炮</span> | <span id="shellAmmoLabel">主炮</span>: <span id="shells">0</span> | <span id="mgAmmoLabel">机枪</span>: <span id="mg">0</span> | <span id="aaAmmoGroup">高射炮: <span id="aa">0</span></span> | <span id="smokeAmmoGroup">烟雾弹: <span id="smoke">0</span></span></div>
-                <div>APS: <span id="apsDisplay" style="color:#00d4ff">4</span> | 重量: <span id="weightDisplay" style="color:#ffaa00">0t</span></div>
-                <div id="teamScoreDisplay"><span class="score-blue">蓝 0分</span><b>|</b><span class="score-red">红 0分</span></div>
-                <div>蓝方据点: <span style="color:#4488ff" id="blueOutposts">0</span></div>
-                <div>红方据点: <span style="color:#ff4444" id="redOutposts">0</span></div>
-                <div id="autoAimStatus" style="color:#ffcc00;font-size:12px;display:none;">🎯 自动瞄准中</div>
-                <div id="environmentInfo" style="color:#bdeaff;font-size:12px;display:none;"></div>
+            <div id="leftHudStack">
+                <div id="hud">
+                    <div>HP: <div class="hp-bar"><div class="hp-fill" id="playerHp" style="width:100%"></div></div></div>
+                    <div>武器: <span id="currentWeapon" style="color:#ffd700">主炮</span> | <span id="shellAmmoLabel">主炮</span>: <span id="shells">0</span> | <span id="mgAmmoLabel">机枪</span>: <span id="mg">0</span> | <span id="aaAmmoGroup">高射炮: <span id="aa">0</span></span> | <span id="smokeAmmoGroup">烟雾弹: <span id="smoke">0</span></span></div>
+                    <div>APS: <span id="apsDisplay" style="color:#00d4ff">4</span> | 重量: <span id="weightDisplay" style="color:#ffaa00">0t</span></div>
+                    <div id="teamScoreDisplay"><span class="score-blue">蓝 0分</span><b>|</b><span class="score-red">红 0分</span></div>
+                    <div>蓝方据点: <span style="color:#4488ff" id="blueOutposts">0</span></div>
+                    <div>红方据点: <span style="color:#ff4444" id="redOutposts">0</span></div>
+                    <div id="autoAimStatus" style="color:#ffcc00;font-size:12px;display:none;">🎯 自动瞄准中</div>
+                    <div id="environmentInfo" style="color:#bdeaff;font-size:12px;display:none;"></div>
+                </div>
+                <div id="speedPenalty">⚠ 负重过多，移动速度降低</div>
+                <div id="ultimateBar">
+                    <div class="ultimate-label">⚡ 终极技能</div>
+                    <div class="ultimate-progress"><div class="ultimate-fill" id="ultimateFill"></div></div>
+                    <div class="ultimate-ready" id="ultimateReady">✓ 就绪 - 按 G 释放</div>
+                </div>
+                <div id="battleFeed" aria-live="polite"></div>
             </div>
-            <div id="battleFeed" aria-live="polite"></div>
-            <div id="weaponIndicator">1/2/3/4 选武器 · T切换 · [ / ] 调仰角</div>
-            <div id="viewModeIndicator" style="position:absolute;top:62px;left:50%;transform:translateX(-50%);color:#8ee8ff;font-size:13px;">🗺 2D俯视 · V切换</div>
-            <div id="timer">05:00</div>
-            <div id="defenseWaveInfo">🛡 守点模式 - 撑过 03:00</div>
-            <div id="sneakModeInfo">🌙 黑夜奇袭 - 摧毁敌方基地</div>
-            <div id="specialModeInfo" style="display:none;"></div>
+            <div id="centerHudStack">
+                <div id="timer">05:00</div>
+                <div id="modeStatus" aria-live="polite">
+                    <div id="modeStatusLabel"></div>
+                    <div class="mode-status-track"><div id="modeStatusFill"></div></div>
+                </div>
+                <div id="defenseWaveInfo">🛡 守点模式 - 撑过 03:00</div>
+                <div id="sneakModeInfo">🌙 黑夜奇袭 - 摧毁敌方基地</div>
+                <div id="specialModeInfo" style="display:none;"></div>
+                <div id="weaponIndicator">1/2/3/4 选武器 · T切换 · [ / ] 调仰角</div>
+            </div>
             <div id="suddenDeathBanner">⚔ 绝地肉搏 · 无限弹药</div>
-            <div id="speedPenalty">⚠ 负重过多，移动速度降低</div>
-            <div id="ultimateBar">
-                <div class="ultimate-label">⚡ 终极技能</div>
-                <div class="ultimate-progress"><div class="ultimate-fill" id="ultimateFill"></div></div>
-                <div class="ultimate-ready" id="ultimateReady">✓ 就绪 - 按 G 释放</div>
-            </div>
             <canvas id="minimap"></canvas>
             <div class="coord-display" id="coordDisplay">X: 0 | Y: 0</div>
             <div class="outpost-info" id="outpostInfo"></div>
@@ -918,14 +928,14 @@
     <script src="Progression.js?v=mastery-quota-17"></script>
     <script src="DailyTasks.js?v=daily-tasks-22"></script>
     <script src="Pathfinding.js?v=escort-rush-21"></script>
-    <script src="UI.js?v=daily-tasks-22"></script>
+    <script src="UI.js?v=three-only-26"></script>
     <script src="Ultimate.js?v=new-modes-20"></script>
-    <script src="GameCore.js?v=escort-rush-21"></script>
+    <script src="GameCore.js?v=three-only-26"></script>
     <script src="MapMechanics.js?v=mastery-custom-2"></script>
     <script src="FactoryPhysics.js?v=mastery-custom-2"></script>
     <script src="AI.js?v=escort-rush-21"></script>
     <script src="Combat.js?v=new-modes-20"></script>
-    <script src="Render.js?v=escort-rush-21"></script>
-    <script src="ThreeRender.js?v=escort-rush-21"></script>
+    <script src="Render.js?v=hud-layout-25"></script>
+    <script src="ThreeRender.js?v=three-only-26"></script>
 </body>
 </html>

@@ -1,33 +1,33 @@
 // ==================== 坦克熟练度 ====================
 const TANK_MASTERY_LEVELS = Object.freeze([
     { level: 1, xp: 0,     legacyMatches: 0,   name: '新兵', reward: '基础涂装' },
-    { level: 2, xp: 300,   legacyMatches: 3,   name: '斥候', reward: '战地迷彩：敌方锁定概率 -10%' },
-    { level: 3, xp: 800,   legacyMatches: 8,   name: '精英', reward: '金色描边：主炮弹变为金色，威力 +20%' },
+    { level: 2, xp: 300,   legacyMatches: 3,   name: '斥候', reward: '战地迷彩：敌方锁定概率 -18%' },
+    { level: 3, xp: 800,   legacyMatches: 8,   name: '精英', reward: '金色描边：主炮弹变为金色，威力 +35%' },
     { level: 4, xp: 1500,  legacyMatches: 15,  name: '老兵', reward: '灼热尾焰；Kimi 解锁二进制环绕特效' },
-    { level: 5, xp: 3000,  legacyMatches: 30,  name: '王牌', reward: '300范围王牌光环（攻防 +15%）；死亡留下紫色火焰' },
-    { level: 6, xp: 5000,  legacyMatches: 50,  name: '战术王牌', reward: '340范围光环（攻防 +17%）；速度 +8%，转向 +10%；橙色死亡火焰' },
-    { level: 7, xp: 7500,  legacyMatches: 75,  name: '传奇', reward: '380范围光环（攻防 +20%）；生命 +12%，装甲 +0.15；红色死亡火焰' },
-    { level: 8, xp: 11000, legacyMatches: 110, name: '战神', reward: '430范围光环（攻防 +24%）；常规武器伤害 +10%；金色死亡火焰' }
+    { level: 5, xp: 3000,  legacyMatches: 30,  name: '王牌', reward: '300范围王牌光环（攻击 +22% / 减伤22%）；强化紫焰' },
+    { level: 6, xp: 5000,  legacyMatches: 50,  name: '战术王牌', reward: '340范围光环（攻击 +27% / 减伤27%）；速度 +15%，转向 +18%' },
+    { level: 7, xp: 7500,  legacyMatches: 75,  name: '传奇', reward: '380范围光环（攻击 +32% / 减伤32%）；生命 +25%，装甲 +0.30' },
+    { level: 8, xp: 11000, legacyMatches: 110, name: '战神', reward: '430范围光环（攻击 +40% / 减伤40%）；常规武器伤害 +20%' }
 ]);
 
 const TANK_MASTERY_MAX_LEVEL = 8;
-const MASTERY_CAMOUFLAGE_EVASION = 0.10;
-const MASTERY_GOLDEN_SHELL_DAMAGE_MULT = 1.20;
-const MASTERY_TRAIL_DAMAGE_PER_SECOND = 55;
+const MASTERY_CAMOUFLAGE_EVASION = 0.18;
+const MASTERY_GOLDEN_SHELL_DAMAGE_MULT = 1.35;
+const MASTERY_TRAIL_DAMAGE_PER_SECOND = 75;
 const MASTERY_AURA_RADIUS = 300;
-const MASTERY_AURA_ATTACK_MULT = 1.15;
-const MASTERY_AURA_DEFENSE_MULT = 0.85;
+const MASTERY_AURA_ATTACK_MULT = 1.22;
+const MASTERY_AURA_DEFENSE_MULT = 0.78;
 const MASTERY_AURA_LEVELS = Object.freeze({
-    5: Object.freeze({ radius: 300, attackMult: 1.15, defenseMult: 0.85 }),
-    6: Object.freeze({ radius: 340, attackMult: 1.17, defenseMult: 0.83 }),
-    7: Object.freeze({ radius: 380, attackMult: 1.20, defenseMult: 0.80 }),
-    8: Object.freeze({ radius: 430, attackMult: 1.24, defenseMult: 0.76 })
+    5: Object.freeze({ radius: 300, attackMult: 1.22, defenseMult: 0.78 }),
+    6: Object.freeze({ radius: 340, attackMult: 1.27, defenseMult: 0.73 }),
+    7: Object.freeze({ radius: 380, attackMult: 1.32, defenseMult: 0.68 }),
+    8: Object.freeze({ radius: 430, attackMult: 1.40, defenseMult: 0.60 })
 });
-const MASTERY_TACTICAL_SPEED_MULT = 1.08;
-const MASTERY_TACTICAL_TURN_MULT = 1.10;
-const MASTERY_LEGENDARY_HP_MULT = 1.12;
-const MASTERY_LEGENDARY_ARMOR_BONUS = 0.15;
-const MASTERY_WARGOD_WEAPON_DAMAGE_MULT = 1.10;
+const MASTERY_TACTICAL_SPEED_MULT = 1.15;
+const MASTERY_TACTICAL_TURN_MULT = 1.18;
+const MASTERY_LEGENDARY_HP_MULT = 1.25;
+const MASTERY_LEGENDARY_ARMOR_BONUS = 0.30;
+const MASTERY_WARGOD_WEAPON_DAMAGE_MULT = 1.20;
 const MASTERY_LEVEL_COLORS = Object.freeze([
     '#aab4bd', '#78ad57', '#37bddd', '#4d83ff',
     '#a768ff', '#ff943d', '#ff4f75', '#ffd84a'
@@ -39,10 +39,10 @@ const MASTERY_AURA_COLORS = Object.freeze({
     8: '#ffd700'
 });
 const MASTERY_DEATH_FLAME_LEVELS = Object.freeze({
-    5: Object.freeze({ color: '#a000ff', damagePerSecond: 45, duration: 4, radius: 90 }),
-    6: Object.freeze({ color: '#ff7a00', damagePerSecond: 65, duration: 5, radius: 105 }),
-    7: Object.freeze({ color: '#ff1744', damagePerSecond: 90, duration: 6, radius: 120 }),
-    8: Object.freeze({ color: '#ffd700', damagePerSecond: 120, duration: 8, radius: 140 })
+    5: Object.freeze({ color: '#a000ff', damagePerSecond: 70, duration: 5, radius: 100 }),
+    6: Object.freeze({ color: '#ff7a00', damagePerSecond: 100, duration: 6, radius: 120 }),
+    7: Object.freeze({ color: '#ff1744', damagePerSecond: 140, duration: 7, radius: 140 }),
+    8: Object.freeze({ color: '#ffd700', damagePerSecond: 190, duration: 9, radius: 165 })
 });
 const AI_MASTERY_LEVEL_WEIGHTS = Object.freeze([30, 22, 16, 12, 8, 6, 4, 2]);
 

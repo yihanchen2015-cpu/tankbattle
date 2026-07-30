@@ -4,6 +4,7 @@ const vm = require('vm');
 
 const stored = new Map();
 const unlockedPopups = [];
+const killCues = [];
 const context = {
     console,
     Date,
@@ -20,7 +21,10 @@ const context = {
         getElementById() { return null; }
     },
     setTimeout() {},
-    showNotification() {}
+    showNotification() {},
+    showJuiceCue(...args) { killCues.push(args); },
+    awardKillScore() {},
+    getReplayTankName(target) { return target.name; }
 };
 
 vm.createContext(context);
@@ -69,5 +73,17 @@ assert.deepStrictEqual(
     'each new achievement should announce exactly once'
 );
 assert(stored.has('tankBattleStats'), 'new achievement counters should persist to local storage');
+
+vm.runInContext(`
+    resetMatchStats();
+    const killer = {isPlayer:true, tankType:'test', hp:100, maxHp:100, ghostActive:false};
+    recordKill(killer, {name:'目标一', maxHp:100, isPlayer:false});
+    recordKill(killer, {name:'目标二', maxHp:100, isPlayer:false});
+    recordKill(killer, {name:'目标三', maxHp:100, isPlayer:false});
+`, context);
+assert.strictEqual(killCues.length, 2, 'double and triple kills should each trigger a juice cue');
+assert.strictEqual(killCues[0][0], '二 杀！');
+assert.strictEqual(killCues[1][0], '三 杀！');
+assert.strictEqual(killCues[1][4], '连续击杀 ×3');
 
 console.log('Achievement progress smoke test passed:', result);

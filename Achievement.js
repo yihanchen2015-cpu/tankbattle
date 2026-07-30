@@ -316,6 +316,43 @@ let playerStats = {
 };
 let currentMatchMasterySettled = false;
 let lastMatchMasteryAward = null;
+const PLAYER_MULTI_KILL_WINDOW_MS = 4500;
+let playerMultiKillCount = 0;
+let playerMultiKillLastAt = 0;
+
+function resetPlayerMultiKill() {
+    playerMultiKillCount = 0;
+    playerMultiKillLastAt = 0;
+}
+
+function registerPlayerMultiKill(target) {
+    const now = Date.now();
+    playerMultiKillCount = now - playerMultiKillLastAt <= PLAYER_MULTI_KILL_WINDOW_MS
+        ? playerMultiKillCount + 1
+        : 1;
+    playerMultiKillLastAt = now;
+    if(playerMultiKillCount < 2 || typeof showJuiceCue !== 'function') return playerMultiKillCount;
+
+    const tiers = {
+        2: { title:'二 杀！', subtitle:'双重击破 · 火力升温', color:'#50e6ff', intensity:1.02 },
+        3: { title:'三 杀！', subtitle:'连续摧毁 · 势不可挡', color:'#ffe45c', intensity:1.10 },
+        4: { title:'疯 狂 四 杀！', subtitle:'战场收割 · 无人可挡', color:'#ff9a3d', intensity:1.16 },
+        5: { title:'五 连 绝 世！', subtitle:'主宰战场 · 全军震动', color:'#ff4f75', intensity:1.22 }
+    };
+    const tier = tiers[Math.min(5, playerMultiKillCount)] || tiers[5];
+    const targetName = target && typeof getReplayTankName === 'function' ? getReplayTankName(target) : '敌方单位';
+    const subtitle = playerMultiKillCount > 5
+        ? `连续 ${playerMultiKillCount} 杀 · ${targetName} 已摧毁`
+        : `${tier.subtitle} · ${targetName}`;
+    showJuiceCue(
+        playerMultiKillCount > 5 ? `主 宰 ×${playerMultiKillCount}！` : tier.title,
+        subtitle,
+        tier.color,
+        tier.intensity,
+        `连续击杀 ×${playerMultiKillCount}`
+    );
+    return playerMultiKillCount;
+}
 
 function loadStats() {
     try {
@@ -445,6 +482,7 @@ function showAchievementPopup(ach) {
 }
 
 function resetMatchStats() {
+    resetPlayerMultiKill();
     playerStats.currentMatchKills = 0;
     playerStats.currentMatchSurvivalTime = 0;
     playerStats.matchStartTime = Date.now();
@@ -515,7 +553,9 @@ function endMatchStats(result) {
 
 function recordKill(tank, target, hitInfo = null) {
     if(typeof awardKillScore === 'function') awardKillScore(tank, target);
+    if(target && target.isPlayer) resetPlayerMultiKill();
     if(tank.isPlayer) {
+        registerPlayerMultiKill(target);
         playerStats.currentMatchKills++;
         playerStats.kills++;
 

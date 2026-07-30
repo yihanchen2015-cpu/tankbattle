@@ -22,6 +22,6 @@ assert(startScreenBlock.includes('-webkit-overflow-scrolling: touch'), 'iOS shou
 assert(startScreenBlock.includes('env(safe-area-inset-bottom)'), 'the last main-menu button should clear the mobile safe area');
 
 const html = fs.readFileSync('index.html', 'utf8');
-assert(html.includes('style.css?v=mobile-scroll-23'), 'the scrollable start-screen stylesheet should use a fresh cache key');
+assert(html.includes('style.css?v=three-only-26'), 'the scrollable start-screen stylesheet should use a fresh cache key');
 
 console.log('Touch control style smoke test passed.');

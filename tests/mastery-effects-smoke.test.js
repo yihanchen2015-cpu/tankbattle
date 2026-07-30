@@ -239,10 +239,10 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(result.auraColors)), [
     '#a000ff', '#ff7a00', '#ff1744', '#ffd700'
 ], 'level-five-to-eight battle auras should come from independent pure-color constants');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.auraConfigs)), [
-    {radius:300,attackMult:1.15,defenseMult:.85},
-    {radius:340,attackMult:1.17,defenseMult:.83},
-    {radius:380,attackMult:1.20,defenseMult:.80},
-    {radius:430,attackMult:1.24,defenseMult:.76}
+    {radius:300,attackMult:1.22,defenseMult:.78},
+    {radius:340,attackMult:1.27,defenseMult:.73},
+    {radius:380,attackMult:1.32,defenseMult:.68},
+    {radius:430,attackMult:1.40,defenseMult:.60}
 ], 'higher mastery auras should grow in both radius and combat strength');
 assert.strictEqual(result.quotaHigh, 3, 'Lv.5+ tanks should occupy no more than 30% of a ten-tank team');
 assert.strictEqual(result.quotaLow, 3, 'Lv.1-2 tanks should occupy at least 30% of a ten-tank team');
@@ -255,10 +255,10 @@ result.quotaLevels.forEach((level, index) => {
 });
 assert.strictEqual(result.maxVisual.auraRadius, 430, 'level-eight aura should be larger than level five');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.deathFlameConfigs)), [
-    {color:'#a000ff',damagePerSecond:45,duration:4,radius:90},
-    {color:'#ff7a00',damagePerSecond:65,duration:5,radius:105},
-    {color:'#ff1744',damagePerSecond:90,duration:6,radius:120},
-    {color:'#ffd700',damagePerSecond:120,duration:8,radius:140}
+    {color:'#a000ff',damagePerSecond:70,duration:5,radius:100},
+    {color:'#ff7a00',damagePerSecond:100,duration:6,radius:120},
+    {color:'#ff1744',damagePerSecond:140,duration:7,radius:140},
+    {color:'#ffd700',damagePerSecond:190,duration:9,radius:165}
 ], 'death flames should have distinct level-five-to-eight colors, damage, duration, and radius');
 assert.strictEqual(result.kimiBinaryVisual, true, 'level-four Kimi should unlock the binary-code visual');
 assert.strictEqual(result.kimiBinaryTank, true, 'the created Kimi tank should carry the binary-code visual flag');
@@ -269,11 +269,11 @@ assert.strictEqual(result.maxTankStats.hp, 896);
 assert.strictEqual(result.maxTankStats.maxHp, 896);
 assert(Math.abs(result.maxTankStats.speed - 5.94) < 1e-9);
 assert(Math.abs(result.maxTankStats.turnSpeed - .099) < 1e-9);
-assert(Math.abs(result.maxTankStats.armor - .85) < 1e-9);
+assert(Math.abs(result.maxTankStats.armor - 1.0) < 1e-9);
 assert.strictEqual(result.maxTankStats.weaponDamageMult, 1.1,
     'levels six through eight should apply cumulative mobility, durability, and weapon bonuses');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.maxAiTankStats)), {
-    level:8, levelColor:'#ffd84a', hp:896, speed:5.94, armor:.85,
+    level:8, levelColor:'#ffd84a', hp:1000, speed:6.325, armor:1,
     aura:true, weaponDamageMult:1.1
 }, 'randomly generated AI levels should apply the same combat bonuses and level color');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.aiLevelSamples)), [1,2,3,4,5,6,7,8],
@@ -281,15 +281,15 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(result.aiLevelSamples)), [1,2,3
 assert.strictEqual(result.camoAvoided, true, 'the ten-percent camouflage roll should reject target acquisition');
 assert.strictEqual(result.normalTargetAccepted, true, 'non-camouflaged targets should not be rejected');
 assert.strictEqual(result.golden, true, 'mastery shells should be marked golden for both renderers');
-assert(Math.abs(result.goldenDamage - result.baseShellDamage * 1.2 * 1.1) < 1e-9,
-    'level-eight golden shells should combine the twenty-percent gold bonus with ten-percent weapon damage');
+assert(Math.abs(result.goldenDamage - result.baseShellDamage * 1.35 * 1.2) < 1e-9,
+    'level-eight golden shells should combine the thirty-five-percent gold bonus with twenty-percent weapon damage');
 assert(Math.abs(result.trailDamage - 27.5) < 0.001, 'hot mastery trail should deal 55 damage per second');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.deathFlame)), {
     kind:'mastery-death-flame', color:'#ffd700', duration:8, radius:140,
-    damagePerSecond:120, damage:60, friendlyDamage:0
+    damagePerSecond:190, damage:95, friendlyDamage:0
 }, 'level-eight death fire should persist after owner death and damage enemies only');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.inspired)), {
-    state:'combat', attack:1.15, defense:.85, active:true
+    state:'combat', attack:1.22, defense:.78, active:true
 }, 'AI within 300 should gain attack, defense, and attack-mode inspiration');
 assert.strictEqual(result.hostileInspired, true, 'the ace aura should affect every AI in range, regardless of team');
 assert.strictEqual(result.outsideInspired, false, 'AI outside the 300 radius should not be inspired');

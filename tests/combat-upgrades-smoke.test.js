@@ -160,7 +160,7 @@ assert.strictEqual(result.stateBeforeDelayEnds,'playing','damage upgrade must re
 assert.strictEqual(result.upgradeState,'damageUpgrade','damage upgrade should open after the 1.5-second death delay');
 assert.strictEqual(result.selected,true,'a presented damage upgrade should be selectable');
 assert.strictEqual(result.respawned,true,'selecting an upgrade should respawn the player');
-assert(Math.abs(result.speedGain-.15)<1e-9,'speed upgrade should add 15% maximum speed');
+assert(Math.abs(result.speedGain-.25)<1e-9,'speed upgrade should add 25% maximum speed');
 assert(result.respawnHp>0,'respawn should restore player HP');
 assert.strictEqual(result.respawnInvincibility,5,'damage-upgrade respawn should grant five seconds of invincibility');
 assert.strictEqual(result.damageUpgradeRecords,1,'a selected damage upgrade should be recorded once');

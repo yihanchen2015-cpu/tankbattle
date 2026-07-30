@@ -140,7 +140,7 @@ function positionThreeHudElement(element, point, opacity = 1) {
         element.style.display = 'none';
         return;
     }
-    element.style.display = 'block';
+    element.style.display = String(element.className || '').includes('three-tank-label') ? 'flex' : 'block';
     element.style.left = `${point.x}px`;
     element.style.top = `${point.y}px`;
     element.style.opacity = opacity;
@@ -1020,12 +1020,50 @@ function createThreeTank(tank) {
     masteryBuffFx.visible = false;
     group.add(masteryBuffFx);
     group.userData.masteryBuffFx = masteryBuffFx;
-    const markerMaterial = new THREE.MeshBasicMaterial({ color: tank.isPlayer ? 0xffffff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838), transparent: true, opacity: tank.isPlayer ? 0.85 : 0.35, side: THREE.DoubleSide });
-    const marker = new THREE.Mesh(new THREE.RingGeometry(3.9, 4.35, 32), markerMaterial);
+    const markerMaterial = new THREE.MeshBasicMaterial({
+        color: tank.isPlayer ? 0x42efff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838),
+        transparent: true,
+        opacity: tank.isPlayer ? 0.95 : 0.35,
+        side: THREE.DoubleSide,
+        depthWrite: false
+    });
+    const marker = new THREE.Mesh(
+        new THREE.RingGeometry(tank.isPlayer ? 5.1 : 3.9, tank.isPlayer ? 6.25 : 4.35, 32),
+        markerMaterial
+    );
     marker.rotation.x = -Math.PI / 2;
     marker.position.y = 0.08;
     group.add(marker);
     group.userData.marker = marker;
+    if(tank.isPlayer) {
+        const playerBeacon = new THREE.Group();
+        const beaconMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffed55,
+            transparent: true,
+            opacity: .9,
+            side: THREE.DoubleSide,
+            depthWrite: false
+        });
+        const beaconRing = new THREE.Mesh(new THREE.RingGeometry(6.7, 7.35, 32), beaconMaterial);
+        beaconRing.rotation.x = -Math.PI / 2;
+        beaconRing.position.y = .12;
+        const beaconBeam = new THREE.Mesh(
+            new THREE.CylinderGeometry(.12, .52, 8.5, 8),
+            new THREE.MeshBasicMaterial({ color: 0x42efff, transparent: true, opacity: .52, depthWrite: false })
+        );
+        beaconBeam.position.y = 4.35;
+        const beaconPointer = new THREE.Mesh(
+            new THREE.ConeGeometry(1.05, 2.3, 4),
+            new THREE.MeshBasicMaterial({ color: 0xffed55, transparent: true, opacity: .96, depthWrite: false })
+        );
+        beaconPointer.position.y = 9.1;
+        playerBeacon.add(beaconRing, beaconBeam, beaconPointer);
+        group.add(playerBeacon);
+        group.userData.playerBeacon = playerBeacon;
+        group.userData.playerBeaconRing = beaconRing;
+        group.userData.playerBeaconBeam = beaconBeam;
+        group.userData.playerBeaconPointer = beaconPointer;
+    }
     const rescueShield = new THREE.Mesh(
         new THREE.SphereGeometry(tank.shape === 'helicopter' ? 5.8 : 4.8, 18, 12),
         new THREE.MeshBasicMaterial({ color: 0x5ee8ff, transparent: true, opacity: 0.18, wireframe: true, depthWrite: false })
@@ -1219,12 +1257,20 @@ function syncThreeTanks(now) {
             const spawnPulse = spawnRemaining > 0 ? 1 + (spawnRemaining / 1.15) * 1.8 : 1;
             mesh.userData.marker.scale.setScalar(spawnPulse);
             mesh.userData.marker.material.color.set(
-                tank.isPlayer ? 0xffffff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838)
+                tank.isPlayer ? 0x42efff : (tank.team === 'blue' ? 0x36a0ff : 0xff3838)
             );
             mesh.userData.marker.material.opacity = (tank.hitFlashTimer || 0) > 0
                 ? .95
-                : tank.isPlayer ? .85 : .35;
+                : tank.isPlayer ? .95 : .35;
             mesh.userData.marker.rotation.z = 0;
+        }
+        if(mesh.userData.playerBeacon) {
+            const beaconPulse = 1 + Math.sin(now * .006) * .09;
+            mesh.userData.playerBeaconRing.scale.setScalar(beaconPulse);
+            mesh.userData.playerBeaconRing.material.opacity = .72 + Math.sin(now * .008) * .2;
+            mesh.userData.playerBeaconBeam.material.opacity = .38 + Math.sin(now * .005 + 1) * .14;
+            mesh.userData.playerBeaconPointer.position.y = 9.1 + Math.sin(now * .006) * .65;
+            mesh.userData.playerBeaconPointer.rotation.y = now * .0018;
         }
         const opacity = tank.ghostActive && !tank.ghostRevealed ? 0.28 : 1;
         if(mesh.userData.lastOpacity !== opacity) {
@@ -2055,6 +2101,7 @@ function syncThreeHud() {
             label = document.createElement('div');
             label.className = 'three-tank-label';
             label.innerHTML = `
+                <div class="three-player-pin">▼ 你的位置</div>
                 <div class="three-tank-title">
                     <span class="three-tank-level"></span>
                     <span class="three-tank-name"></span>
@@ -2064,18 +2111,22 @@ function syncThreeHud() {
             layer.appendChild(label);
             threeView.tankLabels.set(tank.id, label);
         }
+        label.className = tank.isPlayer ? 'three-tank-label three-player-label' : 'three-tank-label';
         const tankData = TANKS[tank.tankType];
         const level = Math.max(1, Math.min(8, Number(tank.masteryLevel) || 1));
         const levelLabel = label.querySelector('.three-tank-level');
         const nameLabel = label.querySelector('.three-tank-name');
         const hpFill = label.querySelector('.three-tank-hp-fill');
+        const playerPin = label.querySelector('.three-player-pin');
+        if(playerPin) playerPin.textContent = tank.isPlayer ? '▼ 你的位置' : '';
         if(levelLabel) {
             levelLabel.textContent = tank.isBoss ? '👑 BOSS' : tank.isEscortVIP ? '👑 VIP' : `★ Lv.${level}`;
             levelLabel.style.color = tank.isEscortVIP ? '#ffd84a' : '#f2f4f7';
         }
         if(nameLabel) {
-            nameLabel.textContent = tank.isBoss ? '巨型首领坦克' : tank.isEscortVIP ? '黄金VIP坦克' : (tankData ? tankData.name : tank.tankType);
-            nameLabel.style.color = tank.isBoss ? '#d290ff' : tank.isEscortVIP ? '#ffe36a' : tank.team === 'blue' ? '#55a7ff' : '#ff5555';
+            const tankName = tank.isBoss ? '巨型首领坦克' : tank.isEscortVIP ? '黄金VIP坦克' : (tankData ? tankData.name : tank.tankType);
+            nameLabel.textContent = tank.isPlayer ? `你 · ${tankName}` : tankName;
+            nameLabel.style.color = tank.isPlayer ? '#74f5ff' : tank.isBoss ? '#d290ff' : tank.isEscortVIP ? '#ffe36a' : tank.team === 'blue' ? '#55a7ff' : '#ff5555';
         }
         if(hpFill) {
             const hpRatio = Math.max(0, Math.min(1, tank.hp / Math.max(1, tank.maxHp)));
@@ -2086,7 +2137,7 @@ function syncThreeHud() {
         const point = hiddenGhost ? null : projectThreeHudPoint(
             tank.x,
             tank.y,
-            (tank.z || 0) + (tank.isFlying ? 76 : tank.isEscortVIP ? 125 : tank.isBoss ? 118 : 68)
+            (tank.z || 0) + (tank.isPlayer ? (tank.isFlying ? 110 : 92) : tank.isFlying ? 76 : tank.isEscortVIP ? 125 : tank.isBoss ? 118 : 68)
         );
         positionThreeHudElement(label, point, tank === player ? 1 : 0.9);
     });

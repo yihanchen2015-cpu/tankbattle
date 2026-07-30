@@ -6,6 +6,12 @@ function startGame() {
         console.error('[START_GAME] No tank selected!');
         return;
     }
+    if(typeof THREE === 'undefined' || typeof initThreeRenderer !== 'function' || !initThreeRenderer()) {
+        if(typeof showNotification === 'function') {
+            showNotification('当前浏览器无法启动 WebGL 3D，游戏未开始', '#ff5a5a');
+        }
+        return;
+    }
     resetMatchStats();
     smokeClouds = [];
     damageUpgradeState = { active: false, pending: false, delayTimer: 0, deaths: 0, offered: [], chosen: [] };
@@ -22,17 +28,18 @@ function startGame() {
     else if(['escort', 'deathmatch', 'boss'].includes(gameMode)) dayNight = 'day';
     else dayNight = document.getElementById('dayNight').value;
     const difficulty = document.getElementById('difficulty').value;
-    const viewMode = document.getElementById('viewMode') ? document.getElementById('viewMode').value : '2d';
+    const viewMode = '3d';
     const customConfig = gameMode === 'custom' && typeof customRoomConfig !== 'undefined'
         ? JSON.parse(JSON.stringify(customRoomConfig))
         : null;
     gameConfig = { dayNight, difficulty, ammo, mg, aa, mode: gameMode, viewMode, custom: customConfig };
-    lastMatchSetup = { selectedTank, currentMap, gameMode, ammo, mg, aa, dayNight, difficulty, viewMode, customRoom: customConfig };
+    lastMatchSetup = { selectedTank, currentMap, gameMode, ammo, mg, aa, dayNight, difficulty, customRoom: customConfig };
     currentWeapon = selectedTank === 'niuniu_heli' ? 'bomb' : 'shell';
     document.getElementById('menu').classList.remove('active');
     document.getElementById('menu').style.display = 'none';
     document.getElementById('gameUI').classList.add('active');
     document.getElementById('gameUI').style.display = 'block';
+    document.getElementById('gameUI').dataset.mode = gameMode;
     document.getElementById('ultimateBar').style.display = 'block';
     const damageUpgradeOverlay = document.getElementById('damageUpgradeOverlay');
     if(damageUpgradeOverlay) damageUpgradeOverlay.classList.remove('active');
@@ -60,7 +67,7 @@ function startGame() {
     initBaseSpawns();
     initSpatialGrid();
     camera.zoom = (MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic).cameraZoom || 1;
-    setViewMode(viewMode, false);
+    activateThreeView();
     const initialView = getCameraViewSize();
     camera.x = player.x - initialView.width / 2;
     camera.y = player.y - initialView.height / 2;
@@ -82,37 +89,15 @@ function startGame() {
     updateOutpostInfo();
 }
 
-function setViewMode(mode, notify = true) {
-    const use3D = mode === '3d';
-    if(use3D && (typeof THREE === 'undefined' || typeof initThreeRenderer !== 'function' || !initThreeRenderer())) {
-        gameConfig.viewMode = '2d';
-        const failedSelect = document.getElementById('viewMode');
-        if(failedSelect) failedSelect.value = '2d';
-        if(notify) showMessage('当前浏览器无法启动 WebGL 3D，已回到 2D', '#ff9f43');
-        return;
-    }
-    gameConfig.viewMode = use3D ? '3d' : '2d';
+function activateThreeView() {
+    gameConfig.viewMode = '3d';
     const gameCanvas = document.getElementById('gameCanvas');
     const threeCanvas = document.getElementById('threeCanvas');
     const threeHudLayer = document.getElementById('threeHudLayer');
-    const threeThreatBorder = document.getElementById('threeThreatBorder');
-    if(gameCanvas) gameCanvas.style.display = use3D ? 'none' : 'block';
-    if(threeCanvas) threeCanvas.style.display = use3D ? 'block' : 'none';
-    if(threeHudLayer) threeHudLayer.style.display = use3D ? 'block' : 'none';
-    if(threeThreatBorder && !use3D) threeThreatBorder.style.display = 'none';
-    if(use3D && typeof rebuildThreeWorld === 'function') rebuildThreeWorld(true);
-    const select = document.getElementById('viewMode');
-    if(select) select.value = gameConfig.viewMode;
-    const indicator = document.getElementById('viewModeIndicator');
-    if(indicator) {
-        indicator.textContent = use3D ? '◈ Three.js 真3D · V切换' : '🗺 2D俯视 · V切换';
-        indicator.style.color = use3D ? '#ffd37a' : '#8ee8ff';
-    }
-    if(notify && gameState === 'playing') showMessage(use3D ? '◈ 已进入 Three.js 真3D战场' : '🗺 已切换到2D俯视', use3D ? '#ffd37a' : '#8ee8ff');
-}
-
-function toggleViewMode() {
-    setViewMode(gameConfig.viewMode === '3d' ? '2d' : '3d');
+    if(gameCanvas) gameCanvas.style.display = 'none';
+    if(threeCanvas) threeCanvas.style.display = 'block';
+    if(threeHudLayer) threeHudLayer.style.display = 'block';
+    if(typeof rebuildThreeWorld === 'function') rebuildThreeWorld(true);
 }
 
 function getCameraViewSize() {
@@ -1635,38 +1620,38 @@ const DAMAGE_UPGRADE_POOL = [
     {
         id:'trackRepair',
         title:'快速履带抢修',
-        description:'履带受损持续时间减少 50%',
-        apply:tank=>{ tank.trackRepairMultiplier = Math.max(.2, (tank.trackRepairMultiplier || 1) * .5); }
+        description:'履带受损持续时间减少 70%',
+        apply:tank=>{ tank.trackRepairMultiplier = Math.max(.15, (tank.trackRepairMultiplier || 1) * .3); }
     },
     {
         id:'goldenShield',
         title:'金色反爆护盾',
-        description:'每 15 秒生成护盾，抵挡下一次攻击并产生小型爆炸',
+        description:'每 10 秒生成护盾，抵挡下一次攻击并产生小型爆炸',
         apply:tank=>{ tank.goldenShieldEnabled = true; tank.goldenShieldReady = false; tank.goldenShieldTimer = CONFIG.goldenShieldInterval; }
     },
     {
         id:'speed',
         title:'超频传动',
-        description:'最大速度永久提升 15%',
-        apply:tank=>{ tank.damageUpgradeSpeedBoost = (tank.damageUpgradeSpeedBoost || 0) + .15; }
+        description:'最大速度永久提升 25%',
+        apply:tank=>{ tank.damageUpgradeSpeedBoost = (tank.damageUpgradeSpeedBoost || 0) + .25; }
     },
     {
         id:'armor',
         title:'附加装甲板',
-        description:'基础装甲永久增加 0.25',
-        apply:tank=>{ tank.armor += .25; }
+        description:'基础装甲永久增加 0.45',
+        apply:tank=>{ tank.armor += .45; }
     },
     {
         id:'reload',
         title:'自动装填优化',
-        description:'射速永久提升 10%',
-        apply:tank=>{ tank.fireRate *= 1.1; }
+        description:'射速永久提升 20%',
+        apply:tank=>{ tank.fireRate *= 1.2; }
     },
     {
         id:'vitality',
         title:'战场翻修',
-        description:'最大生命永久提升 12%，并立即恢复',
-        apply:tank=>{ tank.maxHp = Math.round(tank.maxHp * 1.12); tank.hp = tank.maxHp; }
+        description:'最大生命永久提升 25%，并立即恢复',
+        apply:tank=>{ tank.maxHp = Math.round(tank.maxHp * 1.25); tank.hp = tank.maxHp; }
     }
 ];
 
@@ -1719,7 +1704,7 @@ function beginDamageUpgrade() {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'damage-upgrade-card';
-            button.innerHTML = `<strong>${upgrade.title}</strong><span>${upgrade.description}</span>`;
+            button.innerHTML = `<em>大幅强化</em><strong>${upgrade.title}</strong><span>${upgrade.description}</span>`;
             button.addEventListener('click', () => chooseDamageUpgrade(id));
             choices.appendChild(button);
         });
@@ -1733,6 +1718,7 @@ function chooseDamageUpgrade(id) {
     const upgrade = DAMAGE_UPGRADE_POOL.find(entry => entry.id === id);
     if(!upgrade) return false;
     upgrade.apply(player);
+    player.lastDamageUpgradeTitle = upgrade.title;
     damageUpgradeState.chosen.push(id);
     damageUpgradeState.active = false;
     damageUpgradeState.pending = false;
@@ -1778,7 +1764,9 @@ function respawnPlayerNearBase() {
     if(overlay) overlay.classList.remove('active');
     gameState = 'playing';
     lastTime = performance.now();
-    if(typeof showMessage === 'function') showMessage('⚙ 战损升级完成，已从基地复归', '#ffd84a');
+    if(typeof showMessage === 'function') {
+        showMessage(`⚙ ${player.lastDamageUpgradeTitle || '战损升级'}完成，已从基地复归`, '#ffd84a');
+    }
     return true;
 }
 
@@ -1895,7 +1883,6 @@ function restartLastGame() {
     Object.entries(values).forEach(([id, value]) => { const element = document.getElementById(id); if(element) element.value = value; });
     const dayNight = document.getElementById('dayNight'); if(dayNight) dayNight.value = setup.dayNight;
     const difficulty = document.getElementById('difficulty'); if(difficulty) difficulty.value = setup.difficulty;
-    const viewMode = document.getElementById('viewMode'); if(viewMode) viewMode.value = setup.viewMode;
     const mapSelect = document.getElementById('mapSelect'); if(mapSelect) mapSelect.value = setup.currentMap;
     ['ammo', 'mg', 'aa'].forEach(key => { const output = document.getElementById(`${key}Value`); if(output) output.textContent = setup[key]; });
     const startButton = document.getElementById('startBtn'); if(startButton) startButton.disabled = false;

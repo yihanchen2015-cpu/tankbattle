@@ -52,7 +52,7 @@ const CONFIG = {
     fuelFireDamage: 18,
     armorRicochetMinChance: 0.04,
     armorRicochetMaxChance: 0.68,
-    goldenShieldInterval: 15,
+    goldenShieldInterval: 10,
     shellGravity: 320,
     shellDefaultElevation: 6,
     aaDefaultElevation: 12,

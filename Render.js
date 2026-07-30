@@ -2162,6 +2162,7 @@ function drawMinimap() {
 // ==================== HUD更新 ====================
 function updateHUD() {
     if(!player) return;
+    updateModeStatusHUD();
     const repairButton = document.getElementById('mobileRepairBtn');
     if(repairButton) repairButton.classList.toggle('engineer-active', player.tankType === 'duoduo_eng');
     const heliAltitudeControls = document.getElementById('heliAltitudeControls');
@@ -2272,6 +2273,50 @@ function updateHUD() {
         else if(currentMap === 'volcano' && (player.mapSlowTimer || 0) > 0) penaltyEl.textContent = `🌋 熔岩附着，减速剩余 ${(player.mapSlowTimer || 0).toFixed(1)} 秒`;
         else penaltyEl.textContent = `⚠ 总重 ${totalWeight.toFixed(1)}t，速度降低 ${pct}%`;
     } else penaltyEl.style.display = 'none';
+}
+
+function updateModeStatusHUD() {
+    const panel = document.getElementById('modeStatus');
+    const label = document.getElementById('modeStatusLabel');
+    const fill = document.getElementById('modeStatusFill');
+    if(!panel || !label || !fill) return;
+
+    let text = '';
+    let ratio = 0;
+    let color = '#52d8ff';
+    let showProgress = true;
+
+    if(gameMode === 'escort') {
+        const vip = escortData && escortData.vip;
+        if(vip && !vip.dead && escortData.start && escortData.end) {
+            const total = Math.max(1, Math.hypot(escortData.end.x - escortData.start.x, escortData.end.y - escortData.start.y));
+            const remaining = Math.hypot(escortData.end.x - vip.x, escortData.end.y - vip.y);
+            ratio = Math.max(0, Math.min(1, 1 - remaining / total));
+            const status = vip.escortContested ? '强行突破中（减速）' : vip.escortActive ? '蓝方全速推进' : 'VIP自主推进';
+            text = `VIP ${Math.ceil(vip.hp)}/${vip.maxHp} · ${status} · ${Math.round(ratio * 100)}%`;
+            color = vip.escortContested ? '#ff5a5a' : vip.escortActive ? '#52d8ff' : '#9aa7b4';
+        }
+    } else if(gameMode === 'deathmatch') {
+        const target = deathmatchData.targetKills || 50;
+        text = `蓝 ${deathmatchData.kills.blue}/${target} 击杀 · 红 ${deathmatchData.kills.red}/${target} 击杀`;
+        color = deathmatchData.kills.red > deathmatchData.kills.blue ? '#ff7474' : '#66b7ff';
+        showProgress = false;
+    } else if(gameMode === 'boss') {
+        const boss = bossModeData && bossModeData.boss;
+        ratio = boss ? Math.max(0, Math.min(1, boss.hp / boss.maxHp)) : 0;
+        const buff = bossModeData.buffTeam
+            ? ` · ${bossModeData.buffTeam === 'blue' ? '蓝方' : '红方'}增益 ${Math.ceil(bossModeData.buffTimer)}s`
+            : '';
+        text = boss && !boss.dead ? `巨型BOSS ${Math.ceil(boss.hp)}/${boss.maxHp}${buff}` : `BOSS已被击毁${buff}`;
+        color = '#b34fff';
+    }
+
+    panel.style.display = text ? 'flex' : 'none';
+    if(!text) return;
+    if(label.textContent !== text) label.textContent = text;
+    panel.classList.toggle('no-progress', !showProgress);
+    panel.style.setProperty('--mode-status-color', color);
+    fill.style.width = `${Math.round(ratio * 1000) / 10}%`;
 }
 
 function updateTimer() {
@@ -2928,8 +2973,6 @@ function updateGameModes(dt) {
 
 function renderGameModes() {
     if(gameMode === 'escort') renderEscortMode();
-    else if(gameMode === 'deathmatch') renderDeathmatchMode();
-    else if(gameMode === 'boss') renderBossMode();
 }
 
 function renderEscortMarker(point, label, color) {
@@ -2954,53 +2997,6 @@ function renderEscortMarker(point, label, color) {
 function renderEscortMode() {
     renderEscortMarker(escortData.start, 'A', '#51b8ff');
     renderEscortMarker(escortData.end, 'B', '#ffc24d');
-    const vip = escortData.vip;
-    if(!vip || vip.dead) return;
-    const total = Math.max(1, Math.hypot(escortData.end.x - escortData.start.x, escortData.end.y - escortData.start.y));
-    const remaining = Math.hypot(escortData.end.x - vip.x, escortData.end.y - vip.y);
-    const progress = Math.max(0, Math.min(1, 1 - remaining / total));
-    ctx.save();
-    ctx.fillStyle = 'rgba(7,12,20,.78)';
-    ctx.fillRect(canvas.width / 2 - 190, 18, 380, 42);
-    ctx.fillStyle = vip.escortContested ? '#ff5a5a' : vip.escortActive ? '#52d8ff' : '#9aa7b4';
-    ctx.fillRect(canvas.width / 2 - 180, 46, 360 * progress, 7);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 15px Arial';
-    ctx.textAlign = 'center';
-    const status = vip.escortContested ? '强行突破中（减速）' : vip.escortActive ? '蓝方全速推进' : 'VIP自主推进';
-    ctx.fillText(`VIP ${Math.ceil(vip.hp)}/${vip.maxHp} · ${status} · ${Math.round(progress * 100)}%`, canvas.width / 2, 38);
-    ctx.restore();
-}
-
-function renderDeathmatchMode() {
-    ctx.save();
-    ctx.fillStyle = 'rgba(20,5,10,.78)';
-    ctx.fillRect(canvas.width / 2 - 150, 18, 300, 34);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 17px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(`蓝 ${deathmatchData.kills.blue} : ${deathmatchData.kills.red} 红 · 目标50杀`, canvas.width / 2, 41);
-    ctx.restore();
-}
-
-function renderBossMode() {
-    const boss = bossModeData.boss;
-    ctx.save();
-    ctx.fillStyle = 'rgba(18,3,28,.82)';
-    ctx.fillRect(canvas.width / 2 - 220, 16, 440, 48);
-    const ratio = boss ? Math.max(0, boss.hp / boss.maxHp) : 0;
-    ctx.fillStyle = '#321147';
-    ctx.fillRect(canvas.width / 2 - 205, 44, 410, 10);
-    ctx.fillStyle = '#b34fff';
-    ctx.fillRect(canvas.width / 2 - 205, 44, 410 * ratio, 10);
-    ctx.fillStyle = '#f0d6ff';
-    ctx.font = 'bold 16px Arial';
-    ctx.textAlign = 'center';
-    const buff = bossModeData.buffTeam
-        ? ` · ${bossModeData.buffTeam === 'blue' ? '蓝方' : '红方'}增益 ${Math.ceil(bossModeData.buffTimer)}s`
-        : '';
-    ctx.fillText(boss && !boss.dead ? `巨型BOSS ${Math.ceil(boss.hp)}/${boss.maxHp}${buff}` : `BOSS已被击毁${buff}`, canvas.width / 2, 37);
-    ctx.restore();
 }
 
 function showNotification(text, color) {

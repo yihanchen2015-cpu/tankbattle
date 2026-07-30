@@ -20,7 +20,7 @@ class FakeElement {
 const ids = [
     'matchResultOverlay', 'matchResultTitle', 'resultBlueScore', 'resultRedScore',
     'ammoSlider', 'mgSlider', 'aaSlider', 'ammoValue', 'mgValue', 'aaValue',
-    'dayNight', 'difficulty', 'viewMode', 'mapSelect', 'startBtn'
+    'dayNight', 'difficulty', 'mapSelect', 'startBtn'
 ];
 const elements = Object.fromEntries(ids.map(id => [id, new FakeElement()]));
 const stats = [];
@@ -68,7 +68,7 @@ vm.runInContext(`
     startGame = () => calls.push('start');
     lastMatchSetup = {
         selectedTank:'niuniu', currentMap:'island', gameMode:'boss',
-        ammo:72, mg:188, aa:21, dayNight:'night', difficulty:'hard', viewMode:'3d'
+        ammo:72, mg:188, aa:21, dayNight:'night', difficulty:'hard'
     };
     restartLastGame();
 `, sandbox);
@@ -80,7 +80,6 @@ assert.strictEqual(elements.mgSlider.value, 188);
 assert.strictEqual(elements.aaSlider.value, 21);
 assert.strictEqual(elements.dayNight.value, 'night');
 assert.strictEqual(elements.difficulty.value, 'hard');
-assert.strictEqual(elements.viewMode.value, '3d');
 assert.strictEqual(elements.mapSelect.value, 'island');
 assert.strictEqual(elements.startBtn.disabled, false);
 

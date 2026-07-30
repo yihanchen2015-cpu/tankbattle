@@ -55,6 +55,9 @@ now += 800;
 vm.runInContext("showJuiceCue('一 压 就 爆！','3 桶连锁','#ff6537',1.1)", context);
 assert.strictEqual(elements.juiceCueKicker.textContent, '物理连击 ×2', 'nearby cues should form a physics combo');
 
+vm.runInContext("showJuiceCue('三 杀！','连续摧毁','#ffe45c',1.1,'连续击杀 ×3')", context);
+assert.strictEqual(elements.juiceCueKicker.textContent, '连续击杀 ×3', 'combat streaks should be able to provide a dedicated kicker');
+
 vm.runInContext('resetJuiceCue()', context);
 assert(!elements.juiceCue.classes.has('active'), 'reset should hide the cue');
 
