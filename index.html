@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>坦克大战 - 据点争夺</title>
-    <link rel="stylesheet" href="style.css?v=three-only-26">
+    <link rel="stylesheet" href="style.css?v=physics-settings-28">
     <base target="_blank">
 </head>
 <body>
@@ -66,7 +66,102 @@
                 <button class="start-btn-secondary" id="btnDailyTasks" onclick="showDailyTasksPanel()">📅 每日任务 0/4</button>
                 <button class="start-btn-secondary" id="btnAchievements" onclick="showAchievementPanel()">🏆 成就系统</button>
                 <button class="start-btn-secondary" id="btnGameIntro" onclick="showIntroPanel()">📖 游戏介绍</button>
+                <button class="start-btn-secondary start-btn-settings" id="btnSettings" onclick="showSettingsPanel()">⚙ 战场设置</button>
             </nav>
+        </div>
+
+        <!-- ========== 战场设置 ========== -->
+        <div id="settingsModal" class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+            <section class="settings-panel">
+                <header class="settings-header">
+                    <div>
+                        <div class="settings-kicker">SYSTEM / COMBAT PARAMETERS</div>
+                        <h2 id="settingsTitle">战 场 设 置</h2>
+                    </div>
+                    <button type="button" class="settings-close" onclick="closeSettingsPanel()" aria-label="关闭设置">×</button>
+                </header>
+                <div class="settings-grid">
+                    <label class="setting-row setting-warning">
+                        <span class="setting-copy">
+                            <strong>友军误伤</strong>
+                            <small>炮弹、机枪与爆炸可伤害同队单位，走火将承担真实后果</small>
+                        </span>
+                        <input id="setting-friendlyFire" type="checkbox">
+                        <span class="setting-switch" aria-hidden="true"></span>
+                    </label>
+                    <label class="setting-row setting-assist">
+                        <span class="setting-copy">
+                            <strong>新手辅助</strong>
+                            <small>玩家耐久 +35%、初始弹药 +25%，来自敌军的伤害 -25%</small>
+                        </span>
+                        <input id="setting-beginnerMode" type="checkbox">
+                        <span class="setting-switch" aria-hidden="true"></span>
+                    </label>
+                    <label class="setting-row">
+                        <span class="setting-copy">
+                            <strong>战场音效</strong>
+                            <small>启用炮击、引擎、命中与警报音效</small>
+                        </span>
+                        <input id="setting-audioEnabled" type="checkbox">
+                        <span class="setting-switch" aria-hidden="true"></span>
+                    </label>
+                    <label class="setting-row">
+                        <span class="setting-copy">
+                            <strong>镜头震动</strong>
+                            <small>爆炸、命中和连杀时提供重量感反馈</small>
+                        </span>
+                        <input id="setting-screenShake" type="checkbox">
+                        <span class="setting-switch" aria-hidden="true"></span>
+                    </label>
+                    <label class="setting-row">
+                        <span class="setting-copy">
+                            <strong>伤害数字</strong>
+                            <small>在命中位置显示即时伤害数值</small>
+                        </span>
+                        <input id="setting-damageNumbers" type="checkbox">
+                        <span class="setting-switch" aria-hidden="true"></span>
+                    </label>
+                    <label class="setting-row">
+                        <span class="setting-copy">
+                            <strong>自动瞄准辅助</strong>
+                            <small>闲置鼠标后自动搜索目标并进行预判瞄准</small>
+                        </span>
+                        <input id="setting-autoAim" type="checkbox">
+                        <span class="setting-switch" aria-hidden="true"></span>
+                    </label>
+                    <label class="setting-row">
+                        <span class="setting-copy">
+                            <strong>阵亡精彩回放</strong>
+                            <small>阵亡后播放 3D 致命弹道慢镜头</small>
+                        </span>
+                        <input id="setting-combatReplay" type="checkbox">
+                        <span class="setting-switch" aria-hidden="true"></span>
+                    </label>
+                    <label class="setting-row">
+                        <span class="setting-copy">
+                            <strong>战术小地图</strong>
+                            <small>显示右上角战场俯视图与单位位置</small>
+                        </span>
+                        <input id="setting-minimap" type="checkbox">
+                        <span class="setting-switch" aria-hidden="true"></span>
+                    </label>
+                    <label class="setting-row">
+                        <span class="setting-copy">
+                            <strong>玩家定位标记</strong>
+                            <small>显示车体光环、指针和“你的位置”标签</small>
+                        </span>
+                        <input id="setting-playerLocator" type="checkbox">
+                        <span class="setting-switch" aria-hidden="true"></span>
+                    </label>
+                </div>
+                <footer class="settings-footer">
+                    <div id="settingsSummary" class="settings-summary">标准战斗 · 友伤 OFF</div>
+                    <div class="settings-actions">
+                        <button type="button" class="settings-reset" onclick="resetSettingsToDefault()">恢复默认</button>
+                        <button type="button" class="settings-save" onclick="saveSettingsFromPanel()">保存设置</button>
+                    </div>
+                </footer>
+            </section>
         </div>
 
         <!-- ========== 新手教程弹窗 ========== -->
@@ -651,6 +746,7 @@
                 <button class="series-btn" data-series="niuniu" onclick="filterTanks('niuniu', this)">🩵 牛牛系</button>
                 <button class="series-btn" id="aiSeriesFilterBtn" data-series="kimi" onclick="filterTanks('kimi', this)" hidden style="display:none">🟣 AI系</button>
             </div>
+            <div id="beginnerRosterNotice">新手模式：已精选 6 辆易上手坦克</div>
             <div class="tank-list" id="tankList"></div>
             </div>
 
@@ -918,24 +1014,25 @@
 
     <script src="vendor/three.min.js"></script>
     <script src="vendor/ammo.wasm.js"></script>
-    <script src="Config.js?v=new-modes-20"></script>
-    <script src="Audio.js"></script>
+    <script src="Config.js?v=physics-settings-28"></script>
+    <script src="Settings.js?v=physics-settings-28"></script>
+    <script src="Audio.js?v=physics-settings-28"></script>
     <script src="Score.js?v=new-modes-20"></script>
-    <script src="Replay.js"></script>
+    <script src="Replay.js?v=physics-settings-28"></script>
     <script src="BattleSystems.js?v=mastery-quota-17"></script>
     <script src="TerrainDestruction.js"></script>
-    <script src="Achievement.js?v=daily-tasks-22"></script>
-    <script src="Progression.js?v=mastery-quota-17"></script>
+    <script src="Achievement.js?v=physics-settings-28"></script>
+    <script src="Progression.js?v=physics-settings-28"></script>
     <script src="DailyTasks.js?v=daily-tasks-22"></script>
     <script src="Pathfinding.js?v=escort-rush-21"></script>
-    <script src="UI.js?v=three-only-26"></script>
-    <script src="Ultimate.js?v=new-modes-20"></script>
-    <script src="GameCore.js?v=three-only-26"></script>
+    <script src="UI.js?v=physics-settings-28"></script>
+    <script src="Ultimate.js?v=physics-settings-28"></script>
+    <script src="GameCore.js?v=physics-settings-28"></script>
     <script src="MapMechanics.js?v=mastery-custom-2"></script>
     <script src="FactoryPhysics.js?v=mastery-custom-2"></script>
     <script src="AI.js?v=escort-rush-21"></script>
-    <script src="Combat.js?v=new-modes-20"></script>
+    <script src="Combat.js?v=physics-settings-28"></script>
     <script src="Render.js?v=hud-layout-25"></script>
-    <script src="ThreeRender.js?v=three-only-26"></script>
+    <script src="ThreeRender.js?v=physics-settings-28"></script>
 </body>
 </html>

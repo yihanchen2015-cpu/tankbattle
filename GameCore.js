@@ -14,6 +14,7 @@ function startGame() {
     }
     resetMatchStats();
     smokeClouds = [];
+    apsInterceptEffects = [];
     damageUpgradeState = { active: false, pending: false, delayTimer: 0, deaths: 0, offered: [], chosen: [] };
     if(typeof resetTeamScores === 'function') resetTeamScores();
     if(typeof resetCombatReplay === 'function') resetCombatReplay();
@@ -32,7 +33,8 @@ function startGame() {
     const customConfig = gameMode === 'custom' && typeof customRoomConfig !== 'undefined'
         ? JSON.parse(JSON.stringify(customRoomConfig))
         : null;
-    gameConfig = { dayNight, difficulty, ammo, mg, aa, mode: gameMode, viewMode, custom: customConfig };
+    const settingsSnapshot = typeof gameSettings !== 'undefined' ? { ...gameSettings } : null;
+    gameConfig = { dayNight, difficulty, ammo, mg, aa, mode: gameMode, viewMode, custom: customConfig, settings: settingsSnapshot };
     lastMatchSetup = { selectedTank, currentMap, gameMode, ammo, mg, aa, dayNight, difficulty, customRoom: customConfig };
     currentWeapon = selectedTank === 'niuniu_heli' ? 'bomb' : 'shell';
     document.getElementById('menu').classList.remove('active');
@@ -40,6 +42,8 @@ function startGame() {
     document.getElementById('gameUI').classList.add('active');
     document.getElementById('gameUI').style.display = 'block';
     document.getElementById('gameUI').dataset.mode = gameMode;
+    document.getElementById('gameUI').dataset.beginner =
+        typeof isBeginnerModeEnabled === 'function' && isBeginnerModeEnabled() ? 'true' : 'false';
     document.getElementById('ultimateBar').style.display = 'block';
     const damageUpgradeOverlay = document.getElementById('damageUpgradeOverlay');
     if(damageUpgradeOverlay) damageUpgradeOverlay.classList.remove('active');
@@ -61,6 +65,17 @@ function startGame() {
     if(gameMode === 'custom' && typeof applyCustomRoomMapRules === 'function') applyCustomRoomMapRules();
     initPathGrid();
     spawnTanks(tankData, ammo, mg, aa);
+    if(typeof isBeginnerModeEnabled === 'function' && isBeginnerModeEnabled() && player) {
+        player.maxHp = Math.round(player.maxHp * 1.35);
+        player.hp = player.maxHp;
+        player.maxShells = Math.ceil(player.maxShells * 1.25);
+        player.maxMG = Math.ceil(player.maxMG * 1.25);
+        player.maxAA = Math.ceil(player.maxAA * 1.25);
+        player.shells = player.maxShells;
+        player.mg = player.maxMG;
+        player.aa = player.maxAA;
+        player.beginnerAssist = true;
+    }
     if(typeof distributeFactoryInitialTanks === 'function') distributeFactoryInitialTanks();
     if(typeof initializeSneakRescueMechanic === 'function') initializeSneakRescueMechanic();
     if(typeof updateWeaponHudMode === 'function') updateWeaponHudMode(player);
@@ -77,6 +92,9 @@ function startGame() {
     else if(gameMode === 'boss') initBossMode();
 
     gameState = 'playing';
+    if(player && player.beginnerAssist && typeof showMessage === 'function') {
+        showMessage('新手辅助已启用 · 耐久与弹药强化 · 敌军伤害降低', '#69e8c5');
+    }
     if(gameMode === 'custom' && customConfig) gameTime = customConfig.durationMinutes * 60;
     else if(gameMode === 'defense') gameTime = 180;
     else if(['escort', 'deathmatch', 'boss'].includes(gameMode)) gameTime = 300;
@@ -106,7 +124,7 @@ function getCameraViewSize() {
 }
 
 function screenToWorld(screenX, screenY) {
-    if(gameConfig.viewMode === '3d' && typeof threeScreenToWorld === 'function') {
+    if(typeof threeScreenToWorld === 'function') {
         const point = threeScreenToWorld(screenX, screenY);
         if(point) return point;
     }
@@ -1085,6 +1103,12 @@ function updateMinimapJam(dt) {
 // ==================== 自动瞄准系统 ====================
 function updateAutoAim(tank, dt) {
     if (tank.dead) return;
+    if(tank.isPlayer && typeof isAutoAimEnabled === 'function' && !isAutoAimEnabled()) {
+        tank.autoAimTarget = null;
+        tank.autoAimActive = false;
+        tank.autoAimLockOn = false;
+        return;
+    }
     tank.autoAimTimer = (tank.autoAimTimer || 0) - dt;
 
     if (tank.isPlayer) {
@@ -1900,6 +1924,7 @@ function resetGame() {
     if(typeof resetBattleSystems === 'function') resetBattleSystems();
     selectedTank = null;
     smokeClouds = [];
+    apsInterceptEffects = [];
     damageUpgradeState = { active: false, pending: false, delayTimer: 0, deaths: 0, offered: [], chosen: [] };
     allies = []; enemies = []; bullets = []; particles = []; exhaustTrails = [];
     trailEffects = []; damageNumbers = []; outposts = []; neutralNPCs = []; aiTanks = []; player = null;

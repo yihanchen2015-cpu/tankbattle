@@ -425,6 +425,7 @@ function updateTrailEffects(dt) {
 }
 
 function showDamageNumber(x, y, damage) {
+    if(typeof areDamageNumbersEnabled === 'function' && !areDamageNumbersEnabled()) return;
     if(touchControlMode && mobileDenseCombatMode && damageNumbers.length >= 10) return;
     damageNumbers.push({ x, y, z: 42, text: `-${damage}`, life: 1.0, maxLife: 1.0, vy: -40, vz: 55 });
 }
@@ -541,5 +542,7 @@ function render() {
         return;
     }
     renderThreeScene();
-    drawMinimap();
+    const minimapEnabled = typeof isMinimapEnabled !== 'function' || isMinimapEnabled();
+    if(minimapCanvas) minimapCanvas.style.display = minimapEnabled ? 'block' : 'none';
+    if(minimapEnabled) drawMinimap();
 }

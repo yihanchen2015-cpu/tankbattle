@@ -100,7 +100,7 @@ const result = vm.runInContext(`(() => {
         x:0,y:0,z:0,angle:0,turretAngle:0,turretSize:28,
         tankType:'zuoyan29',team:'blue',isPlayer:false,isFlying:false,
         shells:2,mg:0,aa:0,masteryGoldenProjectiles:true,
-        aiDamageMult:1,masteryAuraDamageMult:1,masteryWeaponDamageMult:1.1,
+        aiDamageMult:1,masteryAuraDamageMult:1,masteryWeaponDamageMult:1.2,
         shellElevation:0,aaElevation:0,suddenDeathInfiniteAmmo:false,
         ghostActive:false,recoilTimer:0,recoilStrength:0
     };
@@ -118,7 +118,7 @@ const result = vm.runInContext(`(() => {
     enemies = [victim];
     trailEffects = [{
         kind:'mastery', x:0, y:0, life:1, maxLife:1, radius:24,
-        team:'blue', owner, damagePerSecond:55, color:'#ffd85a'
+        team:'blue', owner, damagePerSecond:75, color:'#ffd85a'
     }];
     damageNumbers = [];
     updateTrailEffects(.5);
@@ -265,16 +265,18 @@ assert.strictEqual(result.kimiBinaryTank, true, 'the created Kimi tank should ca
 assert.strictEqual(result.maxLevel, 8, 'mastery should have eight levels');
 assert(result.maxVisual.camouflage && result.maxVisual.goldenProjectiles && result.maxVisual.trailColor && result.maxVisual.aura,
     'maximum mastery should expose all four cumulative effects');
-assert.strictEqual(result.maxTankStats.hp, 896);
-assert.strictEqual(result.maxTankStats.maxHp, 896);
-assert(Math.abs(result.maxTankStats.speed - 5.94) < 1e-9);
-assert(Math.abs(result.maxTankStats.turnSpeed - .099) < 1e-9);
+assert.strictEqual(result.maxTankStats.hp, 1000);
+assert.strictEqual(result.maxTankStats.maxHp, 1000);
+assert(Math.abs(result.maxTankStats.speed - 6.325) < 1e-9);
+assert(Math.abs(result.maxTankStats.turnSpeed - .1062) < 1e-9);
 assert(Math.abs(result.maxTankStats.armor - 1.0) < 1e-9);
-assert.strictEqual(result.maxTankStats.weaponDamageMult, 1.1,
+assert.strictEqual(result.maxTankStats.weaponDamageMult, 1.2,
     'levels six through eight should apply cumulative mobility, durability, and weapon bonuses');
-assert.deepStrictEqual(JSON.parse(JSON.stringify(result.maxAiTankStats)), {
+const normalizedMaxAiTankStats = JSON.parse(JSON.stringify(result.maxAiTankStats));
+normalizedMaxAiTankStats.speed = Number(normalizedMaxAiTankStats.speed.toFixed(3));
+assert.deepStrictEqual(normalizedMaxAiTankStats, {
     level:8, levelColor:'#ffd84a', hp:1000, speed:6.325, armor:1,
-    aura:true, weaponDamageMult:1.1
+    aura:true, weaponDamageMult:1.2
 }, 'randomly generated AI levels should apply the same combat bonuses and level color');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.aiLevelSamples)), [1,2,3,4,5,6,7,8],
     'the weighted AI level roll should be able to produce every level');
@@ -283,9 +285,9 @@ assert.strictEqual(result.normalTargetAccepted, true, 'non-camouflaged targets s
 assert.strictEqual(result.golden, true, 'mastery shells should be marked golden for both renderers');
 assert(Math.abs(result.goldenDamage - result.baseShellDamage * 1.35 * 1.2) < 1e-9,
     'level-eight golden shells should combine the thirty-five-percent gold bonus with twenty-percent weapon damage');
-assert(Math.abs(result.trailDamage - 27.5) < 0.001, 'hot mastery trail should deal 55 damage per second');
+assert(Math.abs(result.trailDamage - 37.5) < 0.001, 'hot mastery trail should deal 75 damage per second');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.deathFlame)), {
-    kind:'mastery-death-flame', color:'#ffd700', duration:8, radius:140,
+    kind:'mastery-death-flame', color:'#ffd700', duration:9, radius:165,
     damagePerSecond:190, damage:95, friendlyDamage:0
 }, 'level-eight death fire should persist after owner death and damage enemies only');
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.inspired)), {

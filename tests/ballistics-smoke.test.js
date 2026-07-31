@@ -86,4 +86,29 @@ const obstacleResult = sandbox.__aaObstacleCollision;
 assert.strictEqual(obstacleResult.ignoresObstacles, false, 'AA projectiles must participate in obstacle collision');
 assert.strictEqual(obstacleResult.blockedCount, 0, 'a tall obstacle should stop a fast AA projectile even between frame endpoints');
 assert.strictEqual(obstacleResult.flyoverCount, 1, 'an AA projectile above a low obstacle should continue flying');
+
+vm.runInContext(`
+    bullets = [];
+    obstacles = [];
+    testTank.shells = 1;
+    testTank.shellElevation = 45;
+    fireBullet(testTank, 'shell');
+    const physicalShell = bullets[0];
+    const shellLifeIsInfinite = physicalShell.life === Infinity;
+    for(let i = 0; i < 205; i++) updateBullets(0.02);
+    const shellExistsAfterFourSeconds = bullets.includes(physicalShell);
+    for(let i = 0; i < 120 && bullets.includes(physicalShell); i++) updateBullets(0.02);
+    globalThis.__shellPhysics = {
+        shellLifeIsInfinite,
+        shellExistsAfterFourSeconds,
+        removedByGroundImpact: !bullets.includes(physicalShell),
+        finalZ: physicalShell.z
+    };
+`, sandbox);
+
+const shellPhysics = sandbox.__shellPhysics;
+assert.strictEqual(shellPhysics.shellLifeIsInfinite, true, 'main shells should not receive a timed lifetime');
+assert.strictEqual(shellPhysics.shellExistsAfterFourSeconds, true, 'a high-arc shell should still exist after the old four-second timeout');
+assert.strictEqual(shellPhysics.removedByGroundImpact, true, 'gravity should eventually terminate the shell at terrain contact');
+assert.strictEqual(shellPhysics.finalZ, 0, 'the physical shell should be clamped to ground height on impact');
 console.log('3D ballistics smoke test passed:', result);

@@ -5,9 +5,16 @@ const vm = require('vm');
 const source = fs.readFileSync('DailyTasks.js', 'utf8');
 const awarded = [];
 let saveCount = 0;
+class FixedDate extends Date {
+    constructor(...args) {
+        if(args.length) super(...args);
+        else super(2026, 6, 29, 12, 0, 0);
+    }
+    static now() { return new Date(2026, 6, 29, 12, 0, 0).getTime(); }
+}
 const context = {
     console,
-    Date,
+    Date: FixedDate,
     Math,
     Object,
     Number,

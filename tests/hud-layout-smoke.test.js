@@ -43,8 +43,8 @@ assert(render.includes('function updateModeStatusHUD()') &&
 assert(!render.includes('ctx.fillRect(canvas.width / 2 - 150, 64, 300, 34)') &&
     !render.includes('ctx.fillRect(canvas.width / 2 - 220, 62, 440, 48)'),
     'mode panels must not use fixed canvas coordinates beneath DOM HUD elements');
-assert(html.includes('style.css?v=three-only-26') &&
-    html.includes('GameCore.js?v=three-only-26') &&
+assert(html.includes('style.css?v=physics-settings-28') &&
+    html.includes('GameCore.js?v=physics-settings-28') &&
     html.includes('Render.js?v=hud-layout-25'),
     'HUD layout assets should use fresh cache keys');
 

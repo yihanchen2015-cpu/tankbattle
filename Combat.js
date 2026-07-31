@@ -36,7 +36,8 @@ function fireBullet(tank, type) {
     const masteryDamageMult = masteryGolden
         ? (typeof MASTERY_GOLDEN_SHELL_DAMAGE_MULT !== 'undefined' ? MASTERY_GOLDEN_SHELL_DAMAGE_MULT : 1.2)
         : 1;
-    const maxLife = type === 'bomb' ? 5.0 : (type === 'shell' ? 4.0 : (type === 'aa' ? 5.0 : 1.2));
+    // 主炮弹不使用计时销毁：它会按弹道飞行，直到坠地或真实碰撞。
+    const maxLife = type === 'bomb' ? 5.0 : (type === 'shell' ? Infinity : (type === 'aa' ? 5.0 : 1.2));
     const muzzleDistance = type === 'bomb' ? 0 : tank.turretSize + 12;
     bullets.push({
         x: tank.x + Math.cos(angle) * muzzleDistance,
@@ -116,6 +117,12 @@ function deploySmokeGrenade(tank, options = {}) {
 }
 
 function updateBullets(dt) {
+    if(typeof apsInterceptEffects !== 'undefined') {
+        for(let i = apsInterceptEffects.length - 1; i >= 0; i--) {
+            apsInterceptEffects[i].life -= dt;
+            if(apsInterceptEffects[i].life <= 0) apsInterceptEffects.splice(i, 1);
+        }
+    }
     for(let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.age = (b.age || 0) + dt;
@@ -187,6 +194,19 @@ function updateBullets(dt) {
             b.vz -= (b.type === 'aa' ? CONFIG.aaGravity : CONFIG.shellGravity) * dt;
             b.altitude = b.z;
         }
+        if(b.type === 'shell' && !b.isRocket && b.vz <= 0) {
+            const groundHeight = getBombImpactHeight(b.x, b.y);
+            if(b.z <= groundHeight) {
+                b.z = groundHeight;
+                if(typeof damageTerrainInRadius === 'function') {
+                    damageTerrainInRadius(b.x, b.y, 24, b.damage || CONFIG.bulletDamage, 'shell', b.owner);
+                }
+                createParticles(b.x, b.y, 10, b.masteryGolden ? '#ffe36a' : '#a87a4a', 1.15);
+                if(typeof playWorldSound === 'function') playWorldSound('hit', b.x, b.y, b.owner && b.owner.isPlayer ? .72 : .4);
+                bullets.splice(i, 1);
+                continue;
+            }
+        }
         if(Math.random() < 0.4) {
             const trailColor = b.neutralSniper ? '#c02cff' : (b.type === 'shell' ? '#ff8800' : (b.type === 'aa' ? '#ff66ff' : '#ffff44'));
             createParticles(b.x, b.y, b.neutralSniper ? 2 : 1, trailColor, b.neutralSniper ? .75 : .4);
@@ -196,7 +216,8 @@ function updateBullets(dt) {
             bullets.splice(i, 1);
             continue;
         }
-        if(b.life <= 0 || b.z < -5 || b.x < 0 || b.x > CONFIG.mapWidth || b.y < 0 || b.y > CONFIG.mapHeight) { bullets.splice(i, 1); continue; }
+        const lifetimeExpired = b.type !== 'shell' && b.life <= 0;
+        if(lifetimeExpired || b.z < -5 || b.x < 0 || b.x > CONFIG.mapWidth || b.y < 0 || b.y > CONFIG.mapHeight) { bullets.splice(i, 1); continue; }
         if(b.ignoresObstacles) continue;
         if(currentMap === 'factory' && typeof factoryProjectileCrossedSlab === 'function' && factoryProjectileCrossedSlab(b)) {
             createParticles(b.x,b.y,6,'#8d9498',.7);
@@ -285,6 +306,15 @@ function getBulletObstacleImpact(bullet, obs) {
     return edges[0];
 }
 
+function reflectProjectileFromNormal(bullet, nx, ny) {
+    const normalLength = Math.max(0.0001, Math.hypot(nx, ny));
+    const normalX = nx / normalLength;
+    const normalY = ny / normalLength;
+    const dot = bullet.vx * normalX + bullet.vy * normalY;
+    bullet.vx -= 2 * dot * normalX;
+    bullet.vy -= 2 * dot * normalY;
+}
+
 function tryRicochetBullet(bullet, obs) {
     if(!bullet || !obs || bullet.type !== 'shell' || !bullet.canRicochet || bullet.ricocheted || bullet.baseDefense) return false;
     const speed = Math.hypot(bullet.vx, bullet.vy);
@@ -293,14 +323,14 @@ function tryRicochetBullet(bullet, obs) {
     const dot = (bullet.vx / speed) * impact.nx + (bullet.vy / speed) * impact.ny;
     const grazingAngle = Math.asin(Math.min(1, Math.abs(dot))) * 180 / Math.PI;
     if(grazingAngle >= CONFIG.ricochetMaxGrazingAngle) return false;
-    bullet.vx -= 2 * dot * speed * impact.nx;
-    bullet.vy -= 2 * dot * speed * impact.ny;
+    reflectProjectileFromNormal(bullet, impact.nx, impact.ny);
     bullet.x = impact.x + impact.nx * 4;
     bullet.y = impact.y + impact.ny * 4;
     bullet.prevX = bullet.x;
     bullet.prevY = bullet.y;
     bullet.damage *= CONFIG.ricochetDamageMultiplier;
     bullet.ricocheted = true;
+    bullet.ricochetSource = 'obstacle';
     bullet.maxTargetHits = 2;
     bullet.ricochetAngle = grazingAngle;
     return true;
@@ -325,15 +355,14 @@ function tryTankArmorRicochet(tank, bullet, actualArmor) {
     const distance = Math.max(1, Math.hypot(bullet.x - tank.x, bullet.y - tank.y));
     const nx = (bullet.x - tank.x) / distance;
     const ny = (bullet.y - tank.y) / distance;
-    const dot = bullet.vx * nx + bullet.vy * ny;
-    bullet.vx -= 2 * dot * nx;
-    bullet.vy -= 2 * dot * ny;
+    reflectProjectileFromNormal(bullet, nx, ny);
     bullet.x = tank.x + nx * (CONFIG.tankSize + 5);
     bullet.y = tank.y + ny * (CONFIG.tankSize + 5);
     bullet.prevX = bullet.x;
     bullet.prevY = bullet.y;
     bullet.damage *= CONFIG.ricochetDamageMultiplier;
     bullet.ricocheted = true;
+    bullet.ricochetSource = 'armor';
     bullet.maxTargetHits = Math.max(2, bullet.maxTargetHits || 1);
     if(bullet.hitTanks) bullet.hitTanks.add(tank.id);
     createParticles(bullet.x, bullet.y, 16, '#b7f7ff', 1.4);
@@ -415,7 +444,9 @@ function applyDirectDamage(tank, damage, source, cause = null, projectile = null
     const baseShieldMultiplier = typeof getBlueBaseShieldDamageMultiplier === 'function'
         ? getBlueBaseShieldDamageMultiplier(tank)
         : 1;
-    let remaining = damage * modeMultiplier * baseShieldMultiplier * (tank.masteryAuraDefenseMult || 1) *
+    const beginnerDamageMultiplier = tank === player && source && source.team !== tank.team &&
+        typeof isBeginnerModeEnabled === 'function' && isBeginnerModeEnabled() ? 0.75 : 1;
+    let remaining = damage * modeMultiplier * beginnerDamageMultiplier * baseShieldMultiplier * (tank.masteryAuraDefenseMult || 1) *
         (tank.bossBuffDefenseMult || 1) * Math.max(0, 1 - (tank.damageReduction || 0));
     if(tank.shieldActive && tank.shieldHp > 0) {
         const absorbed = Math.min(tank.shieldHp, remaining);
@@ -467,7 +498,8 @@ function explodeBomb(bomb) {
     const queryRadius = Math.hypot(halfW, halfH);
     if(typeof damageTerrainInRadius === 'function') damageTerrainInRadius(bomb.x, bomb.y, queryRadius, bomb.damage, 'bomb', bomb.owner);
     getNearbyTanks(bomb.x, bomb.y, queryRadius).forEach(tank => {
-        if(!tank || tank.dead || tank.team === bomb.team) return;
+        if(!tank || tank.dead || (tank.team === bomb.team &&
+            !(typeof isFriendlyFireEnabled === 'function' && isFriendlyFireEnabled()))) return;
         const dx = Math.abs(tank.x - bomb.x), dy = Math.abs(tank.y - bomb.y);
         if(dx > halfW || dy > halfH) return;
         if(Math.abs(getProjectileTargetHeight(tank) - (bomb.z || 0)) > 65) return;
@@ -494,7 +526,8 @@ function explodeRocket(b) {
     if(typeof damageTerrainInRadius === 'function') damageTerrainInRadius(b.x, b.y, radius, b.damage, 'rocket', b.owner);
     const targets = getNearbyTanks(b.x, b.y, radius);
     targets.forEach(tank => {
-        if(tank.dead || tank.team === b.team) return;
+        if(tank.dead || (tank.team === b.team &&
+            !(typeof isFriendlyFireEnabled === 'function' && isFriendlyFireEnabled()))) return;
         const distance = Math.hypot(tank.x - b.x, tank.y - b.y);
         if(distance > radius) return;
         if(Number.isFinite(b.z) && Math.abs(getProjectileTargetHeight(tank) - b.z) > 70) return;
@@ -524,18 +557,72 @@ function projectileMatchesTargetHeight(projectile, tank) {
     return Math.abs((projectile.z || 0) - getProjectileTargetHeight(tank)) <= tolerance;
 }
 
+function tryAPSInterceptProjectile(projectile) {
+    if(!projectile || projectile.apsIntercepted || !['shell', 'aa', 'rocket'].includes(projectile.type)) return null;
+    const radius = CONFIG.apsInterceptionRadius || 95;
+    const heightTolerance = CONFIG.apsInterceptionHeightTolerance || 72;
+    const candidates = getNearbyTanks(projectile.x, projectile.y, radius)
+        .filter(tank => tank && !tank.dead && tank.team !== projectile.team &&
+            (tank.apsCharges || 0) > 0 && (tank.apsCooldown || 0) <= 0)
+        .sort((a, b) => Math.hypot(a.x - projectile.x, a.y - projectile.y) - Math.hypot(b.x - projectile.x, b.y - projectile.y));
+    for(const tank of candidates) {
+        const distance = Math.hypot(tank.x - projectile.x, tank.y - projectile.y);
+        if(distance > radius || Math.abs(getProjectileTargetHeight(tank) - (projectile.z || 0)) > heightTolerance) continue;
+        const toTankX = tank.x - projectile.x;
+        const toTankY = tank.y - projectile.y;
+        const horizontalSpeed = Math.hypot(projectile.vx || 0, projectile.vy || 0);
+        if(horizontalSpeed > .1 && (projectile.vx * toTankX + projectile.vy * toTankY) <= 0) continue;
+        tank.apsCharges--;
+        tank.apsCooldown = CONFIG.apsCooldown;
+        projectile.apsIntercepted = true;
+        if(typeof apsInterceptEffects !== 'undefined') {
+            apsInterceptEffects.push({
+                x1: tank.x, y1: tank.y, z1: getProjectileTargetHeight(tank) + 12,
+                x2: projectile.x, y2: projectile.y, z2: projectile.z || 0,
+                life: .28, maxLife: .28
+            });
+        }
+        for(let step = 1; step <= 5; step++) {
+            const progress = step / 6;
+            createParticles(
+                tank.x + (projectile.x - tank.x) * progress,
+                tank.y + (projectile.y - tank.y) * progress,
+                2, '#54e7ff', .72
+            );
+        }
+        createParticles(projectile.x, projectile.y, 18, '#8ef3ff', 1.45);
+        createParticles(projectile.x, projectile.y, 8, '#ff9a42', .9);
+        if(typeof areDamageNumbersEnabled !== 'function' || areDamageNumbersEnabled()) {
+            damageNumbers.push({
+                x: projectile.x, y: projectile.y, z: (projectile.z || 0) + 18,
+                text: 'APS 拦截', life: .9, maxLife: .9, vy: -32, vz: 38, color: '#72efff'
+            });
+        }
+        if(tank === player && typeof showMessage === 'function') showMessage('◇ APS 车外拦截成功', '#72efff');
+        if(typeof playWorldSound === 'function') playWorldSound('aa', projectile.x, projectile.y, tank === player ? .9 : .55);
+        return tank;
+    }
+    return null;
+}
+
 function checkCollisions() {
     for(let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         let hitCount = 0;
-        let forceRemove = false;
         let maxHits = b.maxTargetHits || (b.type === 'mg' ? CONFIG.mgPenetration : 1);
+        if(tryAPSInterceptProjectile(b)) {
+            bullets.splice(i, 1);
+            continue;
+        }
         
         const nearbyTanks = getNearbyTanks(b.x, b.y, CONFIG.tankSize * 2.5);
         const potentialTargets = nearbyTanks.filter(t => {
             if(!t || t.dead) return false;
             if(b.neutralSniperTargetId && t.id !== b.neutralSniperTargetId) return false;
-            if(t.team === b.team) return !!b.ricocheted;
+            if(t.team === b.team) {
+                const friendlyFire = typeof isFriendlyFireEnabled === 'function' && isFriendlyFireEnabled();
+                return (friendlyFire || !!b.ricocheted) && t.invincible <= 0;
+            }
             return t.invincible <= 0;
         });
         
@@ -546,7 +633,8 @@ function checkCollisions() {
             if(dist < (tank.hitRadius || CONFIG.tankSize)) {
                 // XYZ 三轴同时重叠才命中；XY 擦过但高度不符时继续飞行。
                 if(!projectileMatchesTargetHeight(b, tank)) continue;
-                if(b.ricocheted && tank.team === b.team) {
+                if(b.ricocheted && tank.team === b.team &&
+                    !(typeof isFriendlyFireEnabled === 'function' && isFriendlyFireEnabled())) {
                     tank.ricochetSpeedBoost = CONFIG.ricochetFriendlySpeedBoost;
                     tank.ricochetSpeedBoostTimer = CONFIG.ricochetFriendlyBoostDuration;
                     createParticles(tank.x, tank.y, 14, '#64f5c8', 1.35);
@@ -555,14 +643,6 @@ function checkCollisions() {
                     hitCount++;
                     if(b.hitTanks) b.hitTanks.add(tank.id);
                     continue;
-                }
-                if(['shell', 'aa', 'rocket'].includes(b.type) && tank.apsCharges > 0 && tank.apsCooldown <= 0) {
-                    tank.apsCharges--;
-                    tank.apsCooldown = CONFIG.apsCooldown;
-                    createParticles(b.x, b.y, 12, '#00d4ff', 1);
-                    hitCount = maxHits;
-                    forceRemove = true;
-                    break;
                 }
                 let actualArmor = tank.armor * (1 + (tank.armorBoost || 0)) + (tank.mapArmorBonus || 0);
                 if(tank.fortressActive && tank.ultimateData) actualArmor = tank.armor * (tank.ultimateData.armorMult || 5.0);
@@ -605,7 +685,8 @@ function checkCollisions() {
                 }
                 if(b.explosionRadius > 0) {
                     getNearbyTanks(b.x, b.y, b.explosionRadius).forEach(other => {
-                        if(other === tank || other.dead || other.team === b.team) return;
+                        if(other === tank || other.dead || (other.team === b.team &&
+                            !(typeof isFriendlyFireEnabled === 'function' && isFriendlyFireEnabled()))) return;
                         const distance = Math.hypot(other.x - b.x, other.y - b.y);
                         if(distance > b.explosionRadius) return;
                         const splash = b.damage * 0.5 * Math.max(0.25, 1 - distance / b.explosionRadius);
@@ -620,7 +701,7 @@ function checkCollisions() {
                 if(b.hitTanks) b.hitTanks.add(tank.id);
             }
         }
-        if(hitCount > 0 && (forceRemove || !b.hitTanks || b.hitTanks.size >= maxHits)) bullets.splice(i, 1);
+        if(hitCount > 0 && (!b.hitTanks || b.hitTanks.size >= maxHits)) bullets.splice(i, 1);
     }
     
     for(let i = bullets.length - 1; i >= 0; i--) {

@@ -1,13 +1,23 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --font-mechanical: "DIN Alternate", "Arial Narrow", "Roboto Condensed", "STHeiti", "Microsoft YaHei", sans-serif;
+            --font-mechanical-display: "Impact", "DIN Condensed", "DIN Alternate", "Arial Narrow", "STHeiti", sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         html { width: 100%; height: 100%; overflow: hidden; }
         body {
             background: #0a0a0a;
             color: #fff;
-            font-family: 'Microsoft YaHei', sans-serif;
+            font-family: var(--font-mechanical);
+            font-stretch: condensed;
+            letter-spacing: .025em;
             overflow: hidden;
             padding: 0;
             width: 100vw;
             height: 100vh;
+        }
+        button, input, select, textarea {
+            font: inherit;
+            letter-spacing: inherit;
         }
         #gameContainer {
             position: fixed;
@@ -556,7 +566,6 @@
             flex-direction: column;
             align-items: center;
             justify-content: flex-start;
-            justify-content: safe center;
             z-index: 200;
             overflow-x: hidden;
             overflow-y: auto;
@@ -602,8 +611,9 @@
             letter-spacing: .18em;
         }
         .start-title {
+            font-family: var(--font-mechanical-display);
             font-size: clamp(46px, 6vw, 72px);
-            font-weight: bold;
+            font-weight: 900;
             color: #00d4ff;
             text-shadow: 
                 0 0 20px #00d4ff,
@@ -678,7 +688,7 @@
             max-width: none;
             padding: 0;
         }
-.mode-btn {
+        .mode-btn {
             padding: 12px 16px;
             font-size: 16px;
             font-weight: bold;
@@ -693,11 +703,7 @@
             width: 100%;
             min-width: 0;
             min-height: 112px;
-}
-
-.mode-escort { border-color: #ffb02e; }
-.mode-deathmatch { border-color: #ff496d; }
-.mode-boss { border-color: #a86dff; }
+        }
         .mode-btn::after {
             content: '';
             position: absolute;
@@ -808,6 +814,169 @@
             border-color: rgba(255, 255, 255, 0.4);
             transform: scale(1.05);
         }
+        .start-btn-settings {
+            color: #ffe28a;
+            border-color: rgba(255, 193, 61, .45);
+            background: linear-gradient(135deg, rgba(121,78,10,.34), rgba(255,180,35,.08));
+        }
+
+        /* ========== 战场设置 ========== */
+        .settings-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 520;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 22px;
+            background:
+                linear-gradient(rgba(4, 8, 10, .86), rgba(4, 8, 10, .93)),
+                repeating-linear-gradient(135deg, transparent 0 18px, rgba(255,190,46,.06) 18px 20px);
+            backdrop-filter: blur(9px);
+        }
+        .settings-modal.active { display: flex; }
+        .settings-panel {
+            width: min(780px, 100%);
+            max-height: min(88vh, 760px);
+            overflow-y: auto;
+            color: #e8edf0;
+            background: linear-gradient(145deg, #151b1d, #090d0f 70%);
+            border: 2px solid #687176;
+            border-top-color: #d19a38;
+            border-radius: 4px;
+            box-shadow: 0 30px 80px rgba(0,0,0,.68), inset 0 0 0 1px rgba(255,255,255,.05);
+            clip-path: polygon(0 14px, 14px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0 calc(100% - 14px));
+        }
+        .settings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 22px 24px 18px;
+            border-bottom: 1px solid #3b4448;
+            background: linear-gradient(90deg, rgba(194,126,24,.18), transparent 55%);
+        }
+        .settings-kicker {
+            color: #d7a64a;
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: .22em;
+        }
+        .settings-header h2 {
+            margin-top: 5px;
+            color: #f3f0df;
+            font-family: var(--font-mechanical-display);
+            font-size: clamp(26px, 5vw, 38px);
+            letter-spacing: .14em;
+        }
+        .settings-close {
+            width: 42px;
+            height: 42px;
+            flex: 0 0 auto;
+            color: #d9e0e3;
+            background: #20282b;
+            border: 1px solid #5d696e;
+            border-radius: 2px;
+            font-size: 28px;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            padding: 18px 24px;
+        }
+        .setting-row {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 48px;
+            align-items: center;
+            gap: 14px;
+            min-height: 92px;
+            padding: 15px;
+            border: 1px solid #353f43;
+            border-left: 4px solid #647178;
+            border-radius: 2px;
+            background: linear-gradient(110deg, rgba(255,255,255,.055), rgba(255,255,255,.015));
+            cursor: pointer;
+        }
+        .setting-row:hover { border-color: #748086; background-color: rgba(255,255,255,.035); }
+        .setting-row.setting-warning { border-left-color: #d56642; }
+        .setting-row.setting-assist { border-left-color: #4fbea3; }
+        .setting-copy { min-width: 0; }
+        .setting-copy strong {
+            display: block;
+            margin-bottom: 6px;
+            color: #f2f4f4;
+            font-size: 17px;
+            font-weight: 950;
+            letter-spacing: .08em;
+        }
+        .setting-copy small {
+            display: block;
+            color: #96a2a7;
+            font-size: 11px;
+            line-height: 1.55;
+        }
+        .setting-row input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .setting-switch {
+            position: relative;
+            width: 48px;
+            height: 24px;
+            background: #272f32;
+            border: 1px solid #596267;
+            box-shadow: inset 0 2px 6px rgba(0,0,0,.65);
+            transition: .2s ease;
+        }
+        .setting-switch::after {
+            content: "";
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 16px;
+            height: 16px;
+            background: #7c878b;
+            box-shadow: 0 1px 4px #000;
+            transition: .2s ease;
+        }
+        .setting-row input:checked + .setting-switch {
+            background: #6b4d17;
+            border-color: #e5ad43;
+            box-shadow: 0 0 13px rgba(229,173,67,.24), inset 0 2px 5px rgba(0,0,0,.45);
+        }
+        .setting-row input:checked + .setting-switch::after {
+            left: 27px;
+            background: #ffd36c;
+        }
+        .setting-row input:focus-visible + .setting-switch { outline: 2px solid #8feaff; outline-offset: 3px; }
+        .settings-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 16px 24px 22px;
+            border-top: 1px solid #313a3e;
+        }
+        .settings-summary {
+            color: #c5d0d4;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .settings-actions { display: flex; gap: 9px; }
+        .settings-actions button {
+            min-width: 112px;
+            padding: 10px 15px;
+            border-radius: 2px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .settings-reset { color: #bbc4c8; background: #242b2e; border: 1px solid #556066; }
+        .settings-save { color: #17130a; background: #e5ad43; border: 1px solid #ffe19b; }
         @media (max-width: 900px) {
             .mode-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
@@ -818,6 +987,11 @@
             .mode-select-title { font-size: 18px; }
             .start-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .start-btn-secondary { width: 100%; padding: 10px 8px; letter-spacing: .04em; }
+            .settings-modal { padding: 10px; }
+            .settings-grid { grid-template-columns: 1fr; padding: 12px 15px; }
+            .settings-header { padding: 18px 16px 14px; }
+            .settings-footer { align-items: stretch; flex-direction: column; padding: 14px 16px 18px; }
+            .settings-actions button { flex: 1; min-width: 0; }
         }
 
         /* ========== 游戏介绍弹窗 ========== */
@@ -1517,6 +1691,19 @@
             border-radius: 8px;
             pointer-events: auto;
         }
+        #beginnerRosterNotice {
+            display: none;
+            margin: 10px 0 4px;
+            padding: 9px 12px;
+            color: #baf5df;
+            background: rgba(36, 139, 111, .16);
+            border: 1px solid rgba(81, 222, 183, .38);
+            border-left: 4px solid #51deb7;
+            border-radius: 2px;
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: .08em;
+        }
         #hud {
             position: absolute;
             top: 10px; left: 10px;
@@ -1907,8 +2094,7 @@
             }
             .mode-btn {
                 padding: 2vh 3vw;
-                flex: 1 1 40vw;
-                max-width: 90vw;
+                max-width: none;
                 min-height: 12vh;
             }
             .mode-btn .mode-name {
@@ -1920,9 +2106,9 @@
                 line-height: 1.4;
             }
             .start-btn-secondary {
-                padding: 2vh 8vw;
-                font-size: 3.5vw;
-                margin-top: 1.5vh !important;
+                padding: 1.5vh 2vw;
+                font-size: clamp(12px, 2.8vw, 18px);
+                margin: 0 !important;
             }
 
             /* 菜单界面 */
@@ -2279,7 +2465,7 @@
         }
     
         /* 成就面板 */
-        #achievementPanel { font-family: 'Microsoft YaHei', sans-serif; }
+        #achievementPanel { font-family: var(--font-mechanical); }
         .achievement-card {
             background: linear-gradient(135deg, #0f0f2a, #1a1a3e);
             border: 2px solid #333;

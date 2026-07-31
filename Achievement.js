@@ -459,7 +459,7 @@ function showAchievementPopup(ach) {
         background: linear-gradient(135deg, #1a1a3e, #0f0f2a);
         border: 2px solid #ffd700; border-radius: 15px;
         padding: 15px 25px; color: #fff; z-index: 10000;
-        font-family: 'Microsoft YaHei', sans-serif;
+        font-family: var(--font-mechanical, "DIN Alternate", "Arial Narrow", "STHeiti", sans-serif);
         box-shadow: 0 0 30px rgba(255,215,0,0.3);
         transition: right 0.5s ease; min-width: 280px;
     `;
@@ -552,8 +552,14 @@ function endMatchStats(result) {
 }
 
 function recordKill(tank, target, hitInfo = null) {
-    if(typeof awardKillScore === 'function') awardKillScore(tank, target);
     if(target && target.isPlayer) resetPlayerMultiKill();
+    if(tank && target && tank.team && target.team && tank.team === target.team) {
+        if(tank.isPlayer && typeof showMessage === 'function') {
+            showMessage(`⚠ 友军误伤：${target.name || '友军单位'}已被击毁`, '#ff7048');
+        }
+        return;
+    }
+    if(typeof awardKillScore === 'function') awardKillScore(tank, target);
     if(tank.isPlayer) {
         registerPlayerMultiKill(target);
         playerStats.currentMatchKills++;

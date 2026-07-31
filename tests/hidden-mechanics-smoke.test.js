@@ -39,19 +39,24 @@ assert.strictEqual(baseSandbox.bases.blue.defenseCooldown, 1, 'enraged base shou
 assert(baseSandbox.bullets[0].vx > 0 && Math.abs(baseSandbox.bullets[0].vy) < 0.01, 'enraged base should target the nearest enemy');
 
 // 跳弹：只接受小于 15° 的擦边入射，伤害减半并获得一次额外穿透。
+const combatMath = Object.create(Math);
+combatMath.random = () => 0.99;
 const combatSandbox = {
     console,
-    Math,
+    Math: combatMath,
     CONFIG: {
         ricochetMaxGrazingAngle: 15, ricochetDamageMultiplier: 0.5,
         ricochetFriendlySpeedBoost: 0.1, ricochetFriendlyBoostDuration: 5,
         tankSize: 35, mgPenetration: 3, apsCooldown: 15,
         aaHitHeightTolerance: 62, aaExplosionRadius: 60, bulletDamage: 180
     },
-    obstacles: [], bullets: [], currentMap:'classic',
+    obstacles: [], bullets: [], currentMap:'classic', gameMode:'classic',
     bases: { blue:{x:-500,y:-500,w:20,h:20,team:'blue'}, red:{x:500,y:500,w:20,h:20,team:'red'} },
-    player:null, allies:[], enemies:[],
-    createParticles() {}, playWorldSound() {}, showMessage() {}, showDamageNumber() {},
+    player:null, allies:[], enemies:[], damageNumbers:[], apsInterceptEffects:[],
+    friendlyFireEnabled:false, beginnerModeEnabled:false,
+    isFriendlyFireEnabled() { return combatSandbox.friendlyFireEnabled; },
+    isBeginnerModeEnabled() { return combatSandbox.beginnerModeEnabled; },
+    createParticles() {}, playWorldSound() {}, showMessage() {}, showDamageNumber() {}, recordKill() {},
     getNearbyTanks() { return [combatSandbox.player, ...combatSandbox.allies, ...combatSandbox.enemies].filter(Boolean); }
 };
 vm.createContext(combatSandbox);
@@ -64,7 +69,10 @@ assert(combatSandbox.graze.vx < 0 && combatSandbox.graze.vy > 0, 'ricochet shoul
 combatSandbox.steep = { type:'shell', canRicochet:true, ricocheted:false, prevX:95, prevY:130, x:105, y:132, vx:5, vy:1, damage:180 };
 assert.strictEqual(vm.runInContext('tryRicochetBullet(steep, {x:100,y:100,w:100,h:100})', combatSandbox), false, 'steep impacts must not ricochet');
 
-const friendly = { id:'friend', x:150, y:150, hp:800, maxHp:800, team:'blue', dead:false, invincible:0 };
+const friendly = {
+    id:'friend', x:150, y:150, hp:800, maxHp:800, team:'blue', dead:false, invincible:0,
+    armor:1, apsCharges:0, apsCooldown:0, shieldActive:false, shieldHp:0
+};
 combatSandbox.player = friendly;
 combatSandbox.bullets = [{ type:'shell', ricocheted:true, x:150, y:150, vx:1, vy:0, damage:90, team:'blue', owner:null, hitTanks:new Set(), maxTargetHits:2 }];
 vm.runInContext('checkCollisions()', combatSandbox);
@@ -72,6 +80,50 @@ assert.strictEqual(friendly.hp, 800, 'ricochet must not damage a friendly unit')
 assert.strictEqual(friendly.ricochetSpeedBoost, 0.1);
 assert.strictEqual(friendly.ricochetSpeedBoostTimer, 5);
 assert.strictEqual(combatSandbox.bullets.length, 1, 'friendly encouragement should consume only one of two penetration slots');
+
+combatSandbox.friendlyFireEnabled = true;
+friendly.ricochetSpeedBoost = 0;
+friendly.ricochetSpeedBoostTimer = 0;
+combatSandbox.bullets = [{
+    type:'shell', ricocheted:true, x:150, y:150, z:22, vx:1, vy:0,
+    damage:90, team:'blue', owner:null, hitTanks:new Set(), maxTargetHits:2
+}];
+vm.runInContext('checkCollisions()', combatSandbox);
+assert.strictEqual(friendly.hp, 710, 'enabled friendly fire should apply real projectile damage');
+assert.strictEqual(friendly.ricochetSpeedBoost, 0, 'friendly fire should replace the ricochet encouragement');
+
+combatSandbox.beginnerModeEnabled = true;
+friendly.hp = 800;
+const enemySource = { id:'enemy-source', x:200, y:150, team:'red', isPlayer:false };
+combatSandbox.enemySource = enemySource;
+vm.runInContext('applyDirectDamage(player, 100, enemySource)', combatSandbox);
+assert.strictEqual(friendly.hp, 725, 'beginner mode should reduce hostile damage by 25%');
+
+combatSandbox.beginnerModeEnabled = false;
+combatSandbox.friendlyFireEnabled = false;
+friendly.hp = 800;
+friendly.apsCharges = 1;
+friendly.apsCooldown = 0;
+combatSandbox.bullets = [{
+    type:'shell', x:220, y:150, z:22, vx:-1, vy:0, damage:180,
+    team:'red', owner:enemySource, hitTanks:new Set(), maxTargetHits:1
+}];
+vm.runInContext('checkCollisions()', combatSandbox);
+assert.strictEqual(friendly.hp, 800, 'APS interception outside the hull should prevent the incoming hit');
+assert.strictEqual(friendly.apsCharges, 0, 'APS interception should consume one countermeasure');
+assert.strictEqual(combatSandbox.bullets.length, 0, 'APS and the incoming projectile should destroy each other before hull contact');
+assert.strictEqual(combatSandbox.apsInterceptEffects.length, 1, 'APS collision should leave a short-lived 3D counter-projectile effect');
+
+friendly.apsCharges = 0;
+combatMath.random = () => 0;
+combatSandbox.armorShell = {
+    type:'shell', canRicochet:true, ricocheted:false, x:120, y:150, z:22,
+    vx:5, vy:0, damage:180, team:'red', hitTanks:new Set(), maxTargetHits:1
+};
+assert.strictEqual(vm.runInContext('tryTankArmorRicochet(player, armorShell, 3)', combatSandbox), true);
+assert(combatSandbox.armorShell.vx < 0, 'an armor ricochet should physically reverse the projectile direction');
+assert.strictEqual(combatSandbox.armorShell.ricochetSource, 'armor');
+assert.strictEqual(combatSandbox.armorShell.damage, 90, 'the continuing ricochet should retain reduced kinetic damage');
 
 // 绝地偷袭：≤3 名蓝方发现并占领隐藏点后，召唤三辆边缘增援并给全员 20% 护盾。
 const rescueAnnouncements = [];

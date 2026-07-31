@@ -57,6 +57,7 @@ function recordPlayerDamageSource(damage, source, cause, projectile = null) {
 }
 
 function updateCombatReplayBuffer(dt) {
+    if(typeof isCombatReplayEnabled === 'function' && !isCombatReplayEnabled()) return;
     if(combatReplayActive || !player || gameState !== 'playing') return;
     combatReplayTime += dt;
     combatReplayAccumulator += dt;
@@ -94,6 +95,7 @@ function captureCombatReplayFrame(force = false) {
 }
 
 function startCombatReplay(reason) {
+    if(typeof isCombatReplayEnabled === 'function' && !isCombatReplayEnabled()) return false;
     if(combatReplayActive || reason !== 'playerDead' || !player || !player.dead || combatReplayFrames.length < 2) return false;
     captureCombatReplayFrame(true);
     const fatalId = lastPlayerDamageInfo && lastPlayerDamageInfo.projectileId;

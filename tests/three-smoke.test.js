@@ -66,6 +66,7 @@ const sandbox = {
     damageNumbers: [],
     smokeClouds: [{ x: 1480, y: 1190, z: 0, radius: 135, life: 9, maxLife: 10 }],
     trailEffects: [],
+    apsInterceptEffects: [],
     allies: [],
     enemies: [],
     isTankInWater: () => false
@@ -110,6 +111,16 @@ vm.runInContext(`
         color: '#ff4444', accent: '#ffaaaa', shape: 'helicopter', team: 'red',
         tankType: 'heli', turretSize: 25, isPlayer: false, dead: false, isFlying: true,
         hp:450, maxHp:600, masteryLevel:2, masteryLevelColor:'#78ad57'
+    });
+    player.nailLocking = true;
+    player.nailLockTimer = 1.5;
+    player.nailTarget = enemies[0];
+    player.nailLaserAngle = 0;
+    player.ultimateData = { lockTime:3, range:5000 };
+    apsInterceptEffects.push({
+        x1:player.x, y1:player.y, z1:34,
+        x2:enemies[0].x - 30, y2:enemies[0].y, z2:24,
+        life:.2, maxLife:.28
     });
     supplyDrops.push({ id:'supply-test', x:1450, y:1160, z:180, landed:false, pulse:0 });
     const preservedObstacleId = obstacles[0].terrainId;
@@ -182,6 +193,10 @@ vm.runInContext(`
         binaryDigits: threeView.tankMeshes.get('player').userData.binaryCodeField.children.length,
         playerMarkerColor: threeView.tankMeshes.get('player').userData.marker.material.color.getHexString(),
         playerBeaconParts: threeView.tankMeshes.get('player').userData.playerBeacon.children.length,
+        targetingLaserCount: threeView.targetingLaserMeshes.size,
+        apsInterceptMeshCount: threeView.apsInterceptMeshes.size,
+        nailLaserColor: threeView.targetingLaserMeshes.get('nail-player').userData.line.material.color.getHexString(),
+        nailTargetRingVisible: threeView.targetingLaserMeshes.get('nail-player').userData.targetRing.visible,
         masteryTrailMeshes: threeView.trailEffectMeshes.size,
         deathFlameMesh: !!threeView.trailEffectMeshes.get(deathFlameEffect).userData.flames,
         masteryCamouflage: !!threeView.tankMeshes.get('player').userData.camouflage,
@@ -236,6 +251,10 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(result.masteryAuraLayers)), {fi
 assert.strictEqual(result.binaryDigits, 10, '3D Kimi effect should contain floating binary digits');
 assert.strictEqual(result.playerMarkerColor, '42efff', 'the player marker should use a unique high-visibility cyan');
 assert.strictEqual(result.playerBeaconParts, 3, 'the player should have an outer ring, vertical beam, and hovering pointer');
+assert.strictEqual(result.targetingLaserCount, 1, 'the 3D scene should synchronize an active lock-on laser');
+assert.strictEqual(result.apsInterceptMeshCount, 1, 'APS interception should render a visible 3D counter-projectile collision');
+assert.strictEqual(result.nailLaserColor, 'ff1712', 'the Nail of Judgment should use a clear red 3D targeting line');
+assert.strictEqual(result.nailTargetRingVisible, true, 'the locked target should receive a pulsing 3D target ring');
 assert.strictEqual(result.masteryTrailMeshes, 2, 'hot trail and death-flame zones should both be visible in 3D');
 assert.strictEqual(result.deathFlameMesh, true, 'death-flame zone should use animated 3D flame meshes');
 assert.strictEqual(result.masteryCamouflage, true, '3D tanks should carry visible camouflage patches');

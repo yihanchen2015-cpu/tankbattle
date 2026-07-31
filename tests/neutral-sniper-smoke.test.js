@@ -138,6 +138,6 @@ const threeRender = fs.readFileSync('ThreeRender.js','utf8');
 const html = fs.readFileSync('index.html','utf8');
 assert(render.includes('🎯 中立狙击塔') && render.includes('b.neutralSniper'), '2D mode should render the tower and its large purple shell');
 assert(threeRender.includes("element.type === 'neutralSniperTower'") && threeRender.includes('bullet.neutralSniper'), '3D mode should render the tower and purple shell');
-assert(html.includes('Config.js?v=new-modes-20') && html.includes('GameCore.js?v=hud-layout-24'), 'sniper scripts should use fresh cache keys');
+assert(html.includes('Config.js?v=physics-settings-28') && html.includes('GameCore.js?v=physics-settings-28'), 'sniper scripts should use fresh cache keys');
 
 console.log('Neutral sniper smoke test passed:', result);

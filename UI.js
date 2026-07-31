@@ -43,15 +43,18 @@ function closeInfoPanels(exceptId = '') {
     const achievements = document.getElementById('achievementPanel');
     const mastery = document.getElementById('masteryPanel');
     const dailyTasks = document.getElementById('dailyTasksPanel');
+    const settings = document.getElementById('settingsModal');
     if(intro && exceptId !== 'introModal') intro.classList.remove('active');
     if(tutorial && exceptId !== 'tutorialOverlay') tutorial.classList.remove('active');
     if(achievements && exceptId !== 'achievementPanel') achievements.style.display = 'none';
     if(mastery && exceptId !== 'masteryPanel') mastery.style.display = 'none';
     if(dailyTasks && exceptId !== 'dailyTasksPanel') dailyTasks.style.display = 'none';
+    if(settings && exceptId !== 'settingsModal') settings.classList.remove('active');
 }
 
 function init() {
     console.log('[INIT] 游戏初始化开始');
+    if(typeof initializeGameSettings === 'function') initializeGameSettings();
     loadStats();
     if(typeof initializeDailyTasks === 'function') initializeDailyTasks();
     checkHiddenTankUnlocks();
@@ -369,6 +372,9 @@ function setupIntroModal() {
 // ==================== 菜单系统 ====================
 let currentTankFilter = 'all';
 const TANK_SERIES_ORDER = ['zuoyan', 'xingchen', 'duoduo', 'niuniu', 'kimi'];
+const BEGINNER_TANK_POOL = Object.freeze([
+    'zuoyan29', 'zuoyan31', 'xingchen27a', 'xingchen27b', 'duoduo', 'duoduo_eng'
+]);
 
 function getTankSeries(key) {
     return TANK_SERIES_ORDER.find(series => key.startsWith(series)) || 'other';
@@ -409,11 +415,20 @@ function renderTankList() {
     }
     tankList.innerHTML = '';
 
+    const beginnerRoster = typeof isBeginnerModeEnabled === 'function' && isBeginnerModeEnabled();
+    const beginnerNotice = document.getElementById('beginnerRosterNotice');
+    if(beginnerNotice) beginnerNotice.style.display = beginnerRoster ? 'block' : 'none';
+    if(beginnerRoster && currentTankFilter !== 'all' &&
+        !BEGINNER_TANK_POOL.some(key => getTankSeries(key) === currentTankFilter)) {
+        currentTankFilter = 'all';
+    }
+
     Object.entries(TANKS).sort((a, b) => {
         const orderA = TANK_SERIES_ORDER.indexOf(getTankSeries(a[0]));
         const orderB = TANK_SERIES_ORDER.indexOf(getTankSeries(b[0]));
         return orderA - orderB;
     }).forEach(([key, tank]) => {
+        if(beginnerRoster && !BEGINNER_TANK_POOL.includes(key)) return;
         // 跳过未解锁的隐藏坦克
         if (tank.isHidden && !isTankUnlocked(key)) return;
         if(gameMode === 'custom' && typeof getCustomTankPool === 'function' && !getCustomTankPool().includes(key)) return;
@@ -741,6 +756,13 @@ function setupControls() {
 // ==================== 自动瞄准开关 ====================
 
 function toggleAutoAim(tank) {
+    if(tank && tank.isPlayer && typeof isAutoAimEnabled === 'function' && !isAutoAimEnabled()) {
+        tank.autoAimActive = false;
+        tank.autoAimTarget = null;
+        tank.autoAimLockOn = false;
+        showMessage('自动瞄准已在战场设置中关闭', '#ffb14d');
+        return;
+    }
     if (!tank) return;
     if (tank.autoAimActive) {
         tank.autoAimActive = false;

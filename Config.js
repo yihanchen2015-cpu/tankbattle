@@ -63,6 +63,8 @@ const CONFIG = {
     gunElevationStep: 2,
     apsCharges: 4,
     apsCooldown: 15,
+    apsInterceptionRadius: 95,
+    apsInterceptionHeightTolerance: 72,
     cameraSmooth: 0.06,
     speedPenaltyPerShell: 0.002,
     speedPenaltyPerMG: 0.0008,
@@ -345,6 +347,7 @@ let environmentState = {
     windStrength: 0
 };
 let smokeClouds = [];
+let apsInterceptEffects = [];
 let damageUpgradeState = {
     active: false,
     pending: false,

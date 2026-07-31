@@ -19,13 +19,14 @@ assert(core.includes('游戏未开始') && !core.includes('已回到 2D'),
     'unsupported WebGL should stop startup instead of falling back to 2D');
 
 assert(three.includes('group.userData.playerBeacon = playerBeacon') &&
-    three.includes("tank.isPlayer ? 'three-tank-label three-player-label'"),
+    three.includes("'three-tank-label three-player-label'") &&
+    three.includes('isPlayerLocatorEnabled'),
     'the player should receive both a world beacon and a high-priority HUD label');
 assert(css.includes('.three-player-label') && css.includes('.three-player-label .three-player-pin'),
     'the player locator should have dedicated high-visibility styling');
-assert(html.includes('UI.js?v=three-only-26') &&
-    html.includes('GameCore.js?v=three-only-26') &&
-    html.includes('ThreeRender.js?v=three-only-26'),
+assert(html.includes('UI.js?v=physics-settings-28') &&
+    html.includes('GameCore.js?v=physics-settings-28') &&
+    html.includes('ThreeRender.js?v=physics-settings-28'),
     '3D-only assets should use fresh cache keys');
 
 console.log('3D-only mode and player locator smoke test passed.');

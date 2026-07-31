@@ -6,6 +6,7 @@ const gameSoundThrottle = new Map();
 let screenShakeState = { strength: 0, duration: 0, remaining: 0 };
 
 function ensureGameAudio() {
+    if(typeof isGameAudioEnabled === 'function' && !isGameAudioEnabled()) return null;
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if(!AudioContextClass) return null;
     if(!gameAudioContext) gameAudioContext = new AudioContextClass();
@@ -70,6 +71,7 @@ function playNoiseLayer(ctx, options) {
 }
 
 function triggerScreenShake(strength, duration) {
+    if(typeof isScreenShakeEnabled === 'function' && !isScreenShakeEnabled()) return;
     screenShakeState.strength = Math.max(screenShakeState.strength, strength);
     screenShakeState.duration = Math.max(screenShakeState.duration, duration);
     screenShakeState.remaining = Math.max(screenShakeState.remaining, duration);
@@ -81,6 +83,7 @@ function updateScreenShake(dt) {
 }
 
 function getScreenShakeOffset(multiplier = 1) {
+    if(typeof isScreenShakeEnabled === 'function' && !isScreenShakeEnabled()) return { x: 0, y: 0 };
     if(screenShakeState.remaining <= 0 || screenShakeState.duration <= 0) return { x: 0, y: 0 };
     const fade = screenShakeState.remaining / screenShakeState.duration;
     const strength = screenShakeState.strength * fade * multiplier;

@@ -11,6 +11,8 @@ const threeView = {
     modeRoot: null,
     tankMeshes: new Map(),
     bulletMeshes: new Map(),
+    targetingLaserMeshes: new Map(),
+    apsInterceptMeshes: new Map(),
     turretMeshes: new Map(),
     supplyMeshes: new Map(),
     fireballMeshes: new Map(),
@@ -202,6 +204,8 @@ function rebuildThreeWorld(force = false) {
     threeView.scene.add(threeView.worldRoot, threeView.dynamicRoot, threeView.modeRoot);
     threeView.tankMeshes.clear();
     threeView.bulletMeshes.clear();
+    threeView.targetingLaserMeshes.clear();
+    threeView.apsInterceptMeshes.clear();
     threeView.turretMeshes.clear();
     threeView.supplyMeshes.clear();
     threeView.fireballMeshes.clear();
@@ -1254,6 +1258,8 @@ function syncThreeTanks(now) {
             mesh.userData.rescueShield.material.opacity = 0.14 + Math.sin(now * 0.012 + tank.x) * 0.05;
         }
         if(mesh.userData.marker) {
+            const locatorEnabled = typeof isPlayerLocatorEnabled !== 'function' || isPlayerLocatorEnabled();
+            mesh.userData.marker.visible = !tank.isPlayer || locatorEnabled;
             const spawnPulse = spawnRemaining > 0 ? 1 + (spawnRemaining / 1.15) * 1.8 : 1;
             mesh.userData.marker.scale.setScalar(spawnPulse);
             mesh.userData.marker.material.color.set(
@@ -1265,6 +1271,8 @@ function syncThreeTanks(now) {
             mesh.userData.marker.rotation.z = 0;
         }
         if(mesh.userData.playerBeacon) {
+            const locatorEnabled = typeof isPlayerLocatorEnabled !== 'function' || isPlayerLocatorEnabled();
+            mesh.userData.playerBeacon.visible = locatorEnabled;
             const beaconPulse = 1 + Math.sin(now * .006) * .09;
             mesh.userData.playerBeaconRing.scale.setScalar(beaconPulse);
             mesh.userData.playerBeaconRing.material.opacity = .72 + Math.sin(now * .008) * .2;
@@ -1447,6 +1455,171 @@ function syncThreeBullets() {
         if(!active.has(bullet)) {
             disposeThreeObject(mesh);
             threeView.bulletMeshes.delete(bullet);
+        }
+    }
+}
+
+function createThreeTargetingLaser(color = 0xff1d18) {
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(), new THREE.Vector3(1, 0, 0)
+    ]);
+    const line = new THREE.Line(
+        geometry,
+        new THREE.LineDashedMaterial({
+            color, transparent: true, opacity: .9,
+            dashSize: 1.2, gapSize: .65, depthTest: false, depthWrite: false
+        })
+    );
+    line.computeLineDistances();
+    line.renderOrder = 90;
+    const glow = new THREE.Line(
+        geometry.clone(),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: .28, depthTest: false, depthWrite: false })
+    );
+    glow.renderOrder = 89;
+    const targetRing = new THREE.Mesh(
+        new THREE.RingGeometry(3.4, 4.1, 32),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .82, side: THREE.DoubleSide, depthTest: false, depthWrite: false })
+    );
+    targetRing.rotation.x = -Math.PI / 2;
+    targetRing.renderOrder = 91;
+    const group = new THREE.Group();
+    group.add(glow, line, targetRing);
+    group.userData.line = line;
+    group.userData.glow = glow;
+    group.userData.targetRing = targetRing;
+    threeView.dynamicRoot.add(group);
+    return group;
+}
+
+function setThreeTargetingLine(effect, start, end) {
+    [effect.userData.line, effect.userData.glow].forEach(line => {
+        const position = line.geometry.getAttribute('position');
+        position.setXYZ(0, start.x, start.y, start.z);
+        position.setXYZ(1, end.x, end.y, end.z);
+        position.needsUpdate = true;
+        line.geometry.computeBoundingSphere();
+        if(line.computeLineDistances) line.computeLineDistances();
+    });
+}
+
+function syncThreeTargetingLasers(now) {
+    const active = new Set();
+    const tanks = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead);
+    tanks.forEach(tank => {
+        const specs = [];
+        if(tank.nailLocking && tank.ultimateData) {
+            if(tank.nailTarget && !tank.nailTarget.dead) {
+                tank.nailLaserAngle = Math.atan2(tank.nailTarget.y - tank.y, tank.nailTarget.x - tank.x);
+            }
+            const angle = tank.nailLaserAngle || tank.turretAngle || 0;
+            const muzzle = (tank.turretSize || 24) + 20;
+            const range = tank.ultimateData.range || 5000;
+            specs.push({
+                key: `nail-${tank.id}`,
+                color: 0xff1712,
+                startX: tank.x + Math.cos(angle) * muzzle,
+                startY: tank.y + Math.sin(angle) * muzzle,
+                endX: tank.x + Math.cos(angle) * range,
+                endY: tank.y + Math.sin(angle) * range,
+                target: tank.nailTarget,
+                progress: 1 - Math.max(0, tank.nailLockTimer || 0) / Math.max(.01, tank.ultimateData.lockTime || 3)
+            });
+        }
+        if(tank.judgeActive && tank.judgeTarget && !tank.judgeTarget.dead) {
+            specs.push({
+                key: `judge-${tank.id}`,
+                color: 0xff4b24,
+                startX: tank.x,
+                startY: tank.y,
+                endX: tank.judgeTarget.x,
+                endY: tank.judgeTarget.y,
+                target: tank.judgeTarget,
+                progress: .75
+            });
+        }
+        specs.forEach(spec => {
+            active.add(spec.key);
+            let effect = threeView.targetingLaserMeshes.get(spec.key);
+            if(!effect) {
+                effect = createThreeTargetingLaser(spec.color);
+                threeView.targetingLaserMeshes.set(spec.key, effect);
+            }
+            const start = new THREE.Vector3(
+                (spec.startX - CONFIG.mapWidth / 2) * THREE_WORLD_SCALE,
+                ((tank.z || 0) + 30) * THREE_WORLD_SCALE,
+                (spec.startY - CONFIG.mapHeight / 2) * THREE_WORLD_SCALE
+            );
+            const end = new THREE.Vector3(
+                (spec.endX - CONFIG.mapWidth / 2) * THREE_WORLD_SCALE,
+                ((spec.target && spec.target.z || 0) + 24) * THREE_WORLD_SCALE,
+                (spec.endY - CONFIG.mapHeight / 2) * THREE_WORLD_SCALE
+            );
+            setThreeTargetingLine(effect, start, end);
+            const pulse = 1 + Math.sin(now * .012) * .16 + spec.progress * .18;
+            effect.userData.line.material.opacity = .45 + spec.progress * .5;
+            effect.userData.targetRing.visible = !!spec.target;
+            if(spec.target) {
+                setThreeWorldPosition(effect.userData.targetRing, spec.target.x, spec.target.y, (spec.target.z || 0) * THREE_WORLD_SCALE + .18);
+                effect.userData.targetRing.scale.setScalar(pulse);
+                effect.userData.targetRing.rotation.z = now * .0025;
+            }
+        });
+    });
+    for(const [key, effect] of threeView.targetingLaserMeshes) {
+        if(!active.has(key)) {
+            disposeThreeObject(effect);
+            threeView.targetingLaserMeshes.delete(key);
+        }
+    }
+}
+
+function createThreeAPSInterceptEffect(effect) {
+    const start = new THREE.Vector3(
+        (effect.x1 - CONFIG.mapWidth / 2) * THREE_WORLD_SCALE,
+        effect.z1 * THREE_WORLD_SCALE,
+        (effect.y1 - CONFIG.mapHeight / 2) * THREE_WORLD_SCALE
+    );
+    const end = new THREE.Vector3(
+        (effect.x2 - CONFIG.mapWidth / 2) * THREE_WORLD_SCALE,
+        effect.z2 * THREE_WORLD_SCALE,
+        (effect.y2 - CONFIG.mapHeight / 2) * THREE_WORLD_SCALE
+    );
+    const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([start, end]),
+        new THREE.LineBasicMaterial({ color:0x63efff, transparent:true, opacity:.95, depthTest:false, depthWrite:false })
+    );
+    const impact = new THREE.Mesh(
+        new THREE.SphereGeometry(1.4, 12, 8),
+        new THREE.MeshBasicMaterial({ color:0xffc45a, transparent:true, opacity:.92, depthTest:false, depthWrite:false })
+    );
+    impact.position.copy(end);
+    const group = new THREE.Group();
+    group.add(line, impact);
+    group.userData.line = line;
+    group.userData.impact = impact;
+    threeView.dynamicRoot.add(group);
+    return group;
+}
+
+function syncThreeAPSInterceptEffects() {
+    if(typeof apsInterceptEffects === 'undefined') return;
+    const active = new Set(apsInterceptEffects);
+    apsInterceptEffects.forEach(effect => {
+        let group = threeView.apsInterceptMeshes.get(effect);
+        if(!group) {
+            group = createThreeAPSInterceptEffect(effect);
+            threeView.apsInterceptMeshes.set(effect, group);
+        }
+        const progress = Math.max(0, effect.life / Math.max(.01, effect.maxLife));
+        group.userData.line.material.opacity = progress;
+        group.userData.impact.material.opacity = progress;
+        group.userData.impact.scale.setScalar(1 + (1 - progress) * 2.4);
+    });
+    for(const [effect, group] of threeView.apsInterceptMeshes) {
+        if(!active.has(effect)) {
+            disposeThreeObject(group);
+            threeView.apsInterceptMeshes.delete(effect);
         }
     }
 }
@@ -2111,14 +2284,15 @@ function syncThreeHud() {
             layer.appendChild(label);
             threeView.tankLabels.set(tank.id, label);
         }
-        label.className = tank.isPlayer ? 'three-tank-label three-player-label' : 'three-tank-label';
+        const locatorEnabled = typeof isPlayerLocatorEnabled !== 'function' || isPlayerLocatorEnabled();
+        label.className = tank.isPlayer && locatorEnabled ? 'three-tank-label three-player-label' : 'three-tank-label';
         const tankData = TANKS[tank.tankType];
         const level = Math.max(1, Math.min(8, Number(tank.masteryLevel) || 1));
         const levelLabel = label.querySelector('.three-tank-level');
         const nameLabel = label.querySelector('.three-tank-name');
         const hpFill = label.querySelector('.three-tank-hp-fill');
         const playerPin = label.querySelector('.three-player-pin');
-        if(playerPin) playerPin.textContent = tank.isPlayer ? '▼ 你的位置' : '';
+        if(playerPin) playerPin.textContent = tank.isPlayer && locatorEnabled ? '▼ 你的位置' : '';
         if(levelLabel) {
             levelLabel.textContent = tank.isBoss ? '👑 BOSS' : tank.isEscortVIP ? '👑 VIP' : `★ Lv.${level}`;
             levelLabel.style.color = tank.isEscortVIP ? '#ffd84a' : '#f2f4f7';
@@ -2225,6 +2399,8 @@ function renderThreeScene() {
     syncThreeTerrainDestruction();
     syncThreeTanks(now);
     syncThreeBullets();
+    syncThreeTargetingLasers(now);
+    syncThreeAPSInterceptEffects();
     syncThreeSmokeClouds(now);
     syncThreeTrailEffects(now);
     syncThreeTurrets();
