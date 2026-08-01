@@ -788,6 +788,12 @@ function drawTank(tank) {
     const flattened=currentMap==='factory'&&(tank.flattenedTimer||0)>0;
     const animation = getTankVisualAnimation(tank);
     ctx.save();
+    const evolutionOpacity = tank.ghostActive && !tank.ghostRevealed
+        ? (tank.evolutionEffects && tank.evolutionEffects.ultimateOpacity || .28)
+        : tank.evolutionStealthActive
+            ? (tank.evolutionEffects && tank.evolutionEffects.stealthOpacity || .4)
+            : (tank.evolutionPermanentOpacity || 1);
+    ctx.globalAlpha *= evolutionOpacity;
     ctx.translate(tank.x + animation.recoilX, tankRenderY + animation.recoilY);
     const visualScale = tank.visualScale || 1;
     ctx.scale(animation.spawnScale * visualScale, animation.spawnScale * visualScale);
@@ -795,6 +801,18 @@ function drawTank(tank) {
     if(flattened)ctx.scale(1.18,.34);
     ctx.rotate(tank.angle);
     const detailed = !mobileDenseCombatMode || tank.isPlayer;
+    if(tank.evolutionAuraColor) {
+        ctx.strokeStyle = tank.evolutionAuraColor;
+        ctx.globalAlpha *= .72;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = tank.evolutionAuraColor;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, CONFIG.tankSize * 1.18, CONFIG.tankSize * .82, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha /= .72;
+        ctx.shadowBlur = 0;
+    }
     if(detailed) {
         ctx.fillStyle = 'rgba(0,0,0,0.28)';
         ctx.beginPath();
@@ -892,9 +910,11 @@ function drawTank(tank) {
         }
     }
     drawCamouflagePattern(ctx, tank, CONFIG.tankSize, detailed);
+    drawTankEvolutionOverlay(ctx, tank, CONFIG.tankSize, detailed);
     ctx.restore();
     drawMuzzleFlash(tank);
     ctx.save();
+    ctx.globalAlpha *= evolutionOpacity;
     ctx.translate(tank.x + animation.recoilX, tankRenderY + animation.recoilY);
     ctx.scale(animation.spawnScale * visualScale, animation.spawnScale * visualScale);
     if(animation.hitFlash) ctx.filter = `brightness(${1.35 + animation.hitFlash * 1.8}) saturate(1.35)`;
@@ -915,6 +935,15 @@ function drawTank(tank) {
     ctx.beginPath();
     ctx.arc(barrelLen + 8, 0, 5, 0, Math.PI*2);
     ctx.fill();
+    if(tank.evolutionMuzzleGlow) {
+        ctx.fillStyle = tank.evolutionMuzzleGlow;
+        ctx.shadowColor = tank.evolutionMuzzleGlow;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(barrelLen + 8, 0, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
     ctx.fillStyle = tank.accent;
     ctx.shadowColor = tank.accent;
     /*shadow*/ctx.shadowBlur = 0;
@@ -1615,6 +1644,70 @@ function drawCamouflagePattern(pctx, tank, size, detailed = true) {
     pctx.restore();
 }
 
+function drawTankEvolutionOverlay(pctx, tank, size, detailed = true) {
+    const style = tank && tank.evolutionBodyStyle;
+    if(!style || !detailed) return;
+    const accent = tank.accent || '#ffffff';
+    const time = Date.now() * .003;
+    pctx.save();
+    pctx.globalAlpha = .82;
+    pctx.strokeStyle = accent;
+    pctx.fillStyle = accent;
+    pctx.lineWidth = Math.max(1.4, size * .055);
+    pctx.shadowColor = accent;
+    pctx.shadowBlur = style.includes('gold') || style.includes('holy') ||
+        style.includes('lightning') || style.includes('lava') || style.includes('code') ? 10 : 4;
+
+    if(style.includes('ice')) {
+        [[-.52,-.36,.18],[.08,.34,.14],[.48,-.18,.12],[-.1,-.12,.1]].forEach(item => {
+            const x = item[0] * size, y = item[1] * size, radius = item[2] * size;
+            pctx.beginPath();
+            pctx.moveTo(x, y - radius);
+            pctx.lineTo(x + radius * .72, y);
+            pctx.lineTo(x, y + radius);
+            pctx.lineTo(x - radius * .72, y);
+            pctx.closePath();
+            pctx.stroke();
+        });
+    } else if(style.includes('armor') || style.includes('fortress') || style.includes('steel') || style.includes('rivets')) {
+        pctx.strokeRect(-size * .64, -size * .46, size * 1.25, size * .92);
+        for(let x = -size * .5; x <= size * .5; x += size * .25) {
+            pctx.beginPath(); pctx.arc(x, -size * .48, 2.3, 0, Math.PI * 2); pctx.fill();
+            pctx.beginPath(); pctx.arc(x, size * .48, 2.3, 0, Math.PI * 2); pctx.fill();
+        }
+    } else if(style.includes('code') || style.includes('hologram') || style.includes('machine')) {
+        pctx.font = `900 ${Math.max(7, size * .28)}px monospace`;
+        pctx.textAlign = 'center';
+        pctx.fillText('01 10 01', 0, -size * .2);
+        pctx.fillText('10 01 10', 0, size * .35);
+    } else {
+        const jagged = style.includes('crack') || style.includes('lava') || style.includes('burn') ||
+            style.includes('lightning') || style.includes('thunder');
+        for(let line = -1; line <= 1; line++) {
+            const offset = line * size * .28;
+            pctx.beginPath();
+            pctx.moveTo(-size * .7, offset);
+            if(jagged) {
+                pctx.lineTo(-size * .28, offset - size * .16);
+                pctx.lineTo(size * .05, offset + size * .13);
+                pctx.lineTo(size * .35, offset - size * .12);
+            }
+            pctx.lineTo(size * .72, offset);
+            pctx.stroke();
+        }
+    }
+    if(style.includes('star') || style.includes('god') || style.includes('legend')) {
+        for(let index = 0; index < 6; index++) {
+            const angle = time + index / 6 * Math.PI * 2;
+            pctx.globalAlpha = .42 + (index % 2) * .25;
+            pctx.beginPath();
+            pctx.arc(Math.cos(angle) * size * .86, Math.sin(angle) * size * .58, 2.2, 0, Math.PI * 2);
+            pctx.fill();
+        }
+    }
+    pctx.restore();
+}
+
 function drawBase(base) {
     if(!base || base.hidden) return;
     ctx.save();
@@ -2004,12 +2097,36 @@ function drawBullet(b) {
             return;
         }
         const golden = !!b.masteryGolden;
-        ctx.shadowColor = b.ricocheted ? '#72f6ff' : (golden ? '#ffd700' : '#ff8800');
-        ctx.shadowBlur = golden ? 14 : 0;
-        ctx.fillStyle = b.ricocheted ? '#a8fbff' : (golden ? '#fff4a3' : '#ff8800');
-        ctx.beginPath();
-        ctx.arc(b.x, drawY, golden ? 8 : 7, 0, Math.PI*2);
-        ctx.fill();
+        const evolutionColor = b.evolutionTrail || null;
+        ctx.shadowColor = b.ricocheted ? '#72f6ff' : (evolutionColor || (golden ? '#ffd700' : '#ff8800'));
+        ctx.shadowBlur = evolutionColor || golden ? 14 : 0;
+        ctx.fillStyle = b.ricocheted ? '#a8fbff' : (evolutionColor || (golden ? '#fff4a3' : '#ff8800'));
+        if(b.evolutionStyle && b.evolutionStyle.includes('prism')) {
+            const flightAngle = Math.atan2(b.vy || 0, b.vx || 1);
+            ctx.save();
+            ctx.translate(b.x, drawY);
+            ctx.rotate(flightAngle);
+            ctx.beginPath();
+            ctx.moveTo(18,0); ctx.lineTo(0,-8); ctx.lineTo(-13,0); ctx.lineTo(0,8); ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(230,253,255,.82)'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(18,0); ctx.lineTo(0,0); ctx.lineTo(-13,0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0,-8); ctx.lineTo(0,8); ctx.stroke();
+            for(let shardIndex=0; shardIndex<3; shardIndex++) {
+                const orbit=(b.age||0)*12+shardIndex*Math.PI*2/3;
+                ctx.fillStyle=shardIndex===1?'#fff0a0':'#bff9ff';
+                ctx.beginPath();
+                ctx.moveTo(-10+Math.cos(orbit)*2,Math.sin(orbit)*10);
+                ctx.lineTo(-15+Math.cos(orbit)*2,Math.sin(orbit)*10-2);
+                ctx.lineTo(-14+Math.cos(orbit)*2,Math.sin(orbit)*10+2);
+                ctx.closePath(); ctx.fill();
+            }
+            ctx.restore();
+        } else {
+            ctx.beginPath();
+            ctx.arc(b.x, drawY, golden ? 8 : 7, 0, Math.PI*2);
+            ctx.fill();
+        }
         ctx.shadowBlur = 0;
         ctx.fillStyle = b.ricocheted ? '#35cde8' : (golden ? '#e4a900' : '#ff4400');
         ctx.beginPath();
@@ -2132,6 +2249,19 @@ function drawMinimap() {
             minimapCtx.stroke();
         });
     }
+    if(typeof weaponAttachmentPickups !== 'undefined') {
+        weaponAttachmentPickups.forEach(pickup => {
+            if(currentMap === 'factory' && typeof isFactoryEntityOnVisibleFloor === 'function' && !isFactoryEntityOnVisibleFloor(pickup)) return;
+            const attachment = typeof WEAPON_ATTACHMENTS !== 'undefined' ? WEAPON_ATTACHMENTS[pickup.attachmentId] : null;
+            const x = pickup.x * scaleX, y = pickup.y * scaleY;
+            minimapCtx.save();
+            minimapCtx.translate(x, y);
+            minimapCtx.rotate(Math.PI / 4);
+            minimapCtx.fillStyle = attachment ? attachment.color : '#62efff';
+            minimapCtx.fillRect(-2.5, -2.5, 5, 5);
+            minimapCtx.restore();
+        });
+    }
     const drawDot = (t, color, size) => {
         if(t.dead) return;
         if(currentMap === 'factory' && typeof isFactoryEntityOnVisibleFloor === 'function' && !isFactoryEntityOnVisibleFloor(t)) return;
@@ -2142,7 +2272,11 @@ function drawMinimap() {
     };
     drawDot(player, '#00ffff', 5);
     allies.forEach(t => drawDot(t, '#4488ff', 3));
-    enemies.forEach(t => drawDot(t, '#ff4444', 3));
+    enemies.forEach(t => {
+        const visuallyDetected = player && Math.hypot(t.x - player.x, t.y - player.y) <= 650;
+        const revealedByFire = (t.minimapRevealedUntil || 0) > now;
+        if(visuallyDetected || revealedByFire || t.revealActive) drawDot(t, '#ff4444', 3);
+    });
     bullets.forEach(b => {
         if(b.neutralSniper) {
             minimapCtx.fillStyle = '#d05cff';
@@ -2162,6 +2296,18 @@ function drawMinimap() {
 // ==================== HUD更新 ====================
 function updateHUD() {
     if(!player) return;
+    const attachmentHud = document.getElementById('weaponAttachmentHud');
+    if(attachmentHud && typeof getTankWeaponAttachments === 'function') {
+        const weapon = typeof getCurrentAttachmentWeapon === 'function' ? getCurrentAttachmentWeapon(player) : currentWeapon;
+        const slots = getTankWeaponAttachments(player, weapon);
+        attachmentHud.innerHTML = `<b>${getAttachmentWeaponName(weapon)}配件</b>` +
+            [0, 1].map(index => {
+                const attachment = slots[index] && WEAPON_ATTACHMENTS[slots[index]];
+                return attachment
+                    ? `<span style="--attachment-color:${attachment.color}">${attachment.icon} ${attachment.name}</span>`
+                    : '<span class="empty">空槽</span>';
+            }).join('');
+    }
     updateModeStatusHUD();
     const repairButton = document.getElementById('mobileRepairBtn');
     if(repairButton) repairButton.classList.toggle('engineer-active', player.tankType === 'duoduo_eng');

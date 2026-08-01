@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>坦克大战 - 据点争夺</title>
-    <link rel="stylesheet" href="style.css?v=physics-settings-28">
+    <link rel="stylesheet" href="style.css?v=armory-skins-29&tank-evolution-30">
     <base target="_blank">
 </head>
 <body>
@@ -14,7 +14,7 @@
         <div id="startScreen">
             <header class="start-hero">
                 <div class="start-kicker">THREE.JS · 3D 战术装甲对抗</div>
-                <div class="start-title">坦克大战</div>
+                <div class="start-title" id="startGameTitle">坦克大战</div>
                 <p class="start-subtitle">选择战役，驾驶你的专属坦克冲入战场</p>
                 <div class="start-highlights" aria-label="游戏特色">
                     <span>◈ 真 3D 战场</span>
@@ -338,6 +338,8 @@
                         <li><strong>基地护盾</strong>：超过 3 辆红方 AI 进入蓝方基地 300 范围后启动；范围内蓝方坦克减伤 30%，并额外恢复每秒 6% 最大生命。围攻解除后护盾保留 6 秒。</li>
                         <li><strong>中立狙击塔</strong>：地图中心固定生成 1 座，每 10 秒用大型紫色炮弹攻击当前个人分数最高的存活坦克，单发伤害 150；炮弹会被建筑、岩石等障碍物挡住。</li>
                         <li><strong>空投补给</strong>：战场会定期空投带降落伞的补给箱，任何阵营均可拾取，可修复生命并补充弹药和 1 次 APS。</li>
+                        <li><strong>武器配件</strong>：地图散布高爆弹、穿甲弹、快速装填、稳定器、消音器和扩容弹匣；拾取后装到当前武器，每种武器有 2 个槽位，满槽后替换最早配件。</li>
+                        <li><strong>坦克涂装</strong>：黄金、暗影、烈焰和冰雪涂装由熟练度与生涯战绩解锁，只改变外观；另有一种不会主动公布线索的隐藏涂装。</li>
                         <li><strong>工程维修</strong>：多多号工程车按 R 可维修 175 范围内最残血的存活队友，不能维修自己。</li>
                         <li><strong>弹药架殉爆</strong>：车辆被击毁时，剩余弹药越多越可能殉爆；爆风会造成范围伤害，<strong>敌我不分</strong>并可能引发连锁殉爆。</li>
                         <li><strong>地形破坏</strong>：主炮、火箭、炸药包与大型爆炸可以破坏树木、岩石等小型障碍；城市建筑会从受击侧局部坍塌并生成形状不同的新废墟掩体。飞散碎块带有重力、旋转、反弹与阻尼。</li>
@@ -750,6 +752,13 @@
             <div class="tank-list" id="tankList"></div>
             </div>
 
+            <div class="section skin-loadout-section">
+                <h3>▦ 坦克涂装 <small>纯外观 · 不改变属性</small></h3>
+                <div id="tankSkinSelector" class="tank-skin-selector">
+                    <span class="skin-empty">选择坦克后配置纯外观涂装</span>
+                </div>
+            </div>
+
             <div class="section" id="configSection">
                 <h3>⚙ 装备配置</h3>
                 <div class="config-row">
@@ -883,14 +892,14 @@
                 <h2>★ 坦克熟练度档案</h2>
                 <p id="masterySummary"></p>
                 <div class="mastery-unlock-guide">
-                    <span>Lv.1 新兵：基础涂装</span>
-                    <span>Lv.2 · 300 XP：迷彩 / 被锁定 -18%</span>
-                    <span>Lv.3 · 800 XP：金色炮弹 / 威力 +35%</span>
-                    <span>Lv.4 · 1500 XP：灼热尾焰；Kimi 环绕 0/1 字样</span>
-                    <span>Lv.5 · 3000 XP：300范围光环（攻+22% / 减伤22%）；紫焰 70/秒，持续5秒</span>
-                    <span>Lv.6 · 5000 XP：340范围光环（攻+27% / 减伤27%）；速度+15% / 转向+18%；橙焰 100/秒</span>
-                    <span>Lv.7 · 7500 XP：380范围光环（攻+32% / 减伤32%）；生命+25% / 装甲+0.30；红焰 140/秒</span>
-                    <span>Lv.8 · 11000 XP：430范围光环（攻+40% / 减伤40%）；常规伤害+20%；金焰 190/秒</span>
+                    <span>20 辆核心载具拥有彼此独立的 1–8 阶名称、造型与机制</span>
+                    <span>★2 · 300 XP</span>
+                    <span>★3 · 800 XP</span>
+                    <span>★4 · 1500 XP</span>
+                    <span>★5 · 3000 XP</span>
+                    <span>★6 · 5000 XP</span>
+                    <span>★7 · 7500 XP</span>
+                    <span>★8 · 11000 XP</span>
                 </div>
                 <div id="masteryList"></div>
                 <button type="button" class="mastery-close" onclick="document.getElementById('masteryPanel').style.display='none'">返回</button>
@@ -917,6 +926,7 @@
                     <div>红方据点: <span style="color:#ff4444" id="redOutposts">0</span></div>
                     <div id="autoAimStatus" style="color:#ffcc00;font-size:12px;display:none;">🎯 自动瞄准中</div>
                     <div id="environmentInfo" style="color:#bdeaff;font-size:12px;display:none;"></div>
+                    <div id="weaponAttachmentHud" class="weapon-attachment-hud"></div>
                 </div>
                 <div id="speedPenalty">⚠ 负重过多，移动速度降低</div>
                 <div id="ultimateBar">
@@ -1019,20 +1029,22 @@
     <script src="Audio.js?v=physics-settings-28"></script>
     <script src="Score.js?v=new-modes-20"></script>
     <script src="Replay.js?v=physics-settings-28"></script>
-    <script src="BattleSystems.js?v=mastery-quota-17"></script>
+    <script src="BattleSystems.js?v=mastery-quota-17&tank-evolution-31"></script>
     <script src="TerrainDestruction.js"></script>
-    <script src="Achievement.js?v=physics-settings-28"></script>
-    <script src="Progression.js?v=physics-settings-28"></script>
+    <script src="Achievement.js?v=armory-skins-29"></script>
+    <script src="Progression.js?v=physics-settings-28&tank-evolution-30"></script>
+    <script src="TankEvolution.js?v=tank-evolution-32-vfx"></script>
+    <script src="Armory.js?v=armory-skins-29"></script>
     <script src="DailyTasks.js?v=daily-tasks-22"></script>
     <script src="Pathfinding.js?v=escort-rush-21"></script>
-    <script src="UI.js?v=physics-settings-28"></script>
-    <script src="Ultimate.js?v=physics-settings-28"></script>
-    <script src="GameCore.js?v=physics-settings-28"></script>
+    <script src="UI.js?v=armory-skins-29&tank-evolution-30"></script>
+    <script src="Ultimate.js?v=physics-settings-28&tank-evolution-32-vfx"></script>
+    <script src="GameCore.js?v=armory-skins-29&tank-evolution-30"></script>
     <script src="MapMechanics.js?v=mastery-custom-2"></script>
     <script src="FactoryPhysics.js?v=mastery-custom-2"></script>
-    <script src="AI.js?v=escort-rush-21"></script>
-    <script src="Combat.js?v=physics-settings-28"></script>
-    <script src="Render.js?v=hud-layout-25"></script>
-    <script src="ThreeRender.js?v=physics-settings-28"></script>
+    <script src="AI.js?v=escort-rush-21&tank-evolution-32-vfx"></script>
+    <script src="Combat.js?v=armory-skins-29&tank-evolution-32-vfx"></script>
+    <script src="Render.js?v=armory-skins-29&tank-evolution-32-vfx"></script>
+    <script src="ThreeRender.js?v=armory-skins-29&tank-evolution-32-vfx"></script>
 </body>
 </html>

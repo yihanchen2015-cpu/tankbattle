@@ -404,7 +404,8 @@ function updateVolcanoMechanics(dt, tanks) {
     tanks.forEach(tank => {
         const overLava = isPointInLava(tank.x, tank.y, CONFIG.tankSize * 0.45);
         if(tank.isFlying && overLava) {
-            tank.z = Math.min(CONFIG.helicopterMaxAltitude, (tank.z || CONFIG.helicopterAltitude) + CONFIG.helicopterClimbSpeed * 0.2 * dt);
+            tank.z = Math.min(CONFIG.helicopterMaxAltitude * (tank.maxAltitudeMult || 1),
+                (tank.z || CONFIG.helicopterAltitude) + CONFIG.helicopterClimbSpeed * (tank.climbSpeedMult || 1) * 0.2 * dt);
             tank.thermalLiftTimer = 0.25;
         } else if(!tank.isFlying && overLava) {
             tank.lavaDamageAccumulator = (tank.lavaDamageAccumulator || 0) + dt;

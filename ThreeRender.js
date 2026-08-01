@@ -15,6 +15,7 @@ const threeView = {
     apsInterceptMeshes: new Map(),
     turretMeshes: new Map(),
     supplyMeshes: new Map(),
+    attachmentMeshes: new Map(),
     fireballMeshes: new Map(),
     smokeMeshes: new Map(),
     trailEffectMeshes: new Map(),
@@ -42,7 +43,8 @@ const threeView = {
     lavaMeshes: [],
     tankLabels: new Map(),
     damageLabels: new Map(),
-    captureLabels: new Map()
+    captureLabels: new Map(),
+    attachmentLabels: new Map()
 };
 
 function initThreeRenderer() {
@@ -123,6 +125,7 @@ function clearThreeHudElements() {
     threeView.tankLabels.clear();
     threeView.damageLabels.clear();
     threeView.captureLabels.clear();
+    threeView.attachmentLabels.clear();
     const warning = document.getElementById('threeThreatBorder');
     if(warning && warning.style) warning.style.display = 'none';
 }
@@ -208,6 +211,7 @@ function rebuildThreeWorld(force = false) {
     threeView.apsInterceptMeshes.clear();
     threeView.turretMeshes.clear();
     threeView.supplyMeshes.clear();
+    threeView.attachmentMeshes.clear();
     threeView.fireballMeshes.clear();
     threeView.smokeMeshes.clear();
     threeView.trailEffectMeshes.clear();
@@ -926,6 +930,104 @@ function createThreeTank(tank) {
         group.add(camouflage);
         group.userData.camouflage = camouflage;
     }
+    if(tank.evolutionBodyStyle) {
+        const evolutionFx = new THREE.Group();
+        const evolutionColor = new THREE.Color(tank.accent || '#ffffff');
+        const fxMaterial = new THREE.MeshStandardMaterial({
+            color: evolutionColor,
+            emissive: evolutionColor,
+            emissiveIntensity: .78,
+            metalness: .35,
+            roughness: .26,
+            transparent: true,
+            opacity: .82
+        });
+        const addFx = mesh => {
+            mesh.userData.baseOpacity = .82;
+            evolutionFx.add(mesh);
+        };
+        const style = tank.evolutionBodyStyle;
+        if(style.includes('ice')) {
+            [[-2.1,2.8,-1.05,.52],[-.7,3.05,1.0,.42],[1.1,2.72,-1.15,.38],[2.0,2.6,.9,.32]].forEach(item => {
+                const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(item[3], 0), fxMaterial.clone());
+                crystal.position.set(item[0], item[1], item[2]);
+                crystal.scale.y = 1.8;
+                addFx(crystal);
+            });
+        } else if(style.includes('armor') || style.includes('fortress') || style.includes('steel') || style.includes('rivets')) {
+            [-1.9, -.65, .65, 1.9].forEach((x, index) => {
+                const plate = new THREE.Mesh(new THREE.BoxGeometry(1.05, .18, 2.7), fxMaterial.clone());
+                plate.position.set(x, 2.55 + (index % 2) * .08, 0);
+                addFx(plate);
+                const rivet = new THREE.Mesh(new THREE.SphereGeometry(.16, 7, 5), fxMaterial.clone());
+                rivet.position.set(x, 2.82, index % 2 ? .95 : -.95);
+                addFx(rivet);
+            });
+        } else {
+            [-1.8, -.6, .6, 1.8].forEach((x, index) => {
+                const strip = new THREE.Mesh(new THREE.BoxGeometry(.22, .12, 3.2 - index * .2), fxMaterial.clone());
+                strip.position.set(x, 2.62 + (index % 2) * .08, 0);
+                strip.rotation.y = index % 2 ? .36 : -.36;
+                addFx(strip);
+            });
+        }
+        group.add(evolutionFx);
+        group.userData.evolutionFx = evolutionFx;
+    }
+    if(tank.evolutionMuzzleGlow) {
+        const muzzleGlow = new THREE.Mesh(
+            new THREE.SphereGeometry(.48, 10, 8),
+            new THREE.MeshBasicMaterial({
+                color: tank.evolutionMuzzleGlow,
+                transparent: true,
+                opacity: .66,
+                depthWrite: false
+            })
+        );
+        muzzleGlow.userData.baseOpacity = .66;
+        muzzleGlow.position.set(tank.shape === 'helicopter' ? 5.5 : 6.4, tank.shape === 'helicopter' ? 1.1 : 2.65, 0);
+        group.add(muzzleGlow);
+        group.userData.evolutionMuzzleGlow = muzzleGlow;
+    }
+    if(tank.evolutionAuraColor) {
+        const evolutionAura = new THREE.Mesh(
+            new THREE.RingGeometry(4.2, 4.48, 48),
+            new THREE.MeshBasicMaterial({
+                color: tank.evolutionAuraColor,
+                transparent: true,
+                opacity: .48,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            })
+        );
+        evolutionAura.userData.baseOpacity = .48;
+        evolutionAura.rotation.x = -Math.PI / 2;
+        evolutionAura.position.y = .13;
+        group.add(evolutionAura);
+        group.userData.evolutionAura = evolutionAura;
+    }
+    if(tank.skinId === 'pixel') {
+        const pixels = new THREE.Group();
+        const pixelColors = [0x8bff6e, 0x173e28, 0xe14eb6, 0x26372c];
+        [[-2,2.52,-1.1],[0,2.54,.85],[1.7,2.56,-.65],[-.8,2.58,.15],[2.2,2.6,1.05]].forEach((p, index) => {
+            const pixel = new THREE.Mesh(new THREE.BoxGeometry(1.05,.12,.8), makeStandardMaterial(pixelColors[index % pixelColors.length], { roughness:.72 }));
+            pixel.position.set(p[0],p[1],p[2]);
+            pixels.add(pixel);
+        });
+        group.add(pixels);
+        group.userData.skinPixels = pixels;
+    }
+    if(tank.skinId && tank.skinId !== 'standard') {
+        group.traverse(child => {
+            if(!child.isMesh || !child.material || !child.material.isMeshStandardMaterial) return;
+            child.material = child.material.clone();
+            if(Number.isFinite(tank.skinMetalness)) child.material.metalness = Math.max(child.material.metalness || 0, tank.skinMetalness);
+            if(tank.skinEmissive && child.material.emissive) {
+                child.material.emissive.set(tank.skinEmissive);
+                child.material.emissiveIntensity = tank.skinId === 'flame' ? .7 : .28;
+            }
+        });
+    }
     if(tank.masteryTrailColor) {
         const flameColor = new THREE.Color(tank.masteryTrailColor);
         const masteryExhaust = new THREE.Group();
@@ -1068,6 +1170,52 @@ function createThreeTank(tank) {
         group.userData.playerBeaconBeam = beaconBeam;
         group.userData.playerBeaconPointer = beaconPointer;
     }
+    if(tank.tankType === 'xingchen27a') {
+        const guardianRadius = ((tank.ultimateData && tank.ultimateData.shieldRadius) || 170) * THREE_WORLD_SCALE;
+        const guardianDome = new THREE.Mesh(
+            new THREE.SphereGeometry(guardianRadius, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2),
+            new THREE.MeshPhysicalMaterial({
+                color: 0x46f28a, emissive: 0x0b8f49, emissiveIntensity: 1.25,
+                transparent: true, opacity: .21, roughness: .14, metalness: .05,
+                side: THREE.DoubleSide, depthWrite: false, clearcoat: 1, clearcoatRoughness: .08
+            })
+        );
+        guardianDome.position.y = .12;
+        guardianDome.visible = false;
+        const guardianRim = new THREE.Mesh(
+            new THREE.TorusGeometry(guardianRadius, .24, 12, 96),
+            new THREE.MeshBasicMaterial({ color: 0xa4ffbc, transparent: true, opacity: .78, depthWrite: false })
+        );
+        guardianRim.rotation.x = Math.PI / 2;
+        guardianRim.position.y = .15;
+        guardianRim.visible = false;
+        group.add(guardianDome, guardianRim);
+        group.userData.guardianDome = guardianDome;
+        group.userData.guardianDomeRim = guardianRim;
+    }
+    if(tank.tankType === 'xingchen27b') {
+        const fortressBubble = new THREE.Mesh(
+            new THREE.SphereGeometry(5.65, 32, 18),
+            new THREE.MeshPhysicalMaterial({
+                color: 0xffcf4e, emissive: 0xb66a08, emissiveIntensity: 1.45,
+                transparent: true, opacity: .23, roughness: .12, metalness: .12,
+                side: THREE.DoubleSide, depthWrite: false, clearcoat: 1
+            })
+        );
+        fortressBubble.scale.y = .72;
+        fortressBubble.position.y = 2.15;
+        fortressBubble.visible = false;
+        const fortressRing = new THREE.Mesh(
+            new THREE.TorusGeometry(5.35, .22, 10, 72),
+            new THREE.MeshBasicMaterial({ color: 0xffe58a, transparent: true, opacity: .82, depthWrite: false })
+        );
+        fortressRing.rotation.x = Math.PI / 2;
+        fortressRing.position.y = .38;
+        fortressRing.visible = false;
+        group.add(fortressBubble, fortressRing);
+        group.userData.fortressBubble = fortressBubble;
+        group.userData.fortressBubbleRing = fortressRing;
+    }
     const rescueShield = new THREE.Mesh(
         new THREE.SphereGeometry(tank.shape === 'helicopter' ? 5.8 : 4.8, 18, 12),
         new THREE.MeshBasicMaterial({ color: 0x5ee8ff, transparent: true, opacity: 0.18, wireframe: true, depthWrite: false })
@@ -1076,6 +1224,14 @@ function createThreeTank(tank) {
     rescueShield.visible = false;
     group.add(rescueShield);
     group.userData.rescueShield = rescueShield;
+    const radarRevealBox = new THREE.Mesh(
+        new THREE.BoxGeometry(tank.shape === 'helicopter' ? 15 : 8.4, tank.shape === 'helicopter' ? 6 : 4.8, tank.shape === 'helicopter' ? 7 : 6.2),
+        new THREE.MeshBasicMaterial({ color: 0xff3434, transparent: true, opacity: .82, wireframe: true, depthWrite: false })
+    );
+    radarRevealBox.position.y = tank.shape === 'helicopter' ? .4 : 2.1;
+    radarRevealBox.visible = false;
+    group.add(radarRevealBox);
+    group.userData.radarRevealBox = radarRevealBox;
     if(tank.isEscortVIP) {
         const crown = new THREE.Group();
         const crownMaterial = makeStandardMaterial(0xffd21f, {
@@ -1257,6 +1413,36 @@ function syncThreeTanks(now) {
             mesh.userData.rescueShield.visible = !!(tank.rescueShieldActive && tank.shieldActive && tank.shieldHp > 0);
             mesh.userData.rescueShield.material.opacity = 0.14 + Math.sin(now * 0.012 + tank.x) * 0.05;
         }
+        if(mesh.userData.radarRevealBox) {
+            mesh.userData.radarRevealBox.visible = (tank.evolutionRadarMarkedTimer || 0) > 0;
+            if(mesh.userData.radarRevealBox.visible) {
+                const pulse = 1 + Math.sin(now * .012) * .06;
+                mesh.userData.radarRevealBox.scale.setScalar(pulse);
+            }
+        }
+        if(mesh.userData.guardianDome) {
+            const visible = !!(tank.shieldActive && tank.shieldHp > 0);
+            mesh.userData.guardianDome.visible = visible;
+            mesh.userData.guardianDomeRim.visible = visible;
+            if(visible) {
+                const pulse = 1 + Math.sin(now * .0045 + tank.x) * .025;
+                mesh.userData.guardianDome.scale.setScalar(pulse);
+                mesh.userData.guardianDome.material.opacity = .18 + Math.sin(now * .006) * .045;
+                mesh.userData.guardianDomeRim.material.opacity = .66 + Math.sin(now * .008) * .18;
+                mesh.userData.guardianDomeRim.rotation.z = now * .00032;
+            }
+        }
+        if(mesh.userData.fortressBubble) {
+            const visible = !!tank.fortressActive;
+            mesh.userData.fortressBubble.visible = visible;
+            mesh.userData.fortressBubbleRing.visible = visible;
+            if(visible) {
+                const pulse = 1 + Math.sin(now * .006 + tank.x) * .035;
+                mesh.userData.fortressBubble.scale.set(pulse, .72 * pulse, pulse);
+                mesh.userData.fortressBubble.material.opacity = .2 + Math.sin(now * .009) * .045;
+                mesh.userData.fortressBubbleRing.rotation.z = -now * .00048;
+            }
+        }
         if(mesh.userData.marker) {
             const locatorEnabled = typeof isPlayerLocatorEnabled !== 'function' || isPlayerLocatorEnabled();
             mesh.userData.marker.visible = !tank.isPlayer || locatorEnabled;
@@ -1280,7 +1466,11 @@ function syncThreeTanks(now) {
             mesh.userData.playerBeaconPointer.position.y = 9.1 + Math.sin(now * .006) * .65;
             mesh.userData.playerBeaconPointer.rotation.y = now * .0018;
         }
-        const opacity = tank.ghostActive && !tank.ghostRevealed ? 0.28 : 1;
+        const opacity = tank.ghostActive && !tank.ghostRevealed
+            ? (tank.evolutionEffects && tank.evolutionEffects.ultimateOpacity || .28)
+            : tank.evolutionStealthActive
+                ? (tank.evolutionEffects && tank.evolutionEffects.stealthOpacity || .4)
+                : (tank.evolutionPermanentOpacity || 1);
         if(mesh.userData.lastOpacity !== opacity) {
             mesh.userData.lastOpacity = opacity;
             mesh.traverse(child => {
@@ -1299,8 +1489,29 @@ function syncThreeTanks(now) {
     }
 }
 
+function createThreeBipyramidGeometry(length, radius, sides = 6) {
+    const vertices = [];
+    const addTriangle = (a, b, c) => vertices.push(...a, ...b, ...c);
+    const front = [length * .55, 0, 0];
+    const rear = [-length * .45, 0, 0];
+    for(let index = 0; index < sides; index++) {
+        const angleA = index / sides * Math.PI * 2;
+        const angleB = (index + 1) / sides * Math.PI * 2;
+        const ringA = [0, Math.cos(angleA) * radius, Math.sin(angleA) * radius];
+        const ringB = [0, Math.cos(angleB) * radius, Math.sin(angleB) * radius];
+        addTriangle(front, ringA, ringB);
+        addTriangle(rear, ringB, ringA);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.computeVertexNormals();
+    return geometry;
+}
+
 function createThreeBullet(bullet) {
-    const color = bullet.neutralSniper
+    const color = bullet.evolutionTrail
+        ? bullet.evolutionTrail
+        : bullet.neutralSniper
         ? 0xb126ff
         : bullet.masteryGolden
         ? 0xffd629
@@ -1309,6 +1520,90 @@ function createThreeBullet(bullet) {
     const material = makeStandardMaterial(color, { emissive: color, emissiveIntensity: bullet.type === 'mg' || bullet.type === 'airmg' ? 1.2 : 2.4, roughness: 0.25 });
     const group = new THREE.Group();
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(radius, 10, 8), material);
+    projectile.userData.baseScale = new THREE.Vector3(1, 1, 1);
+    projectile.userData.visualRadius = radius;
+    if(bullet.evolutionStyle && bullet.evolutionStyle.includes('prism')) {
+        projectile.geometry.dispose();
+        projectile.geometry = createThreeBipyramidGeometry(radius * 6.8, radius * 1.32, 6);
+        projectile.material = new THREE.MeshPhysicalMaterial({
+            color: bullet.evolutionStyle.includes('gold') ? 0xaef6ff : 0xb9f8ff,
+            emissive: bullet.evolutionStyle.includes('gold') ? 0x2c9fc4 : 0x1fb9e6,
+            emissiveIntensity: 2.25, roughness: .08, metalness: .08,
+            transparent: true, opacity: .94, clearcoat: 1, clearcoatRoughness: .04
+        });
+        const prismGlow = new THREE.Mesh(
+            createThreeBipyramidGeometry(radius * 7.4, radius * 1.7, 6),
+            new THREE.MeshBasicMaterial({
+                color: bullet.evolutionStyle.includes('gold') ? 0xffe780 : 0x69eaff,
+                transparent: true, opacity: .2, wireframe: true, depthWrite: false
+            })
+        );
+        projectile.add(prismGlow);
+        projectile.userData.prismGlow = prismGlow;
+        const shardGroup = new THREE.Group();
+        for(let index = 0; index < 4; index++) {
+            const shard = new THREE.Mesh(
+                new THREE.OctahedronGeometry(radius * .38, 0),
+                new THREE.MeshBasicMaterial({ color: index % 2 ? 0xdfffff : 0x55dcff, transparent:true, opacity:.78, depthWrite:false })
+            );
+            const orbit = index / 4 * Math.PI * 2;
+            shard.position.set(-radius * 2.15, Math.cos(orbit) * radius * 1.35, Math.sin(orbit) * radius * 1.35);
+            shard.scale.set(1.8, .55, .55);
+            shard.userData.phase = orbit;
+            shardGroup.add(shard);
+        }
+        projectile.add(shardGroup);
+        projectile.userData.iceShards = shardGroup;
+        projectile.userData.isIcePrism = true;
+    } else if(bullet.isDrone) {
+        projectile.geometry.dispose();
+        projectile.geometry = new THREE.OctahedronGeometry(radius * 1.4, 0);
+        projectile.userData.baseScale.set(1.55, .72, .9);
+        const wingMaterial = new THREE.MeshBasicMaterial({ color:0x8ee8ff, transparent:true, opacity:.85, depthWrite:false });
+        const wing = new THREE.Mesh(new THREE.BoxGeometry(radius * 2.8, radius * .12, radius * 3.4), wingMaterial);
+        wing.position.x = -radius * .25;
+        projectile.add(wing);
+        projectile.userData.droneWing = wing;
+    } else if(bullet.isRocket || bullet.type === 'rocket' || bullet.owner && bullet.owner.tankType === 'duoduo_rocket') {
+        projectile.geometry.dispose();
+        projectile.geometry = new THREE.CylinderGeometry(radius * .62, radius * .72, radius * 4.2, 10);
+        projectile.geometry.rotateZ(Math.PI / 2);
+        projectile.material.color.setHex(0xff7031);
+        const nose = new THREE.Mesh(new THREE.ConeGeometry(radius * .7, radius * 1.8, 10), material.clone());
+        nose.rotation.z = -Math.PI / 2; nose.position.x = radius * 2.8;
+        const flame = new THREE.Mesh(new THREE.ConeGeometry(radius * .72, radius * 3.4, 9), new THREE.MeshBasicMaterial({color:0xffc33d,transparent:true,opacity:.9,depthWrite:false}));
+        flame.rotation.z = Math.PI / 2; flame.position.x = -radius * 3.1;
+        projectile.add(nose, flame);
+        projectile.userData.rocketFlame = flame;
+    } else if(bullet.empData) {
+        projectile.geometry.dispose();
+        projectile.geometry = new THREE.IcosahedronGeometry(radius * 1.12, 1);
+        projectile.material.color.setHex(0xffb144);
+        projectile.material.emissive.setHex(0xff5a19);
+        const rings = new THREE.Group();
+        for(let index = 0; index < 2; index++) {
+            const ring = new THREE.Mesh(
+                new THREE.TorusGeometry(radius * (1.65 + index * .38), radius * .09, 8, 28),
+                new THREE.MeshBasicMaterial({color:index ? 0xffeb75 : 0xff6927,transparent:true,opacity:.72,depthWrite:false})
+            );
+            ring.rotation.set(index ? Math.PI/2 : 0, index ? 0 : Math.PI/2, index * .7);
+            rings.add(ring);
+        }
+        projectile.add(rings); projectile.userData.empRings = rings;
+    } else if(bullet.toxinData) {
+        projectile.material.color.setHex(0x8cff58);
+        projectile.material.emissive.setHex(0x2dcf65);
+        const toxinHalo = new THREE.Mesh(
+            new THREE.TorusGeometry(radius * 1.65, radius * .12, 8, 24),
+            new THREE.MeshBasicMaterial({color:0xbaff68,transparent:true,opacity:.68,depthWrite:false})
+        );
+        toxinHalo.rotation.y = Math.PI / 2;
+        projectile.add(toxinHalo); projectile.userData.toxinHalo = toxinHalo;
+    } else if(bullet.type === 'mg' || bullet.type === 'airmg') {
+        projectile.userData.baseScale.set(2.5, .46, .46);
+    } else if(bullet.type === 'shell') {
+        projectile.userData.baseScale.set(1.55, .76, .76);
+    }
     if(bullet.neutralSniper) {
         const glow = new THREE.Mesh(
             new THREE.SphereGeometry(radius * 1.9, 14, 10),
@@ -1316,31 +1611,34 @@ function createThreeBullet(bullet) {
         );
         projectile.add(glow);
     } else if(bullet.masteryGolden) {
-        projectile.scale.set(1.22, 1.22, 1.22);
+        projectile.userData.baseScale.multiplyScalar(1.22);
         const glow = new THREE.Mesh(
             new THREE.SphereGeometry(radius * 1.8, 10, 8),
             new THREE.MeshBasicMaterial({ color: 0xffdf55, transparent: true, opacity: .22, depthWrite: false })
         );
-        group.add(glow);
+        projectile.add(glow);
     }
     if(bullet.type === 'bomb') projectile.scale.set(.72, 1.7, .72);
     group.add(projectile);
     group.userData.projectile = projectile;
-    if(bullet.type === 'aa') {
+    const needsTrail = ['aa','shell','rocket','drone','mg','airmg'].includes(bullet.type) || bullet.isDrone || bullet.empData || bullet.toxinData;
+    if(needsTrail) {
         const trailGeometry = new THREE.BufferGeometry();
-        const trailPositions = new Float32Array(16 * 3);
+        const trailCapacity = bullet.type === 'mg' || bullet.type === 'airmg' ? 7 : 18;
+        const trailPositions = new Float32Array(trailCapacity * 3);
         const trailAttribute = new THREE.BufferAttribute(trailPositions, 3);
         trailAttribute.setUsage(THREE.DynamicDrawUsage);
         trailGeometry.setAttribute('position', trailAttribute);
         trailGeometry.setDrawRange(0, 0);
         const trail = new THREE.Line(
             trailGeometry,
-            new THREE.LineBasicMaterial({ color: 0xff72ff, transparent: true, opacity: 0.82, depthWrite: false })
+            new THREE.LineBasicMaterial({ color: bullet.evolutionTrail || color, transparent: true, opacity: bullet.type === 'mg' ? .52 : .78, depthWrite: false })
         );
         group.add(trail);
         group.userData.trail = trail;
         group.userData.trailPoints = [];
         group.userData.lastTrailAge = -1;
+        group.userData.trailCapacity = trailCapacity;
     }
     threeView.dynamicRoot.add(group);
     return group;
@@ -1382,6 +1680,51 @@ function syncThreeSupplyDrops(now) {
     });
     for(const [drop, mesh] of threeView.supplyMeshes) {
         if(!active.has(drop)) { disposeThreeObject(mesh); threeView.supplyMeshes.delete(drop); }
+    }
+}
+
+function createThreeAttachmentPickup(pickup) {
+    const attachment = WEAPON_ATTACHMENTS[pickup.attachmentId];
+    const group = new THREE.Group();
+    const core = new THREE.Mesh(
+        new THREE.OctahedronGeometry(1.5, 0),
+        makeStandardMaterial(attachment.color, { metalness:.65, roughness:.2, emissive:attachment.color, emissiveIntensity:.75 })
+    );
+    const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(2.4,.16,8,28),
+        new THREE.MeshBasicMaterial({ color:attachment.color, transparent:true, opacity:.82, depthWrite:false })
+    );
+    ring.rotation.x = Math.PI / 2;
+    const beacon = new THREE.Mesh(
+        new THREE.CylinderGeometry(.18,.5,8,10,1,true),
+        new THREE.MeshBasicMaterial({ color:attachment.color, transparent:true, opacity:.26, depthWrite:false, side:THREE.DoubleSide })
+    );
+    beacon.position.y = 4;
+    group.add(core, ring, beacon);
+    group.userData.ring = ring;
+    group.traverse(child => { if(child.isMesh) child.castShadow = true; });
+    threeView.dynamicRoot.add(group);
+    return group;
+}
+
+function syncThreeAttachmentPickups(now) {
+    if(typeof weaponAttachmentPickups === 'undefined') return;
+    const active = new Set(weaponAttachmentPickups);
+    weaponAttachmentPickups.forEach(pickup => {
+        let mesh = threeView.attachmentMeshes.get(pickup);
+        if(!mesh) {
+            mesh = createThreeAttachmentPickup(pickup);
+            threeView.attachmentMeshes.set(pickup, mesh);
+        }
+        setThreeWorldPosition(mesh, pickup.x, pickup.y, (pickup.z || 0) * THREE_WORLD_SCALE + 2.25 + Math.sin(now * .003 + pickup.pulse) * .45);
+        mesh.rotation.y = now * .0012 + pickup.pulse;
+        mesh.userData.ring.rotation.z = -now * .0018;
+    });
+    for(const [pickup, mesh] of threeView.attachmentMeshes) {
+        if(!active.has(pickup)) {
+            disposeThreeObject(mesh);
+            threeView.attachmentMeshes.delete(pickup);
+        }
     }
 }
 
@@ -1439,12 +1782,38 @@ function syncThreeBullets() {
             : bullet.neutralSniper
             ? 1 + Math.sin((bullet.age || 0) * 18) * .16
             : bullet.type === 'aa' ? 1 + Math.sin((bullet.age || 0) * 25) * 0.18 : 1;
-        projectile.scale.setScalar(pulse);
-        if(bullet.type === 'aa' && (bullet.age || 0) - mesh.userData.lastTrailAge >= 0.035) {
+        const baseScale = projectile.userData.baseScale || new THREE.Vector3(1,1,1);
+        projectile.scale.set(baseScale.x * pulse, baseScale.y * pulse, baseScale.z * pulse);
+        if(projectile.userData.isIcePrism) {
+            const visualRadius = projectile.userData.visualRadius || .48;
+            projectile.rotation.x = (bullet.age || 0) * 7.5;
+            projectile.userData.prismGlow.material.opacity = .14 + Math.sin((bullet.age || 0) * 22) * .08;
+            projectile.userData.iceShards.rotation.x = -(bullet.age || 0) * 11;
+            projectile.userData.iceShards.children.forEach((shard, index) => {
+                const orbit = shard.userData.phase + (bullet.age || 0) * 9;
+                shard.position.y = Math.cos(orbit) * visualRadius * 1.35;
+                shard.position.z = Math.sin(orbit) * visualRadius * 1.35;
+                shard.rotation.x += .16 + index * .01;
+            });
+        }
+        if(projectile.userData.droneWing) projectile.userData.droneWing.rotation.x = (bullet.age || 0) * 18;
+        if(projectile.userData.rocketFlame) {
+            const flamePulse = .72 + Math.sin((bullet.age || 0) * 38) * .22;
+            projectile.userData.rocketFlame.scale.set(1, flamePulse, flamePulse);
+        }
+        if(projectile.userData.empRings) {
+            projectile.userData.empRings.rotation.x = (bullet.age || 0) * 8;
+            projectile.userData.empRings.rotation.y = -(bullet.age || 0) * 11;
+        }
+        if(projectile.userData.toxinHalo) {
+            projectile.userData.toxinHalo.rotation.x = (bullet.age || 0) * 7;
+            projectile.userData.toxinHalo.rotation.y = Math.PI / 2 + (bullet.age || 0) * 5;
+        }
+        if(mesh.userData.trail && (bullet.age || 0) - mesh.userData.lastTrailAge >= (bullet.type === 'mg' ? .018 : .032)) {
             mesh.userData.lastTrailAge = bullet.age || 0;
             const points = mesh.userData.trailPoints;
             points.push(projectile.position.clone());
-            if(points.length > 16) points.shift();
+            if(points.length > mesh.userData.trailCapacity) points.shift();
             const attribute = mesh.userData.trail.geometry.getAttribute('position');
             points.forEach((point, index) => attribute.setXYZ(index, point.x, point.y, point.z));
             attribute.needsUpdate = true;
@@ -1672,7 +2041,115 @@ function syncThreeSmokeClouds(now) {
 
 function createThreeTrailEffect(effect) {
     const group = new THREE.Group();
-    if(effect.kind === 'mastery-death-flame') {
+    const effectColor = new THREE.Color(effect.color || '#ffffff');
+    const effectAccent = new THREE.Color(effect.accent || effect.color || '#ffffff');
+    if(effect.kind && effect.kind.startsWith('muzzle-')) {
+        const flash = new THREE.Mesh(
+            new THREE.ConeGeometry(.72, 4.8, 7),
+            new THREE.MeshBasicMaterial({color:effectColor,transparent:true,opacity:.92,depthWrite:false})
+        );
+        flash.rotation.z = -Math.PI / 2; flash.position.x = 2.1;
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(1.22,.16,8,28),
+            new THREE.MeshBasicMaterial({color:effectAccent,transparent:true,opacity:.8,depthWrite:false})
+        );
+        ring.rotation.y = Math.PI / 2;
+        const sparks = new THREE.Group();
+        for(let index=0; index<6; index++) {
+            const spark = new THREE.Mesh(
+                new THREE.OctahedronGeometry(.16 + index%2*.08,0),
+                new THREE.MeshBasicMaterial({color:index%2?effectAccent:effectColor,transparent:true,opacity:.86,depthWrite:false})
+            );
+            const spread = (index-2.5)*.32;
+            spark.position.set(1.1 + index%3*.45, Math.sin(spread)*1.2, Math.cos(spread)*1.2);
+            spark.userData.basePosition = spark.position.clone();
+            sparks.add(spark);
+        }
+        group.add(flash,ring,sparks);
+        group.userData.visualType='muzzle'; group.userData.flash=flash; group.userData.ring=ring; group.userData.sparks=sparks;
+    } else if(effect.kind && effect.kind.startsWith('impact-')) {
+        const shock = new THREE.Mesh(
+            new THREE.IcosahedronGeometry(1.2,1),
+            new THREE.MeshBasicMaterial({color:effectColor,transparent:true,opacity:.42,wireframe:true,depthWrite:false})
+        );
+        shock.position.y=1.1;
+        const ring = new THREE.Mesh(
+            new THREE.RingGeometry(1.1,1.45,40),
+            new THREE.MeshBasicMaterial({color:effectAccent,transparent:true,opacity:.78,side:THREE.DoubleSide,depthWrite:false})
+        );
+        ring.rotation.x=-Math.PI/2; ring.position.y=.12;
+        const spikes = new THREE.Group();
+        const spikeCount = effect.kind === 'impact-ice' ? 8 : 6;
+        for(let index=0; index<spikeCount; index++) {
+            const angle=index/spikeCount*Math.PI*2;
+            const spike = new THREE.Mesh(
+                effect.kind === 'impact-ice' ? new THREE.ConeGeometry(.24,2.8,5) : new THREE.OctahedronGeometry(.34,0),
+                new THREE.MeshBasicMaterial({color:index%2?effectAccent:effectColor,transparent:true,opacity:.82,depthWrite:false})
+            );
+            spike.position.set(Math.cos(angle)*1.6,1.1,Math.sin(angle)*1.6);
+            spike.rotation.z=Math.cos(angle)*.72; spike.rotation.x=Math.sin(angle)*.72;
+            spike.userData.angle=angle;
+            spikes.add(spike);
+        }
+        group.add(shock,ring,spikes);
+        group.userData.visualType='impact'; group.userData.shock=shock; group.userData.ring=ring; group.userData.spikes=spikes;
+    } else if(effect.kind && effect.kind.startsWith('ultimate-')) {
+        const radius = Math.max(5, Math.min(42, (effect.radius || 150) * THREE_WORLD_SCALE));
+        const field = new THREE.Mesh(
+            new THREE.CircleGeometry(radius,72),
+            new THREE.MeshBasicMaterial({color:effectAccent,transparent:true,opacity:.13,side:THREE.DoubleSide,depthWrite:false})
+        );
+        field.rotation.x=-Math.PI/2; field.position.y=.06;
+        const outerRing = new THREE.Mesh(
+            new THREE.RingGeometry(radius*.88,radius,72),
+            new THREE.MeshBasicMaterial({color:effectColor,transparent:true,opacity:.78,side:THREE.DoubleSide,depthWrite:false})
+        );
+        outerRing.rotation.x=-Math.PI/2; outerRing.position.y=.16;
+        const innerRing = new THREE.Mesh(
+            new THREE.TorusGeometry(radius*.55,.18,9,64),
+            new THREE.MeshBasicMaterial({color:effectAccent,transparent:true,opacity:.74,depthWrite:false})
+        );
+        innerRing.rotation.x=Math.PI/2; innerRing.position.y=.3;
+        const beam = new THREE.Mesh(
+            new THREE.CylinderGeometry(.18,1.1,Math.min(28,radius*1.4),12,1,true),
+            new THREE.MeshBasicMaterial({color:effectColor,transparent:true,opacity:.22,side:THREE.DoubleSide,depthWrite:false})
+        );
+        beam.position.y=Math.min(14,radius*.7);
+        const nodes = new THREE.Group();
+        for(let index=0; index<10; index++) {
+            const angle=index/10*Math.PI*2;
+            const node=new THREE.Mesh(new THREE.OctahedronGeometry(.22+index%3*.08,0),new THREE.MeshBasicMaterial({color:index%2?effectColor:effectAccent,transparent:true,opacity:.88,depthWrite:false}));
+            node.position.set(Math.cos(angle)*radius*.72,.45+index%2*.35,Math.sin(angle)*radius*.72);
+            node.userData.phase=angle; nodes.add(node);
+        }
+        group.add(field,outerRing,innerRing,beam,nodes);
+        group.userData.visualType='ultimate'; group.userData.field=field; group.userData.outerRing=outerRing;
+        group.userData.innerRing=innerRing; group.userData.beam=beam; group.userData.nodes=nodes; group.userData.effectRadius=radius;
+    } else if(effect.kind === 'poison-cloud') {
+        const radius=Math.max(2,effect.radius*THREE_WORLD_SCALE);
+        const pool=new THREE.Mesh(new THREE.CircleGeometry(radius,48),new THREE.MeshBasicMaterial({color:0x35d96a,transparent:true,opacity:.18,side:THREE.DoubleSide,depthWrite:false}));
+        pool.rotation.x=-Math.PI/2;
+        const bubbles=new THREE.Group();
+        for(let index=0;index<12;index++){
+            const angle=index/12*Math.PI*2;
+            const bubble=new THREE.Mesh(new THREE.SphereGeometry(.2+index%3*.11,8,6),new THREE.MeshBasicMaterial({color:index%2?0xb8ff5d:0x43e888,transparent:true,opacity:.62,depthWrite:false}));
+            bubble.position.set(Math.cos(angle)*radius*(.25+(index%4)*.17),.35+index%3*.28,Math.sin(angle)*radius*(.25+(index%4)*.17));
+            bubble.userData.baseY=bubble.position.y; bubble.userData.phase=angle; bubbles.add(bubble);
+        }
+        group.add(pool,bubbles); group.userData.visualType='poison-cloud'; group.userData.ember=pool; group.userData.bubbles=bubbles;
+    } else if(effect.kind === 'rocket-fire') {
+        const radius=Math.max(2,effect.radius*THREE_WORLD_SCALE);
+        const ember=new THREE.Mesh(new THREE.CircleGeometry(radius,40),new THREE.MeshBasicMaterial({color:0xff4b18,transparent:true,opacity:.25,side:THREE.DoubleSide,depthWrite:false}));
+        ember.rotation.x=-Math.PI/2;
+        const flames=new THREE.Group();
+        for(let index=0;index<14;index++){
+            const angle=index/14*Math.PI*2;
+            const flame=new THREE.Mesh(new THREE.ConeGeometry(.3+index%3*.15,2.2+index%4*.55,7),new THREE.MeshBasicMaterial({color:index%2?0xffd348:0xff5a1f,transparent:true,opacity:.72,depthWrite:false}));
+            flame.position.set(Math.cos(angle)*radius*(.15+(index%4)*.18),1.0,Math.sin(angle)*radius*(.15+(index%4)*.18));
+            flame.userData.baseY=flame.position.y; flame.userData.phase=angle; flames.add(flame);
+        }
+        group.add(ember,flames); group.userData.visualType='rocket-fire'; group.userData.ember=ember; group.userData.flames=flames;
+    } else if(effect.kind === 'mastery-death-flame') {
         const color = new THREE.Color(effect.color || 0xa000ff);
         const radius = Math.max(1, effect.radius * THREE_WORLD_SCALE);
         const flameMaterial = opacity => new THREE.MeshBasicMaterial({
@@ -1771,6 +2248,69 @@ function syncThreeTrailEffects(now) {
         }
         setThreeWorldPosition(mesh, effect.x, effect.y, ((effect.z || 0) * THREE_WORLD_SCALE) + .12);
         const alpha = Math.max(0, effect.life / Math.max(.01, effect.maxLife));
+        const progress = 1 - alpha;
+        if(mesh.userData.visualType === 'muzzle') {
+            mesh.rotation.y = -(effect.angle || 0);
+            const flashScale = .55 + Math.sin(Math.min(1, progress) * Math.PI) * 1.05;
+            mesh.userData.flash.scale.set(1 + progress * .8, flashScale, flashScale);
+            mesh.userData.flash.material.opacity = alpha * .94;
+            mesh.userData.ring.scale.setScalar(.55 + progress * 1.9);
+            mesh.userData.ring.material.opacity = alpha * .82;
+            mesh.userData.ring.rotation.x = progress * 2.2;
+            mesh.userData.sparks.children.forEach((spark,index) => {
+                spark.position.copy(spark.userData.basePosition).multiplyScalar(1 + progress * (1.2 + index * .12));
+                spark.material.opacity = alpha * .88;
+                spark.rotation.x = progress * 8 + index;
+            });
+        } else if(mesh.userData.visualType === 'impact') {
+            const radius = Math.max(1.8, (effect.radius || 42) * THREE_WORLD_SCALE);
+            mesh.userData.shock.scale.setScalar(radius * (.24 + progress * 1.15));
+            mesh.userData.shock.material.opacity = alpha * .44;
+            mesh.userData.shock.rotation.y = now * .003 + (effect.seed || 0);
+            mesh.userData.ring.scale.setScalar(radius * (.4 + progress * 1.1));
+            mesh.userData.ring.material.opacity = alpha * .8;
+            mesh.userData.spikes.children.forEach((spike,index) => {
+                const distance = radius * (.28 + progress * .72);
+                spike.position.x = Math.cos(spike.userData.angle) * distance;
+                spike.position.z = Math.sin(spike.userData.angle) * distance;
+                spike.position.y = .45 + Math.sin(progress * Math.PI) * radius * .48;
+                spike.scale.setScalar(.55 + Math.sin(progress * Math.PI) * 1.35);
+                spike.material.opacity = alpha * (.72 + index%2*.12);
+            });
+        } else if(mesh.userData.visualType === 'ultimate') {
+            const waveScale = .68 + Math.sin(Math.min(1,progress)*Math.PI*.68) * .48;
+            mesh.userData.field.scale.setScalar(waveScale);
+            mesh.userData.field.material.opacity = alpha * .16;
+            mesh.userData.outerRing.scale.setScalar(.7 + progress * .45);
+            mesh.userData.outerRing.material.opacity = alpha * .84;
+            mesh.userData.outerRing.rotation.z = now * .0014;
+            mesh.userData.innerRing.scale.setScalar(.55 + progress * .8);
+            mesh.userData.innerRing.material.opacity = alpha * .76;
+            mesh.userData.innerRing.rotation.z = -now * .002;
+            mesh.userData.beam.scale.y = .25 + Math.sin(progress*Math.PI) * 1.1;
+            mesh.userData.beam.material.opacity = alpha * .3;
+            mesh.userData.nodes.rotation.y = now * .0032 + (effect.seed || 0);
+            mesh.userData.nodes.children.forEach((node,index) => {
+                const pulse=.65+Math.sin(now*.012+node.userData.phase)*.35;
+                node.scale.setScalar(pulse);
+                node.position.y=.35+Math.sin(now*.006+index)*1.2+progress*2.2;
+                node.material.opacity=alpha*.9;
+            });
+        } else if(mesh.userData.visualType === 'poison-cloud') {
+            mesh.userData.bubbles.rotation.y=now*.00055;
+            mesh.userData.bubbles.children.forEach((bubble,index)=>{
+                bubble.position.y=bubble.userData.baseY+((now*.0015+bubble.userData.phase)%1)*2.1;
+                bubble.material.opacity=alpha*(.35+Math.sin(now*.006+index)*.18);
+            });
+        } else if(mesh.userData.visualType === 'rocket-fire') {
+            mesh.userData.flames.rotation.y=now*.00025;
+            mesh.userData.flames.children.forEach((flame,index)=>{
+                const flicker=.58+Math.sin(now*.018+flame.userData.phase)*.34;
+                flame.scale.set(.78+index%2*.18,flicker,.78+index%2*.18);
+                flame.position.y=flame.userData.baseY*(.65+flicker);
+                flame.material.opacity=alpha*(.48+index%3*.1);
+            });
+        }
         if(mesh.userData.ember) {
             const opacity = effect.kind === 'mastery-death-flame' ? .28 : (effect.kind === 'mastery' ? .5 : .3);
             mesh.userData.ember.material.opacity = alpha * opacity;
@@ -2369,6 +2909,31 @@ function syncThreeHud() {
         }
     }
 
+    const visibleAttachmentPickups = typeof weaponAttachmentPickups !== 'undefined'
+        ? weaponAttachmentPickups.filter(pickup => !player || Math.hypot(pickup.x - player.x, pickup.y - player.y) <= 900)
+        : [];
+    const activeAttachmentLabels = new Set(visibleAttachmentPickups);
+    visibleAttachmentPickups.forEach(pickup => {
+        const attachment = WEAPON_ATTACHMENTS[pickup.attachmentId];
+        if(!attachment) return;
+        let label = threeView.attachmentLabels.get(pickup);
+        if(!label) {
+            label = document.createElement('div');
+            label.className = 'three-attachment-label';
+            layer.appendChild(label);
+            threeView.attachmentLabels.set(pickup, label);
+        }
+        label.textContent = `${attachment.icon} ${attachment.name}`;
+        label.style.setProperty('--pickup-color', attachment.color);
+        positionThreeHudElement(label, projectThreeHudPoint(pickup.x, pickup.y, (pickup.z || 0) + 70), 1);
+    });
+    for(const [pickup, label] of threeView.attachmentLabels) {
+        if(!activeAttachmentLabels.has(pickup)) {
+            label.remove();
+            threeView.attachmentLabels.delete(pickup);
+        }
+    }
+
     const hostileHelicopters = livingTanks.filter(tank => tank.team !== player.team && tank.isFlying);
     let nearestHelicopter = null;
     let nearestDistance = 1800;
@@ -2405,6 +2970,7 @@ function renderThreeScene() {
     syncThreeTrailEffects(now);
     syncThreeTurrets();
     syncThreeSupplyDrops(now);
+    syncThreeAttachmentPickups(now);
     syncThreeAmmoRackFireballs(now);
     syncThreeSnowTracks(now);
     syncThreeOwnership(now);

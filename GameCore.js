@@ -76,6 +76,8 @@ function startGame() {
         player.aa = player.maxAA;
         player.beginnerAssist = true;
     }
+    if(typeof initializeTankAttachmentState === 'function') initializeTankAttachmentState(player);
+    if(typeof resetWeaponAttachmentPickups === 'function') resetWeaponAttachmentPickups();
     if(typeof distributeFactoryInitialTanks === 'function') distributeFactoryInitialTanks();
     if(typeof initializeSneakRescueMechanic === 'function') initializeSneakRescueMechanic();
     if(typeof updateWeaponHudMode === 'function') updateWeaponHudMode(player);
@@ -730,7 +732,10 @@ function createTank(data, x, y, team, isPlayer, masteryLevelOverride = null) {
     const masteryVisual = typeof getTankMasteryVisual === 'function'
         ? getTankMasteryVisual(tankType, aiMasteryLevel)
         : null;
-    return {
+    const skinVisual = isPlayer && typeof getTankSkinVisual === 'function'
+        ? getTankSkinVisual(data, tankType)
+        : null;
+    const tank = {
         x, y, z: data.isFlying ? CONFIG.helicopterAltitude : (currentMap === 'factory' && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(1) : 0),
         factoryFloor: currentMap === 'factory' ? 1 : null,
         factoryElevatorRide: null,
@@ -756,9 +761,12 @@ function createTank(data, x, y, team, isPlayer, masteryLevelOverride = null) {
         turnSpeed: data.turnSpeed * (masteryVisual ? masteryVisual.turnSpeedMult : 1),
         armor: data.armor + (masteryVisual ? masteryVisual.armorBonus : 0),
         fireRate: data.fireRate * (isPlayer ? 1 : CONFIG.aiFireRateMultiplier),
-        color: masteryVisual ? masteryVisual.color : data.color,
-        accent: masteryVisual ? masteryVisual.accent : data.accent,
+        color: skinVisual && skinVisual.color ? skinVisual.color : (masteryVisual ? masteryVisual.color : data.color),
+        accent: skinVisual && skinVisual.accent ? skinVisual.accent : (masteryVisual ? masteryVisual.accent : data.accent),
         baseColor: data.color, baseAccent: data.accent, shape: data.shape,
+        skinId: skinVisual ? skinVisual.skinId : 'standard',
+        skinMetalness: skinVisual ? skinVisual.skinMetalness : null,
+        skinEmissive: skinVisual ? skinVisual.skinEmissive : null,
         masteryLevel: masteryVisual ? masteryVisual.level : 1,
         masteryLevelName: masteryVisual ? masteryVisual.levelName : '新兵',
         masteryLevelColor: masteryVisual ? masteryVisual.levelColor : '#aab4bd',
@@ -804,7 +812,7 @@ function createTank(data, x, y, team, isPlayer, masteryLevelOverride = null) {
         target: null, pathTimer: 0, moveTarget: null, lastShotTime: 0,
         aiState: 'combat', aiStateTimer: 0, aiCaptureTarget: null,
         aiStayTimer: 0, aiLastPos: {x, y},
-        exhaustColor: data.exhaustColor, id: id,
+        exhaustColor: skinVisual && skinVisual.exhaustColor ? skinVisual.exhaustColor : data.exhaustColor, id: id,
         path: null, 
         pathRefreshTimer: 0,
         stuckTimer: 0, lastPos: {x, y}, patrolCenter: null,
@@ -891,6 +899,8 @@ function createTank(data, x, y, team, isPlayer, masteryLevelOverride = null) {
         snowIdleTimer: 0, freezeLevel: 0, freezeDamageTimer: 1, waterDamageTimer: 1,
         environmentLastPos: {x, y}, lastSnowTrackPos: {x, y}
     };
+    if(typeof applyTankEvolution === 'function') applyTankEvolution(tank, masteryVisual);
+    return tank;
 }
 
 function getBaseSpawnInterval(team) {
@@ -1065,6 +1075,7 @@ function update(dt) {
         updateFactoryPhysics(dt, [player, ...allies, ...enemies].filter(tank => tank && !tank.dead));
     }
     if(typeof updateBattleSystems === 'function') updateBattleSystems(dt);
+    if(typeof updateWeaponAttachmentPickups === 'function') updateWeaponAttachmentPickups();
     if(typeof updateTerrainDestruction === 'function') updateTerrainDestruction(dt);
     updateBullets(dt);
     updateParticles(dt);
@@ -1353,6 +1364,7 @@ function updateTank(tank, dt) {
     if(tank.mgCooldown > 0) tank.mgCooldown -= dt;
     if(tank.aaCooldown > 0) tank.aaCooldown -= dt;
     updateStatusEffects(tank, dt);
+    if(typeof updateTankEvolution === 'function') updateTankEvolution(tank, dt);
     if(tank.isFlying && typeof updateHelicopterFlight === 'function') updateHelicopterFlight(tank, dt);
     if(tank.dead) return;
     if(tank.trailDebuff > 0) {
@@ -1377,30 +1389,35 @@ function updateTank(tank, dt) {
             if(currentWeapon === 'shell') {
                 if(tank.fireCooldown <= 0 && (tank.shells > 0 || tank.suddenDeathInfiniteAmmo)) {
                     fireBullet(tank, 'shell');
-                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)) *
+                        (typeof getAttachmentFireRateMultiplier === 'function' ? getAttachmentFireRateMultiplier(tank, 'shell') : 1));
                     if(navigator.vibrate) navigator.vibrate(30);
                 }
             } else if(currentWeapon === 'mg') {
                 if(tank.mgCooldown <= 0 && (tank.mg > 0 || tank.suddenDeathInfiniteAmmo)) {
                     fireBullet(tank, 'mg');
-                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)) *
+                        (typeof getAttachmentFireRateMultiplier === 'function' ? getAttachmentFireRateMultiplier(tank, 'mg') : 1));
                 }
             } else if(currentWeapon === 'aa') {
                 if((tank.aaCooldown || 0) <= 0 && ((tank.aa || 0) > 0 || tank.suddenDeathInfiniteAmmo)) {
                     fireBullet(tank, 'aa');
-                    tank.aaCooldown = CONFIG.aaCooldown / tank.fireRate;
+                    tank.aaCooldown = CONFIG.aaCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) *
+                        (typeof getAttachmentFireRateMultiplier === 'function' ? getAttachmentFireRateMultiplier(tank, 'aa') : 1));
                     if(navigator.vibrate) navigator.vibrate(20);
                 }
             } else if(currentWeapon === 'bomb') {
                 if(tank.fireCooldown <= 0 && (tank.shells > 0 || tank.suddenDeathInfiniteAmmo)) {
                     fireBullet(tank, 'bomb');
-                    tank.fireCooldown = 0.95 / tank.fireRate;
+                    tank.fireCooldown = 0.95 / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) *
+                        (typeof getAttachmentFireRateMultiplier === 'function' ? getAttachmentFireRateMultiplier(tank, 'bomb') : 1));
                     if(navigator.vibrate) navigator.vibrate(24);
                 }
             } else if(currentWeapon === 'airmg') {
                 if(tank.mgCooldown <= 0 && (tank.mg > 0 || tank.suddenDeathInfiniteAmmo)) {
                     fireBullet(tank, 'airmg');
-                    tank.mgCooldown = 0.095 / tank.fireRate;
+                    tank.mgCooldown = 0.095 / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) *
+                        (typeof getAttachmentFireRateMultiplier === 'function' ? getAttachmentFireRateMultiplier(tank, 'airmg') : 1));
                 }
             } else if(currentWeapon === 'smoke') {
                 deploySmokeGrenade(tank);
@@ -1410,7 +1427,8 @@ function updateTank(tank, dt) {
     updateAutoAim(tank, dt);
 
     if(!tank.canMove) return;
-    const canPassObstacles = !tank.isFlying && (tank.canPassObstacles || (tank.ghostActive && tank.ultimateData && tank.ultimateData.canPassObstacles));
+    const canPassObstacles = !tank.isFlying && (tank.canPassObstacles ||
+        (tank.ghostActive && tank.ultimateData && tank.ultimateData.canPassObstacles));
     if(moveX !== 0 || moveY !== 0) {
         const len = Math.sqrt(moveX*moveX + moveY*moveY);
         if(len > 0) { moveX /= len; moveY /= len; }
@@ -1440,6 +1458,12 @@ function updateTank(tank, dt) {
 
 function updateEnvironment(dt) {
     const allTanks = [player, ...allies, ...enemies].filter(t => t && !t.dead);
+    for(let index = obstacles.length - 1; index >= 0; index--) {
+        const obstacle = obstacles[index];
+        if(!Number.isFinite(obstacle.evolutionCoverTimer)) continue;
+        obstacle.evolutionCoverTimer -= dt;
+        if(obstacle.evolutionCoverTimer <= 0) obstacles.splice(index, 1);
+    }
 
     if(currentMap === 'desert') {
         if(environmentState.sandstormActive) {
@@ -1602,16 +1626,24 @@ function updateStatusEffects(tank, dt) {
     }
     if(tank.isClone && tank.cloneTimer > 0) {
         tank.cloneTimer -= dt;
-        if(tank.cloneTimer <= 0) tank.dead = true;
+        if(tank.cloneTimer <= 0) {
+            if(typeof detonateEvolutionPhantom === 'function') detonateEvolutionPhantom(tank);
+            tank.dead = true;
+        }
     }
     if(tank.toxinDebuffTimer > 0) {
         tank.toxinDebuffTimer -= dt;
         tank.toxinTickTimer -= dt;
         if(tank.toxinTickTimer <= 0) {
             tank.toxinTickTimer += 1;
-            applyDirectDamage(tank, tank.toxinDamage || 0, null, '毒素伤害');
+            applyDirectDamage(tank, tank.toxinDamage || 0, tank.toxinSource || null, '毒素伤害');
         }
-        if(tank.toxinDebuffTimer <= 0) tank.toxinSlow = 0;
+        if(tank.toxinDebuffTimer <= 0) {
+            tank.toxinSlow = 0;
+            tank.toxinSpreadRadius = 0;
+            tank.toxinSource = null;
+            tank.evolutionToxinSpreadDone = false;
+        }
     }
     if(tank.burnTimer > 0) {
         tank.burnTimer -= dt;
@@ -2184,13 +2216,21 @@ function fireUltimateSalvo(tank) {
     for(let i = 0; i < ult.shellCount; i++) {
         const shellAngle = angle - halfSpread + (ult.spreadAngle / (ult.shellCount - 1)) * i;
         const damage = ult.damagePerShell;
-        bullets.push({
+        const projectile = {
             x: tank.x + Math.cos(shellAngle) * (tank.turretSize + 20),
             y: tank.y + Math.sin(shellAngle) * (tank.turretSize + 20),
             vx: Math.cos(shellAngle) * CONFIG.bulletSpeed,
             vy: Math.sin(shellAngle) * CONFIG.bulletSpeed,
-            damage: damage, team: tank.team, type: 'shell', owner: tank, life: 2.0, hitTanks: new Set()
-        });
+            damage: damage, team: tank.team, type: 'shell', owner: tank, life: 2.0, hitTanks: new Set(),
+            maxTargetHits: 1, explosionRadius: 0,
+            armorIgnorePercent: tank.evolutionEffects && tank.evolutionEffects.salvoArmorIgnore || 0
+        };
+        if(typeof applyTankEvolutionToProjectile === 'function') applyTankEvolutionToProjectile(tank, projectile);
+        if(tank.evolutionEffects && tank.evolutionEffects.salvoSplashMult) {
+            projectile.explosionRadius *= tank.evolutionEffects.salvoSplashMult;
+        }
+        bullets.push(projectile);
+        if(typeof spawnTankShotAnimation === 'function') spawnTankShotAnimation(tank, projectile, shellAngle);
     }
     createParticles(tank.x, tank.y, 20, '#ff8800', 2);
 }

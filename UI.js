@@ -71,6 +71,7 @@ function init() {
     window.addEventListener('resize', updateInputDeviceMode);
     setupStartScreen();
     setupMenu();
+    if(typeof installPixelSkinEasterEgg === 'function') installPixelSkinEasterEgg();
     setupControls();
     setupIntroModal();
     requestAnimationFrame(gameLoop);
@@ -483,6 +484,7 @@ function setupMenu() {
     if(typeof setupCustomRoomControls === 'function') setupCustomRoomControls();
 
     renderTankList();
+    if(typeof renderTankSkinSelector === 'function') renderTankSkinSelector(selectedTank);
 
     document.getElementById('ammoSlider').oninput = (e) => document.getElementById('ammoValue').textContent = e.target.value;
     document.getElementById('mgSlider').oninput = (e) => document.getElementById('mgValue').textContent = e.target.value;
@@ -522,6 +524,8 @@ function setupMapSelection() {
 
 function drawTankPreview(key, tank) {
     const preview = document.getElementById(`preview-${key}`);
+    if(!preview) return;
+    preview.innerHTML = '';
     const c = document.createElement('canvas');
     c.width = 220; c.height = 90;
     const pctx = c.getContext('2d');
@@ -529,7 +533,8 @@ function drawTankPreview(key, tank) {
     const masteryVisual = typeof getTankMasteryVisual === 'function'
         ? getTankMasteryVisual(key)
         : null;
-    const previewTank = masteryVisual ? { ...tank, ...masteryVisual, tankType: key } : tank;
+    const skinVisual = typeof getTankSkinVisual === 'function' ? getTankSkinVisual(tank, key) : null;
+    const previewTank = { ...tank, ...(masteryVisual || {}), ...(skinVisual || {}), tankType: key };
     if(previewTank.shape === 'helicopter') {
         drawHelicopterPreview(pctx, previewTank);
     } else {
@@ -579,6 +584,7 @@ function selectTank(key, card) {
     document.querySelectorAll('.tank-card').forEach(c => c.classList.remove('selected'));
     card.classList.add('selected');
     selectedTank = key;
+    if(typeof renderTankSkinSelector === 'function') renderTankSkinSelector(key);
     const tank = TANKS[key];
     const ammoSlider = document.getElementById('ammoSlider');
     const mgSlider = document.getElementById('mgSlider');

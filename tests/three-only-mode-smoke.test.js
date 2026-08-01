@@ -24,9 +24,9 @@ assert(three.includes('group.userData.playerBeacon = playerBeacon') &&
     'the player should receive both a world beacon and a high-priority HUD label');
 assert(css.includes('.three-player-label') && css.includes('.three-player-label .three-player-pin'),
     'the player locator should have dedicated high-visibility styling');
-assert(html.includes('UI.js?v=physics-settings-28') &&
-    html.includes('GameCore.js?v=physics-settings-28') &&
-    html.includes('ThreeRender.js?v=physics-settings-28'),
+assert(html.includes('UI.js?v=armory-skins-29') &&
+    html.includes('GameCore.js?v=armory-skins-29') &&
+    html.includes('ThreeRender.js?v=armory-skins-29'),
     '3D-only assets should use fresh cache keys');
 
 console.log('3D-only mode and player locator smoke test passed.');

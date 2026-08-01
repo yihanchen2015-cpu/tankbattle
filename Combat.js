@@ -10,6 +10,7 @@ function getTankFiringAngle(tank, spread = 0) {
 }
 
 function fireBullet(tank, type) {
+    if(!tank || tank.dead || (tank.evolutionTurretDisabledTimer || 0) > 0) return;
     const infiniteReserve = !!tank.suddenDeathInfiniteAmmo || (tank.stormActive && tank.tankType === 'duoduo_ifv');
     if ((type === 'shell' || type === 'bomb') && tank.shells <= 0 && !infiniteReserve) return;
     if ((type === 'mg' || type === 'airmg') && tank.mg <= 0 && !infiniteReserve) return;
@@ -19,7 +20,12 @@ function fireBullet(tank, type) {
     tank.recoilTimer = type === 'shell' || type === 'bomb' ? .24 : type === 'aa' ? .15 : .08;
     tank.recoilStrength = type === 'shell' || type === 'bomb' ? 11 : type === 'aa' ? 6 : 2.5;
     
-    if(tank.ghostActive && tank.ultimateData && tank.ultimateData.revealOnFire) tank.ghostRevealed = true;
+    const suppressed = typeof tankWeaponHasAttachment === 'function' && tankWeaponHasAttachment(tank, type, 'suppressor');
+    if(!suppressed) {
+        const minimapClock = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        tank.minimapRevealedUntil = minimapClock + 4000;
+    }
+    if(!suppressed && tank.ghostActive && tank.ultimateData && tank.ultimateData.revealOnFire) tank.ghostRevealed = true;
     let speedMult = 1, spreadMult = 1, damageMult = 1, infiniteAmmo = !!tank.suddenDeathInfiniteAmmo;
     if(tank.stormActive && tank.tankType === 'duoduo_ifv') {
         speedMult = tank.ultimateData.mgRateMult || 3; spreadMult = tank.ultimateData.mgSpreadMult || 0.5;
@@ -30,7 +36,11 @@ function fireBullet(tank, type) {
         : type === 'aa' ? (tank.aaElevation ?? CONFIG.aaDefaultElevation) : 0;
     const elevation = elevationDeg * Math.PI / 180;
     const speed = baseSpeed * Math.cos(elevation);
-    const spread = (type === 'mg' || type === 'airmg') ? (Math.random() - 0.5) * 0.12 * spreadMult : (type === 'aa' ? (Math.random() - 0.5) * 0.08 : 0);
+    const movingSpread = typeof getAttachmentSpreadMultiplier === 'function' ? getAttachmentSpreadMultiplier(tank, type) : 1;
+    const spread = (type === 'mg' || type === 'airmg') ? (Math.random() - 0.5) * 0.12 * spreadMult * movingSpread
+        : (type === 'aa' ? (Math.random() - 0.5) * 0.08 * movingSpread
+        : (type === 'shell' && typeof isTankActivelyMoving === 'function' && isTankActivelyMoving(tank)
+            ? (Math.random() - .5) * .026 * movingSpread : 0));
     const angle = getTankFiringAngle(tank, spread);
     const masteryGolden = type === 'shell' && !!tank.masteryGoldenProjectiles;
     const masteryDamageMult = masteryGolden
@@ -39,14 +49,16 @@ function fireBullet(tank, type) {
     // 主炮弹不使用计时销毁：它会按弹道飞行，直到坠地或真实碰撞。
     const maxLife = type === 'bomb' ? 5.0 : (type === 'shell' ? Infinity : (type === 'aa' ? 5.0 : 1.2));
     const muzzleDistance = type === 'bomb' ? 0 : tank.turretSize + 12;
-    bullets.push({
+    const projectile = {
         x: tank.x + Math.cos(angle) * muzzleDistance,
         y: tank.y + Math.sin(angle) * muzzleDistance,
         z: type === 'bomb' ? Math.max(28, (tank.z || CONFIG.helicopterAltitude) - 8) : (tank.z || 0) + (type === 'aa' ? 18 : 24),
         vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
         vz: type === 'bomb' ? -35 : ((type === 'shell' || type === 'aa') ? baseSpeed * 60 * Math.sin(elevation) : 0),
         damage: (type === 'bomb' ? 340 : (type === 'shell' ? CONFIG.bulletDamage : (type === 'aa' ? CONFIG.aaDamage : (type === 'airmg' ? 18 : CONFIG.mgDamage)))) *
-            damageMult * masteryDamageMult * (tank.masteryWeaponDamageMult || 1) *
+            damageMult * masteryDamageMult *
+            (typeof getAttachmentDamageMultiplier === 'function' ? getAttachmentDamageMultiplier(tank, type) : 1) *
+            (tank.masteryWeaponDamageMult || 1) *
             (tank.aiDamageMult || 1) * (tank.masteryAuraDamageMult || 1) * (tank.bossBuffAttackMult || 1),
         team: tank.team, type, owner: tank,
         masteryGolden,
@@ -63,6 +75,7 @@ function fireBullet(tank, type) {
         ignoresObstacles: type === 'airmg' || (!!tank.isFlying && type !== 'aa'),
         hitTanks: new Set(),
         armorIgnore: tank.tankType === 'duoduo_spat',
+        armorIgnorePercent: typeof tankWeaponHasAttachment === 'function' && tankWeaponHasAttachment(tank, type, 'armorPiercing') ? .3 : 0,
         elevation: elevationDeg,
         explosionWidth: type === 'bomb' ? 150 : 0,
         explosionHeight: type === 'bomb' ? 150 : 0,
@@ -74,7 +87,17 @@ function fireBullet(tank, type) {
             slow: tank.ultimateData.slowPercent,
             chance: tank.ultimateData.applyChance
         } : null
-    });
+    };
+    if(typeof applyTankEvolutionToProjectile === 'function') applyTankEvolutionToProjectile(tank, projectile);
+    bullets.push(projectile);
+    if(typeof spawnTankShotAnimation === 'function') spawnTankShotAnimation(tank, projectile, angle);
+    if(type === 'shell' && tank.tankType === 'duoduo_rocket' && !tank.evolutionBurstFiring) {
+        const burstCount = tank.evolutionEffects && tank.evolutionEffects.rocketBurstCount || 1;
+        if(burstCount > 1) {
+            tank.evolutionBurstRemaining = burstCount - 1;
+            tank.evolutionBurstTimer = tank.evolutionEffects.rocketBurstInterval || .1;
+        }
+    }
     if(bullets.length > 500) bullets.splice(0, bullets.length - 500);
     if((type === 'shell' || type === 'bomb') && !infiniteAmmo) tank.shells--;
     else if((type === 'mg' || type === 'airmg') && !infiniteAmmo) tank.mg--;
@@ -91,7 +114,8 @@ function fireBullet(tank, type) {
 }
 
 function deploySmokeGrenade(tank, options = {}) {
-    if(!tank || tank.dead || tank.isFlying || (tank.smoke || 0) <= 0 || (tank.smokeCooldown || 0) > 0) return false;
+    if(!tank || tank.dead || tank.isFlying || tank.evolutionSkillDisabledTimer > 0 ||
+       (tank.smoke || 0) <= 0 || (tank.smokeCooldown || 0) > 0) return false;
     const angle = typeof getTankFiringAngle === 'function' ? getTankFiringAngle(tank) : tank.turretAngle;
     const atFeet = options.atFeet === true;
     const distance = atFeet ? 0 : 95;
@@ -128,7 +152,7 @@ function updateBullets(dt) {
         b.age = (b.age || 0) + dt;
         if(!Number.isFinite(b.z)) b.z = (b.owner && b.owner.z || 0) + 24;
         if(!Number.isFinite(b.vz)) b.vz = 0;
-        if(b.isDrone) {
+        if(b.isDrone && b.autoTrack) {
             const targets = b.team === 'blue' ? enemies : [player, ...allies];
             let nearest = null, nearestDist = b.trackRange || 800;
             targets.forEach(t => {
@@ -202,22 +226,28 @@ function updateBullets(dt) {
                     damageTerrainInRadius(b.x, b.y, 24, b.damage || CONFIG.bulletDamage, 'shell', b.owner);
                 }
                 createParticles(b.x, b.y, 10, b.masteryGolden ? '#ffe36a' : '#a87a4a', 1.15);
+                if(typeof spawnTankImpactAnimation === 'function') spawnTankImpactAnimation(b);
                 if(typeof playWorldSound === 'function') playWorldSound('hit', b.x, b.y, b.owner && b.owner.isPlayer ? .72 : .4);
                 bullets.splice(i, 1);
                 continue;
             }
         }
         if(Math.random() < 0.4) {
-            const trailColor = b.neutralSniper ? '#c02cff' : (b.type === 'shell' ? '#ff8800' : (b.type === 'aa' ? '#ff66ff' : '#ffff44'));
+            const trailColor = b.evolutionTrail || (b.neutralSniper ? '#c02cff' : (b.type === 'shell' ? '#ff8800' : (b.type === 'aa' ? '#ff66ff' : '#ffff44')));
             createParticles(b.x, b.y, b.neutralSniper ? 2 : 1, trailColor, b.neutralSniper ? .75 : .4);
         }
         if(b.isRocket && (Math.hypot(b.x - b.targetX, b.y - b.targetY) < 35 || b.life <= 0)) {
             explodeRocket(b);
+            if(typeof spawnTankImpactAnimation === 'function') spawnTankImpactAnimation(b);
             bullets.splice(i, 1);
             continue;
         }
         const lifetimeExpired = b.type !== 'shell' && b.life <= 0;
-        if(lifetimeExpired || b.z < -5 || b.x < 0 || b.x > CONFIG.mapWidth || b.y < 0 || b.y > CONFIG.mapHeight) { bullets.splice(i, 1); continue; }
+        if(lifetimeExpired || b.z < -5 || b.x < 0 || b.x > CONFIG.mapWidth || b.y < 0 || b.y > CONFIG.mapHeight) {
+            if(b.isDrone && typeof explodeEvolutionDrone === 'function') explodeEvolutionDrone(b);
+            if(typeof createEvolutionRocketImpact === 'function') createEvolutionRocketImpact(b);
+            bullets.splice(i, 1); continue;
+        }
         if(b.ignoresObstacles) continue;
         if(currentMap === 'factory' && typeof factoryProjectileCrossedSlab === 'function' && factoryProjectileCrossedSlab(b)) {
             createParticles(b.x,b.y,6,'#8d9498',.7);
@@ -240,9 +270,16 @@ function updateBullets(dt) {
                     break;
                 } else if(b.isRocket) explodeRocket(b);
                 else {
-                    if(typeof damageObstacleAtPoint === 'function') damageObstacleAtPoint(obs, b.damage || CONFIG.bulletDamage, b.type, b.x, b.y, b.owner);
+                    const evolution = b.owner && b.owner.evolutionEffects || {};
+                    const smallObstacle = Math.max(obs.w || 0, obs.h || 0) <= 130 ||
+                        ['tree', 'factoryCrate', 'oilBarrel', 'evolutionCover'].includes(obs.type);
+                    const siegeMult = evolution.destroySmallObstacles && smallObstacle ? 3 : 1;
+                    if(typeof damageObstacleAtPoint === 'function') damageObstacleAtPoint(obs, (b.damage || CONFIG.bulletDamage) * siegeMult, b.type, b.x, b.y, b.owner);
                     createParticles(b.x, b.y, 6, '#777', 1);
                 }
+                if(b.isDrone && typeof explodeEvolutionDrone === 'function') explodeEvolutionDrone(b);
+                if(typeof createEvolutionRocketImpact === 'function') createEvolutionRocketImpact(b);
+                if(typeof spawnTankImpactAnimation === 'function') spawnTankImpactAnimation(b);
                 bullets.splice(i, 1); break;
             }
         }
@@ -391,17 +428,20 @@ function applyTankHitReaction(tank, projectile) {
     if(!tank || tank.dead || !projectile || !['shell','aa','rocket'].includes(projectile.type)) return 'hull';
     const zone = getTankHitZone(tank, projectile);
     if(zone === 'turret') {
-        tank.turretJamTimer = Math.max(tank.turretJamTimer || 0, CONFIG.turretJamDuration);
+        const recoveryMult = tank.evolutionEffects && tank.evolutionEffects.hitRecoveryMult || 1;
+        tank.turretJamTimer = Math.max(tank.turretJamTimer || 0, CONFIG.turretJamDuration * recoveryMult);
         createParticles(tank.x, tank.y, 10, '#e8c26b', 1);
         if(tank === player && typeof showMessage === 'function') showMessage('⚙ 炮塔卡壳：暂时无法转动', '#ffc867');
     } else if(zone === 'track') {
-        const duration = CONFIG.trackDamageDuration * Math.max(.2, tank.trackRepairMultiplier || 1);
+        const recoveryMult = tank.evolutionEffects && tank.evolutionEffects.hitRecoveryMult || 1;
+        const duration = CONFIG.trackDamageDuration * Math.max(.2, tank.trackRepairMultiplier || 1) * recoveryMult;
         tank.trackDamageTimer = Math.max(tank.trackDamageTimer || 0, duration);
         createParticles(tank.x, tank.y + 15, 12, '#806f5c', 1.2);
         if(tank === player && typeof showMessage === 'function') showMessage('⛓ 履带受损：速度下降', '#e1b278');
     } else if(zone === 'fuel') {
-        tank.fuelFireTimer = Math.max(tank.fuelFireTimer || 0, CONFIG.fuelFireDuration);
-        tank.burnTimer = Math.max(tank.burnTimer || 0, CONFIG.fuelFireDuration);
+        const recoveryMult = tank.evolutionEffects && tank.evolutionEffects.hitRecoveryMult || 1;
+        tank.fuelFireTimer = Math.max(tank.fuelFireTimer || 0, CONFIG.fuelFireDuration * recoveryMult);
+        tank.burnTimer = Math.max(tank.burnTimer || 0, CONFIG.fuelFireDuration * recoveryMult);
         tank.burnTickTimer = Math.min(tank.burnTickTimer || 1, .5);
         tank.burnDamage = Math.max(tank.burnDamage || 0, CONFIG.fuelFireDamage);
         createParticles(tank.x, tank.y, 15, '#ff681f', 1.5);
@@ -427,10 +467,39 @@ function consumeGoldenShield(tank, source, projectile) {
     return true;
 }
 
-function applyDirectDamage(tank, damage, source, cause = null, projectile = null) {
+function applyDirectDamage(tank, damage, source, cause = null, projectile = null, evolutionShared = false) {
     if(!tank || tank.dead || damage <= 0) return 0;
+    if((tank.evolutionUndyingTimer || 0) > 0) return 0;
+    if(!evolutionShared && source && source.team !== tank.team) {
+        const linkOwner = tank.linkedTo && !tank.linkedTo.dead ? tank.linkedTo : null;
+        const linkShare = linkOwner && linkOwner.evolutionEffects && linkOwner.evolutionEffects.linkDamageShare || 0;
+        if(linkOwner && linkShare > 0) {
+            const shared = damage * linkShare;
+            damage -= shared;
+            applyDirectDamage(linkOwner, shared, source, cause || '链接分摊', projectile, true);
+        }
+        const team = tank.team === 'blue' ? [player, ...allies] : enemies;
+        const destinyOwner = team.find(member => member && !member.dead && member.evolutionEffects && member.evolutionEffects.teamDamageShare);
+        if(destinyOwner) {
+            const recipients = team.filter(member => member && member !== tank && !member.dead);
+            const teamShare = destinyOwner.evolutionEffects.teamDamageShare;
+            if(recipients.length) {
+                const shared = damage * teamShare;
+                damage -= shared;
+                recipients.forEach(member => applyDirectDamage(member, shared / recipients.length, source, '命运共同体', projectile, true));
+            }
+        }
+    }
     if(consumeGoldenShield(tank, source, projectile)) return 0;
+    if(typeof modifyTankEvolutionIncomingDamage === 'function') {
+        damage = modifyTankEvolutionIncomingDamage(tank, source, damage);
+        if(damage <= 0) {
+            if(typeof showDamageNumber === 'function') showDamageNumber(tank.x, tank.y - 30, '闪避');
+            return 0;
+        }
+    }
     const preHitHp = tank.hp;
+    const shieldWasActive = !!(tank.shieldActive && tank.shieldHp > 0);
     let modeMultiplier = 1;
     if(gameMode === 'defense' && source) {
         if(tank === player && !source.isPlayer && source.team === 'red') {
@@ -460,9 +529,26 @@ function applyDirectDamage(tank, damage, source, cause = null, projectile = null
         if(source) tank.hitDirection = Math.atan2(source.y - tank.y, source.x - tank.x);
         if(tank === player && typeof recordPlayerDamageSource === 'function') recordPlayerDamageSource(remaining, source, cause, projectile);
     }
+    if(tank.hp <= 0 && tank.linkedTo && !tank.linkedTo.dead) {
+        const linkEffects = tank.linkedTo.evolutionEffects || {};
+        if(linkEffects.linkUndyingDuration) {
+            tank.hp = 1;
+            tank.evolutionUndyingTimer = linkEffects.linkUndyingDuration;
+            tank.invincible = Math.max(tank.invincible || 0, linkEffects.linkUndyingDuration);
+            if(typeof createParticles === 'function') createParticles(tank.x, tank.y, 24, '#b6ff86', 2);
+        }
+    }
+    if(shieldWasActive && (!tank.shieldActive || tank.shieldHp <= 0) &&
+       typeof handleTankEvolutionShieldBreak === 'function') {
+        handleTankEvolutionShieldBreak(tank);
+    }
+    if(typeof handleTankEvolutionDamaged === 'function') {
+        handleTankEvolutionDamaged(tank, source, preHitHp);
+    }
     if(tank.hp <= 0 && !tank.dead) {
         if(source) recordKill(source, tank, { preHitHp, damage, weapon: source.isPlayer ? currentWeapon : null });
         tank.dead = true;
+        if(typeof handleTankEvolutionDeath === 'function') handleTankEvolutionDeath(tank);
         if(typeof spawnMasteryDeathFlame === 'function') spawnMasteryDeathFlame(tank);
         createParticles(tank.x, tank.y, 40, tank.color, 3);
         createParticles(tank.x, tank.y, 25, '#ffaa00', 2);
@@ -504,7 +590,9 @@ function explodeBomb(bomb) {
         if(dx > halfW || dy > halfH) return;
         if(Math.abs(getProjectileTargetHeight(tank) - (bomb.z || 0)) > 65) return;
         const falloff = Math.max(.3, 1 - Math.max(dx / halfW, dy / halfH));
-        const dealt = applyDirectDamage(tank, bomb.damage * falloff / Math.max(.35, tank.armor + (tank.mapArmorBonus || 0)), bomb.owner, '垂直炸药包', bomb);
+        const bombArmor = (tank.armor + (tank.mapArmorBonus || 0)) *
+            (1 - Math.max(0, Math.min(.95, bomb.armorIgnorePercent || 0)));
+        const dealt = applyDirectDamage(tank, bomb.damage * falloff / Math.max(.35, bombArmor), bomb.owner, '垂直炸药包', bomb);
         if(dealt > 0) showDamageNumber(tank.x, tank.y - 34, Math.round(dealt));
     });
     const enemyBase = bomb.team === 'blue' ? bases.red : bases.blue;
@@ -651,6 +739,9 @@ function checkCollisions() {
                     continue;
                 }
                 let damage = b.damage;
+                if(typeof modifyTankEvolutionOutgoingDamage === 'function') {
+                    damage = modifyTankEvolutionOutgoingDamage(b, tank, damage);
+                }
                 if(tank.isFlying && b.type === 'shell') damage *= 0.4;
                 if(tank.isFlying && b.type === 'aa') {
                     const aaMapMultiplier = currentMap === 'classic' ? 1.35 : currentMap === 'island' ? 1.20 : 1;
@@ -662,10 +753,12 @@ function checkCollisions() {
                         damage += b.owner.ultimateData.executeDamage || 0;
                     }
                 }
-                if(!b.armorIgnore && (b.type === 'mg' || b.type === 'airmg')) damage = damage / Math.max(1, actualArmor * 0.5);
-                else if(!b.armorIgnore) damage = damage / Math.max(0.25, actualArmor);
+                const effectiveArmor = actualArmor * (1 - Math.max(0, Math.min(.95, b.armorIgnorePercent || 0)));
+                if(!b.armorIgnore && (b.type === 'mg' || b.type === 'airmg')) damage = damage / Math.max(1, effectiveArmor * 0.5);
+                else if(!b.armorIgnore) damage = damage / Math.max(0.25, effectiveArmor);
                 if(tank.reflectActive && tank.fortressActive && b.owner) {
-                    const reflectDmg = damage * (tank.ultimateData.reflectDamage || 0.3);
+                    const reflectMult = tank.evolutionEffects && tank.evolutionEffects.reflectMult || 1;
+                    const reflectDmg = damage * (tank.ultimateData.reflectDamage || 0.3) * reflectMult;
                     applyDirectDamage(b.owner, reflectDmg, tank, '反射伤害'); showDamageNumber(b.owner.x, b.owner.y - 30, Math.floor(reflectDmg));
                     createParticles(b.owner.x, b.owner.y, 5, '#ff0000', 1);
                 }
@@ -677,11 +770,16 @@ function checkCollisions() {
                     applyDirectDamage(tank.shieldOwner, redirectDamage, b.owner, getWeaponCause(b.type), b);
                 } else dealtToTank = applyDirectDamage(tank, damage, b.owner, getWeaponCause(b.type), b);
                 if(dealtToTank > 0 && !tank.dead) applyTankHitReaction(tank, b);
+                if(typeof handleTankEvolutionProjectileHit === 'function') handleTankEvolutionProjectileHit(b, tank, dealtToTank);
+                if(typeof spawnTankImpactAnimation === 'function') spawnTankImpactAnimation(b, tank);
                 if(b.toxinData && Math.random() < (b.toxinData.chance || 1)) {
                     tank.toxinDebuffTimer = Math.max(tank.toxinDebuffTimer || 0, b.toxinData.duration || 0);
                     tank.toxinTickTimer = b.toxinData.interval || 1;
                     tank.toxinDamage = Math.max(tank.toxinDamage || 0, b.toxinData.damage || 0);
                     tank.toxinSlow = Math.max(tank.toxinSlow || 0, b.toxinData.slow || 0);
+                    tank.toxinSource = b.toxinData.source || b.owner || null;
+                    tank.toxinSpreadRadius = Math.max(tank.toxinSpreadRadius || 0, b.toxinData.spreadRadius || 0);
+                    tank.evolutionToxinSpreadDone = false;
                 }
                 if(b.explosionRadius > 0) {
                     getNearbyTanks(b.x, b.y, b.explosionRadius).forEach(other => {
@@ -701,7 +799,11 @@ function checkCollisions() {
                 if(b.hitTanks) b.hitTanks.add(tank.id);
             }
         }
-        if(hitCount > 0 && (!b.hitTanks || b.hitTanks.size >= maxHits)) bullets.splice(i, 1);
+        if(hitCount > 0 && (!b.hitTanks || b.hitTanks.size >= maxHits)) {
+            if(b.isDrone && typeof explodeEvolutionDrone === 'function') explodeEvolutionDrone(b);
+            if(typeof createEvolutionRocketImpact === 'function') createEvolutionRocketImpact(b);
+            bullets.splice(i, 1);
+        }
     }
     
     for(let i = bullets.length - 1; i >= 0; i--) {
@@ -721,7 +823,8 @@ function checkCollisions() {
                         return;
                     }
                     const wasAlive = base.hp > 0;
-                    base.hp -= b.damage;
+                    const structureMult = b.owner && b.owner.evolutionEffects && b.owner.evolutionEffects.structureDamageMult || 1;
+                    base.hp -= b.damage * structureMult;
                     if(wasAlive && base.hp <= 0) recordBaseDestroy(b.team, b.owner || null);
                     createParticles(b.x, b.y, 8, '#ff6600', 1.2); hitBase = true;
                 }
@@ -810,8 +913,10 @@ function updateHelicopterFlight(tank, dt) {
         if(keys.KeyE || keys.Space) lift = 1;
         if(keys.KeyQ || keys.ShiftLeft || keys.ShiftRight) lift = -1;
         if(lift !== 0) {
-            const nextZ = Math.max(CONFIG.helicopterMinAltitude, Math.min(CONFIG.helicopterMaxAltitude,
-                (tank.z || CONFIG.helicopterAltitude) + lift * CONFIG.helicopterClimbSpeed * dt));
+            const maxAltitude = CONFIG.helicopterMaxAltitude * (tank.maxAltitudeMult || 1);
+            const climbSpeed = CONFIG.helicopterClimbSpeed * (tank.climbSpeedMult || 1);
+            const nextZ = Math.max(CONFIG.helicopterMinAltitude, Math.min(maxAltitude,
+                (tank.z || CONFIG.helicopterAltitude) + lift * climbSpeed * dt));
             if(lift < 0 && flyingTankHitsObstacle(tank.x, tank.y, nextZ, CONFIG.tankSize * 0.8)) registerHelicopterCollision(tank);
             else tank.z = nextZ;
         }
@@ -861,7 +966,9 @@ function resolveTankCollisions() {
         for(let other of nearby) {
             if(other === tank || other.dead) continue;
             // 幽灵坦克不参与物理碰撞
-            if(tank.ghostActive || other.ghostActive) continue;
+            if(tank.ghostActive || other.ghostActive ||
+               (tank.evolutionStealthActive && tank.evolutionEffects && tank.evolutionEffects.phaseTanks) ||
+               (other.evolutionStealthActive && other.evolutionEffects && other.evolutionEffects.phaseTanks)) continue;
             // 飞行单位不参与地面坦克碰撞
             if(tank.isFlying || other.isFlying) continue;
             if(Math.abs((tank.z || 0) - (other.z || 0)) > 55) continue;

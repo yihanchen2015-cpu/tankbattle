@@ -173,6 +173,7 @@ function updateAITank(tank, dt) {
     if (tank.mgCooldown > 0) tank.mgCooldown -= dt;
     if (tank.aaCooldown > 0) tank.aaCooldown -= dt;
     updateStatusEffects(tank, dt);
+    if(typeof updateTankEvolution === 'function') updateTankEvolution(tank, dt);
     if(tank.isFlying && typeof updateHelicopterFlight === 'function') updateHelicopterFlight(tank, dt);
     if(tank.dead) return;
     
@@ -583,10 +584,11 @@ function updateAITank(tank, dt) {
         shouldFire = true;
         usePathfinding = false;
         stopDist = nearestEnemy.isFlying ? 170 : 18;
+        const maxAltitude = CONFIG.helicopterMaxAltitude * (tank.maxAltitudeMult || 1);
         const desiredAltitude = nearestEnemy.isFlying
-            ? Math.max(CONFIG.helicopterMinAltitude, Math.min(CONFIG.helicopterMaxAltitude, nearestEnemy.z || CONFIG.helicopterAltitude))
+            ? Math.max(CONFIG.helicopterMinAltitude, Math.min(maxAltitude, nearestEnemy.z || CONFIG.helicopterAltitude))
             : Math.max(CONFIG.helicopterMinAltitude, Math.min(320, 180 + minEnemyDist * 0.08));
-        const altitudeStep = CONFIG.helicopterClimbSpeed * dt;
+        const altitudeStep = CONFIG.helicopterClimbSpeed * (tank.climbSpeedMult || 1) * dt;
         const nextZ = (tank.z || CONFIG.helicopterAltitude) + Math.max(-altitudeStep, Math.min(altitudeStep, desiredAltitude - (tank.z || CONFIG.helicopterAltitude)));
         if(nextZ >= (tank.z || 0) || !flyingTankHitsObstacle(tank.x, tank.y, nextZ, CONFIG.tankSize * 0.8)) tank.z = nextZ;
     }
@@ -629,10 +631,10 @@ function updateAITank(tank, dt) {
         const isAimedAtBase = aimDiff < 0.24;
         if(tank.isFlying && baseDistance < 55 && (tank.shells > 0 || tank.suddenDeathInfiniteAmmo) && tank.fireCooldown <= 0) {
             fireBullet(tank, 'bomb');
-            tank.fireCooldown = .95 / tank.fireRate;
+            tank.fireCooldown = .95 / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)));
         } else if(!tank.isFlying && isAimedAtBase && lineOfSight(tank.x, tank.y, enemyBase.x + enemyBase.w/2, enemyBase.y + enemyBase.h/2, tank.factoryFloor) && tank.shells > 0 && tank.fireCooldown <= 0) {
             fireBullet(tank, 'shell');
-            tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)) * (isRedAI ? 1.08 : 1));
+            tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)) * (isRedAI ? 1.08 : 1));
         }
     }
 
@@ -683,49 +685,49 @@ function updateAITank(tank, dt) {
                 Math.abs((tank.z || 0) - (nearestEnemy.z || 0)) <= 42 &&
                 (tank.mg > 0 || tank.suddenDeathInfiniteAmmo) && tank.mgCooldown <= 0) {
                 fireBullet(tank, 'airmg');
-                tank.mgCooldown = .095 / tank.fireRate;
+                tank.mgCooldown = .095 / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)));
             } else if(tank.isFlying && !nearestEnemy.isFlying && minEnemyDist < 55 && canFireShell) {
                 fireBullet(tank, 'bomb');
-                tank.fireCooldown = .95 / tank.fireRate;
+                tank.fireCooldown = .95 / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)));
             } else if(!tank.isFlying && canFireAA) {
                 fireBullet(tank, 'aa');
-                tank.aaCooldown = CONFIG.aaCooldown / tank.fireRate;
+                tank.aaCooldown = CONFIG.aaCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)));
             } else if(!tank.isFlying && nearestEnemy.isFlying) {
                 if(canFireShell) {
                     fireBullet(tank, 'shell');
-                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)));
                 }
             } else if(!tank.isFlying && isStormActive) {
                 if (tank.mgCooldown <= 0) {
                     fireBullet(tank, 'mg');
-                    tank.mgCooldown = (CONFIG.mgCooldown / tank.fireRate) / (tank.ultimateData.mgRateMult || 3);
+                    tank.mgCooldown = (CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)))) / (tank.ultimateData.mgRateMult || 3);
                 }
             } else if(!tank.isFlying && minEnemyDist < 200) {
                 if (canFireMG) {
                     fireBullet(tank, 'mg');
-                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)));
                 } else if (canFireShell) {
                     fireBullet(tank, 'shell');
-                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)));
                 }
             } else if(!tank.isFlying && minEnemyDist < 500) {
                 if (canFireMG && mgRatio > 0.15) {
                     fireBullet(tank, 'mg');
-                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)));
                 } else if (canFireShell && shellRatio > 0.1) {
                     fireBullet(tank, 'shell');
-                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)));
                 } else if (canFireMG) {
                     fireBullet(tank, 'mg');
-                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)));
                 }
             } else if(!tank.isFlying) {
                 if (canFireShell && shellRatio > 0.05) {
                     fireBullet(tank, 'shell');
-                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)));
                 } else if (canFireMG && mgRatio > 0.1) {
                     fireBullet(tank, 'mg');
-                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.fireRateBuff || 0)));
+                    tank.mgCooldown = CONFIG.mgCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)));
                 }
             }
         }
@@ -818,6 +820,7 @@ function updateAIUltimate(tank, dt) {
     if (tank.ultimateActive || tank.ultimateCharging || tank.nailLocking || tank.stormActive || tank.fortressActive || tank.ghostActive) {
         return;
     }
+    if(tank.evolutionSkillDisabledTimer > 0 || tank.evolutionJudgmentNoUltimate) return;
     
     const enemyList = tank.team === 'blue' ? enemies.filter(e => !e.dead) : [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])];
     const nearestEnemy = enemyList.length > 0 ? enemyList.reduce((a, b) => Math.hypot(a.x - tank.x, a.y - tank.y) < Math.hypot(b.x - tank.x, b.y - tank.y) ? a : b) : null;
@@ -829,7 +832,9 @@ function updateAIUltimate(tank, dt) {
         const highValueTarget = enemyList.find(e => (e.isPlayer || e.tankType === 'duoduo' || e.tankType === 'duoduo_ifv' || e.tankType === 'duoduo_spat') && Math.hypot(e.x - tank.x, e.y - tank.y) < 800);
         if(highValueTarget && tank.hp > tank.maxHp * 0.3) {
             tank.ghostActive = true; tank.ghostTimer = tank.ultimateData.duration; tank.ultimateCooldown = tank.ultimateData.cooldown;
-            tank.speedBoost = tank.ultimateData.ghostSpeedBoost || 0.5; tank.ultimateActive = true; tank.ultimateTimer = tank.ultimateData.duration; return;
+            tank.speedBoost = tank.ultimateData.ghostSpeedBoost || 0.5; tank.ultimateActive = true; tank.ultimateTimer = tank.ultimateData.duration;
+            if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(tank);
+            return;
         }
     }
     if(tank.tankType === 'zuoyan1') {
@@ -837,14 +842,18 @@ function updateAIUltimate(tank, dt) {
         const needEscape = tank.hp < tank.maxHp * 0.3 && minEnemyDist < 400;
         if((capturable && Math.hypot(capturable.x - tank.x, capturable.y - tank.y) < 1500) || needEscape) {
             tank.ultimateActive = true; tank.ultimateTimer = tank.ultimateData.duration; tank.ultimateCooldown = tank.ultimateData.cooldown;
-            tank.speedBoost = tank.ultimateData.speedBoost; tank.turnBoost = tank.ultimateData.turnBoost; return;
+            tank.speedBoost = tank.ultimateData.speedBoost; tank.turnBoost = tank.ultimateData.turnBoost;
+            if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(tank);
+            return;
         }
     }
     if(tank.tankType === 'zuoyan29') {
         const lowHpEnemy = enemyList.find(e => e.hp < e.maxHp * 0.4 && Math.hypot(e.x - tank.x, e.y - tank.y) < 600);
         if(lowHpEnemy && tank.hp > tank.maxHp * 0.4) {
             tank.ultimateActive = true; tank.ultimateTimer = tank.ultimateData.duration; tank.ultimateCooldown = tank.ultimateData.cooldown;
-            tank.speedBoost = tank.ultimateData.speedBoost; tank.turnBoost = tank.ultimateData.turnBoost; return;
+            tank.speedBoost = tank.ultimateData.speedBoost; tank.turnBoost = tank.ultimateData.turnBoost;
+            if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(tank);
+            return;
         }
     }
     if(tank.tankType === 'xingchen27b') {
@@ -852,7 +861,9 @@ function updateAIUltimate(tank, dt) {
         if(surrounded && tank.hp > tank.maxHp * 0.2) {
             tank.fortressActive = true; tank.fortressTimer = tank.ultimateData.duration; tank.ultimateCooldown = tank.ultimateData.cooldown;
             tank.armorBoost = tank.ultimateData.armorMult - 1; tank.canMove = false; tank.reflectActive = true;
-            tank.ultimateActive = true; tank.ultimateTimer = tank.ultimateData.duration; return;
+            tank.ultimateActive = true; tank.ultimateTimer = tank.ultimateData.duration;
+            if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(tank);
+            return;
         }
     }
     if(tank.tankType === 'xingchen27s') {
@@ -863,7 +874,8 @@ function updateAIUltimate(tank, dt) {
             let ty = tank.y + Math.sin(angle) * tank.ultimateData.teleportDist;
             tx = Math.max(CONFIG.tankSize * 2, Math.min(CONFIG.mapWidth - CONFIG.tankSize * 2, tx));
             ty = Math.max(CONFIG.tankSize * 2, Math.min(CONFIG.mapHeight - CONFIG.tankSize * 2, ty));
-            if(checkObstacleCollision(tx, ty, CONFIG.tankSize, tank)) {
+            const teleportThroughWalls = !!(tank.evolutionEffects && tank.evolutionEffects.teleportThroughWalls);
+            if(!teleportThroughWalls && checkObstacleCollision(tx, ty, CONFIG.tankSize, tank)) {
                 let found = false;
                 for(let r = 20; r <= 500; r += 20) {
                     for(let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
@@ -882,7 +894,9 @@ function updateAIUltimate(tank, dt) {
             tank.x = tx; tank.y = ty;
             tank.shieldActive = true; tank.shieldHp = tank.ultimateData.shieldHp; tank.ultimateCooldown = tank.ultimateData.cooldown;
             tank.ultimateActive = true; tank.ultimateTimer = tank.ultimateData.shieldDuration;
-            ghostTarget.ghostRevealed = true; ghostTarget.ghostTimer = 0; createParticles(tank.x, tank.y, 20, '#66cc66', 1.5); return;
+            ghostTarget.ghostRevealed = true; ghostTarget.ghostTimer = 0; createParticles(tank.x, tank.y, 20, '#66cc66', 1.5);
+            if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(tank);
+            return;
         }
     }
     if(tank.tankType === 'xingchen27a') {
@@ -890,14 +904,18 @@ function updateAIUltimate(tank, dt) {
         const selfInDanger = tank.hp < tank.maxHp * 0.4 && minEnemyDist < 400;
         if((allyInDanger || selfInDanger) && tank.hp > tank.maxHp * 0.2) {
             tank.ultimateActive = true; tank.ultimateTimer = tank.ultimateData.duration; tank.ultimateCooldown = tank.ultimateData.cooldown;
-            tank.shieldActive = true; tank.shieldHp = tank.ultimateData.shieldHp; tank.armorBoost = tank.ultimateData.armorBoost; return;
+            tank.shieldActive = true; tank.shieldHp = tank.ultimateData.shieldHp; tank.armorBoost = tank.ultimateData.armorBoost;
+            if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(tank);
+            return;
         }
     }
     if(tank.tankType === 'duoduo') {
         const goodTarget = nearestEnemy && (nearestEnemy.tankType === 'xingchen27b' || nearestEnemy.isPlayer || nearestEnemy.hp < nearestEnemy.maxHp * 0.5);
         if(goodTarget && minEnemyDist < 600 && minEnemyDist > 200) {
             tank.ultimateCharging = true; tank.ultimateChargeTimer = tank.ultimateData.chargeTime; tank.ultimateCooldown = tank.ultimateData.cooldown;
-            tank.canMove = false; tank.ultimateActive = true; return;
+            tank.canMove = false; tank.ultimateActive = true;
+            if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(tank);
+            return;
         }
     }
     if(tank.tankType === 'duoduo_ifv') {
@@ -905,7 +923,9 @@ function updateAIUltimate(tank, dt) {
         const surrounded2 = multipleEnemies >= 3;
         if(paralyzedTarget || surrounded2) {
             tank.stormActive = true; tank.stormTimer = tank.ultimateData.duration; tank.ultimateCooldown = tank.ultimateData.cooldown;
-            tank.canMove = false; tank.ultimateActive = true; tank.ultimateTimer = tank.ultimateData.duration; return;
+            tank.canMove = false; tank.ultimateActive = true; tank.ultimateTimer = tank.ultimateData.duration;
+            if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(tank);
+            return;
         }
     }
     if(tank.tankType === 'duoduo_spat') {
@@ -913,7 +933,46 @@ function updateAIUltimate(tank, dt) {
         if(goodTarget && minEnemyDist > 400 && minEnemyDist < 3000) {
             tank.nailLocking = true; tank.nailLockTimer = tank.ultimateData.lockTime; tank.ultimateCooldown = tank.ultimateData.cooldown;
             tank.canMove = false; tank.ultimateActive = true; tank.nailTarget = nearestEnemy;
-            tank.nailLaserAngle = Math.atan2(nearestEnemy.y - tank.y, nearestEnemy.x - tank.x); return;
+            tank.nailLaserAngle = Math.atan2(nearestEnemy.y - tank.y, nearestEnemy.x - tank.x);
+            if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(tank);
+            return;
+        }
+    }
+    if(tank.tankType === 'kimi_tank') {
+        const shouldClone = multipleEnemies >= 2 || (nearestEnemy && tank.hp < tank.maxHp * .55);
+        if(shouldClone) {
+            const ult = tank.ultimateData;
+            const effects = tank.evolutionEffects || {};
+            const ratio = effects.cloneStatRatio || 0;
+            const disguise = TANKS[ult.disguiseAs] || TANKS.zuoyan29;
+            tank.hp = Math.max(1, tank.hp - (ult.hpCost || 0));
+            tank.ultimateActive = true;
+            tank.ultimateTimer = ult.duration;
+            tank.ultimateCooldown = ult.cooldown;
+            for(let index = 0; index < ult.cloneCount; index++) {
+                const angle = Math.PI * 2 * index / ult.cloneCount;
+                const clone = createTank(disguise, tank.x + Math.cos(angle) * 70, tank.y + Math.sin(angle) * 70, tank.team, false, 1);
+                clone.hp = ratio ? Math.max(ult.cloneHp, Math.round(tank.maxHp * ratio)) : ult.cloneHp;
+                clone.maxHp = clone.hp;
+                if(ratio) {
+                    clone.speed = tank.speed * ratio;
+                    clone.fireRate = Math.max(.35, tank.fireRate * ratio);
+                    clone.armor = Math.max(.2, tank.armor * ratio);
+                }
+                clone.isClone = true;
+                clone.cloneOwner = tank;
+                clone.cloneTimer = ult.duration;
+                clone.cloneCanFire = !!effects.cloneCanFire;
+                clone.cloneDamageMult = effects.cloneDamageMult || 0;
+                clone.shells = clone.cloneCanFire ? Math.max(8, Math.round((tank.shells || 0) * ratio)) : 0;
+                clone.mg = clone.cloneCanFire ? Math.max(30, Math.round((tank.mg || 0) * ratio)) : 0;
+                if(tank.team === 'blue') allies.push(clone);
+                else enemies.push(clone);
+                aiTanks.push(clone);
+            }
+            if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(tank);
+            createParticles(tank.x, tank.y, 20, '#ce93d8', 1.8);
+            return;
         }
     }
     if(tank.tankType === 'duoduo_emp') {
@@ -936,6 +995,7 @@ function updateAIUltimate(tank, dt) {
                 }
             });
             createParticles(tank.x, tank.y, 15, '#ff8800', 1.5);
+            if(typeof applyEvolutionEmpUltimate === 'function') applyEvolutionEmpUltimate(tank);
         }
     } else if(tank.tankType === 'zuoyan31') {
         const enemyList2 = tank.team === 'blue' ? enemies.filter(e => !e.dead) : [...allies.filter(a => !a.dead), ...(player && !player.dead ? [player] : [])];
@@ -943,15 +1003,7 @@ function updateAIUltimate(tank, dt) {
             tank.ultimateActive = true;
             tank.ultimateTimer = tank.ultimateData.duration;
             tank.ultimateCooldown = tank.ultimateData.cooldown;
-            for(let i = 0; i < tank.ultimateData.droneCount; i++) {
-                const angle = getTankFiringAngle(tank, (i - 1) * 0.5);
-                bullets.push({
-                    x: tank.x + Math.cos(angle) * 30, y: tank.y + Math.sin(angle) * 30,
-                    vx: Math.cos(angle) * tank.ultimateData.droneSpeed, vy: Math.sin(angle) * tank.ultimateData.droneSpeed,
-                    damage: tank.ultimateData.droneDamage, team: tank.team, type: 'drone', owner: tank,
-                    life: tank.ultimateData.droneLife, hitTanks: new Set(), isDrone: true, trackRange: tank.ultimateData.trackRange
-                });
-            }
+            if(typeof spawnEvolutionDroneSwarm === 'function') spawnEvolutionDroneSwarm(tank);
             createParticles(tank.x, tank.y, 12, '#5599ff', 1.5);
         }
     } else if(tank.tankType === 'zuoyan32') {
@@ -960,15 +1012,7 @@ function updateAIUltimate(tank, dt) {
             tank.ultimateActive = true;
             tank.ultimateTimer = tank.ultimateData.duration;
             tank.ultimateCooldown = tank.ultimateData.cooldown;
-            for(let i = 0; i < tank.ultimateData.cloneCount; i++) {
-                const angle = Math.random() * Math.PI * 2;
-                const dist = 50 + Math.random() * 50;
-                const clone = createTank(TANKS['zuoyan32'], tank.x + Math.cos(angle) * dist, tank.y + Math.sin(angle) * dist, tank.team, false, 1);
-                clone.hp = tank.ultimateData.cloneHp; clone.maxHp = tank.ultimateData.cloneHp;
-                clone.isClone = true; clone.cloneOwner = tank; clone.cloneTimer = tank.ultimateData.duration;
-                if(tank.team === 'blue') allies.push(clone); else enemies.push(clone);
-                aiTanks.push(clone);
-            }
+            if(typeof spawnEvolutionPhantoms === 'function') spawnEvolutionPhantoms(tank);
             createParticles(tank.x, tank.y, 15, '#77bbff', 1.5);
         }
     } else if(tank.tankType === 'zuoyan33') {
@@ -978,6 +1022,7 @@ function updateAIUltimate(tank, dt) {
             tank.ultimateTimer = tank.ultimateData.duration;
             tank.ultimateCooldown = tank.ultimateData.cooldown;
             tank.toxinActive = true; tank.toxinTimer = tank.ultimateData.duration;
+            if(typeof createEvolutionPoisonCloud === 'function') createEvolutionPoisonCloud(tank);
             createParticles(tank.x, tank.y, 12, '#44dd88', 1.5);
         }
     } else if(tank.tankType === 'xingchen27c') {
@@ -1034,6 +1079,7 @@ function updateAIUltimate(tank, dt) {
                 team: tank.team, owner: tank, duration: tank.ultimateData.duration,
                 fireCooldown: 0, fireRate: 1.5
             });
+            if(typeof deployEvolutionCovers === 'function') deployEvolutionCovers(tank);
             createParticles(turretX, turretY, 15, '#dd8833', 1.5);
         }
     } else if(tank.tankType === 'duoduo_rocket') {
@@ -1049,13 +1095,15 @@ function updateAIUltimate(tank, dt) {
                 const dist = 200 + Math.random() * 400;
                 const targetX = tank.x + Math.cos(spreadAngle) * dist;
                 const targetY = tank.y + Math.sin(spreadAngle) * dist;
-                bullets.push({
+                const rocket = {
                     x: tank.x + Math.cos(targetAngle) * 30, y: tank.y + Math.sin(targetAngle) * 30,
                     vx: Math.cos(targetAngle) * 12, vy: Math.sin(targetAngle) * 12,
                     damage: tank.ultimateData.shellDamage, team: tank.team, type: 'rocket', owner: tank,
                     life: 3.0, hitTanks: new Set(), targetX, targetY, isRocket: true,
                     burnDuration: tank.ultimateData.burnDuration, burnDamage: tank.ultimateData.burnDamage
-                });
+                };
+                bullets.push(rocket);
+                if(typeof spawnTankShotAnimation === 'function') spawnTankShotAnimation(tank, rocket, targetAngle);
             }
             createParticles(tank.x, tank.y, 20, '#cc5522', 2);
         }
@@ -1078,5 +1126,8 @@ function updateAIUltimate(tank, dt) {
                 }
             });
         }
+    }
+    if(tank.ultimateCooldown > 0 && typeof spawnTankUltimateAnimation === 'function') {
+        spawnTankUltimateAnimation(tank);
     }
 }

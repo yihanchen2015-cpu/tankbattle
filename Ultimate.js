@@ -1,9 +1,17 @@
 // ==================== 大招系统 ====================
 function activateUltimate() {
-    if(!player || player.dead || player.ultimateCooldown > 0 || player.ultimateActive) return;
+    if(player && player.tankType === 'xingchen27s' && player.ultimateActive &&
+       typeof performTankEvolutionSecondTeleport === 'function' &&
+       performTankEvolutionSecondTeleport(player)) {
+        if(typeof updateUltimateUI === 'function') updateUltimateUI();
+        return;
+    }
+    if(!player || player.dead || player.ultimateCooldown > 0 || player.ultimateActive ||
+       player.evolutionSkillDisabledTimer > 0 || player.evolutionJudgmentNoUltimate) return;
     const ult = player.ultimateData;
     if(!ult) return;
     recordUltimate();
+    if(typeof spawnTankUltimateAnimation === 'function') spawnTankUltimateAnimation(player);
     player.ultimateActive = true;
     player.ultimateTimer = ult.duration || 0;
     player.ultimateCooldown = ult.cooldown;
@@ -27,7 +35,8 @@ function activateUltimate() {
         let ty = player.y + Math.sin(teleportAngle) * ult.teleportDist;
         tx = Math.max(CONFIG.tankSize * 2, Math.min(CONFIG.mapWidth - CONFIG.tankSize * 2, tx));
         ty = Math.max(CONFIG.tankSize * 2, Math.min(CONFIG.mapHeight - CONFIG.tankSize * 2, ty));
-        if(checkObstacleCollision(tx, ty, CONFIG.tankSize)) {
+        const teleportThroughWalls = !!(player.evolutionEffects && player.evolutionEffects.teleportThroughWalls);
+        if(!teleportThroughWalls && checkObstacleCollision(tx, ty, CONFIG.tankSize)) {
             let found = false;
             for(let r = 20; r <= 500; r += 20) {
                 for(let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
@@ -80,42 +89,19 @@ function activateUltimate() {
             }
         });
         createParticles(player.x, player.y, 20, '#ff8800', 2);
+        if(typeof applyEvolutionEmpUltimate === 'function') applyEvolutionEmpUltimate(player);
     } else if(player.tankType === 'zuoyan31') {
         player.ultimateActive = true;
         player.ultimateTimer = ult.duration;
         player.ultimateCooldown = ult.cooldown;
-        // 释放蜂群无人机
-        for(let i = 0; i < ult.droneCount; i++) {
-            const angle = player.turretAngle + (i - 1) * 0.5;
-            bullets.push({
-                x: player.x + Math.cos(angle) * 30,
-                y: player.y + Math.sin(angle) * 30,
-                vx: Math.cos(angle) * ult.droneSpeed,
-                vy: Math.sin(angle) * ult.droneSpeed,
-                damage: ult.droneDamage, team: player.team, type: 'drone', owner: player,
-                life: ult.droneLife, hitTanks: new Set(), isDrone: true, trackRange: ult.trackRange
-            });
-        }
+        if(typeof spawnEvolutionDroneSwarm === 'function') spawnEvolutionDroneSwarm(player);
         createParticles(player.x, player.y, 15, '#5599ff', 2);
         player.ultimateActive = false;
     } else if(player.tankType === 'zuoyan32') {
         player.ultimateActive = true;
         player.ultimateTimer = ult.duration;
         player.ultimateCooldown = ult.cooldown;
-        // 生成全息幻象
-        for(let i = 0; i < ult.cloneCount; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 50 + Math.random() * 50;
-            const clone = createTank(TANKS['zuoyan32'], player.x + Math.cos(angle) * dist, player.y + Math.sin(angle) * dist, player.team, false, 1);
-            clone.hp = ult.cloneHp;
-            clone.maxHp = ult.cloneHp;
-            clone.isClone = true;
-            clone.cloneOwner = player;
-            clone.cloneTimer = ult.duration;
-            if(player.team === 'blue') allies.push(clone);
-            else enemies.push(clone);
-            aiTanks.push(clone);
-        }
+        if(typeof spawnEvolutionPhantoms === 'function') spawnEvolutionPhantoms(player);
         createParticles(player.x, player.y, 20, '#77bbff', 2);
     } else if(player.tankType === 'zuoyan33') {
         player.ultimateActive = true;
@@ -123,6 +109,7 @@ function activateUltimate() {
         player.ultimateCooldown = ult.cooldown;
         player.toxinActive = true;
         player.toxinTimer = ult.duration;
+        if(typeof createEvolutionPoisonCloud === 'function') createEvolutionPoisonCloud(player);
         createParticles(player.x, player.y, 15, '#44dd88', 2);
     } else if(player.tankType === 'xingchen27c') {
         player.ultimateActive = true;
@@ -197,6 +184,7 @@ function activateUltimate() {
             team: player.team, owner: player, duration: ult.duration,
             fireCooldown: 0, fireRate: 1.5
         });
+        if(typeof deployEvolutionCovers === 'function') deployEvolutionCovers(player);
         createParticles(turretX, turretY, 20, '#dd8833', 2);
     } else if(player.tankType === 'duoduo_rocket') {
         player.ultimateActive = true;
@@ -209,14 +197,16 @@ function activateUltimate() {
             const dist = 200 + Math.random() * 400;
             const targetX = player.x + Math.cos(spreadAngle) * dist;
             const targetY = player.y + Math.sin(spreadAngle) * dist;
-            bullets.push({
+            const rocket = {
                 x: player.x + Math.cos(targetAngle) * 30,
                 y: player.y + Math.sin(targetAngle) * 30,
                 vx: Math.cos(targetAngle) * 12, vy: Math.sin(targetAngle) * 12,
                 damage: ult.shellDamage, team: player.team, type: 'rocket', owner: player,
                 life: 3.0, hitTanks: new Set(), targetX, targetY, isRocket: true,
                 burnDuration: ult.burnDuration, burnDamage: ult.burnDamage
-            });
+            };
+            bullets.push(rocket);
+            if(typeof spawnTankShotAnimation === 'function') spawnTankShotAnimation(player, rocket, targetAngle);
         }
         createParticles(player.x, player.y, 25, '#cc5522', 2.5);
         player.ultimateActive = false;
@@ -234,7 +224,8 @@ function activateUltimate() {
         const targetPoint = screenToWorld(mouse.x, mouse.y);
         const targetX = targetPoint.x;
         const targetY = targetPoint.y;
-        for(let i = 0; i < ult.bombCount; i++) {
+        const bombCount = ult.bombCount + (player.evolutionEffects && player.evolutionEffects.ultimateBombBonus || 0);
+        for(let i = 0; i < bombCount; i++) {
             const tx = targetX + (Math.random() - 0.5) * ult.bombRadius * 2;
             const ty = targetY + (Math.random() - 0.5) * ult.bombRadius * 2;
             bullets.push({
@@ -252,13 +243,30 @@ function activateUltimate() {
         for(let i = 0; i < ult.cloneCount; i++) {
             const angle = Math.PI * 2 * i / ult.cloneCount;
             const clone = createTank(disguise, player.x + Math.cos(angle) * 70, player.y + Math.sin(angle) * 70, player.team, false, 1);
-            clone.hp = ult.cloneHp; clone.maxHp = ult.cloneHp;
+            const ratio = player.evolutionEffects && player.evolutionEffects.cloneStatRatio || 0;
+            clone.hp = ratio ? Math.max(ult.cloneHp, Math.round(player.maxHp * ratio)) : ult.cloneHp;
+            clone.maxHp = clone.hp;
+            if(ratio) {
+                clone.speed = player.speed * ratio;
+                clone.fireRate = Math.max(.35, player.fireRate * ratio);
+                clone.armor = Math.max(.2, player.armor * ratio);
+            }
             clone.isClone = true; clone.cloneOwner = player; clone.cloneTimer = ult.duration;
+            clone.cloneDamageMult = player.evolutionEffects && player.evolutionEffects.cloneDamageMult || 0;
+            clone.cloneCanFire = !!(player.evolutionEffects && player.evolutionEffects.cloneCanFire);
+            if(!clone.cloneCanFire) {
+                clone.shells = 0;
+                clone.mg = 0;
+            } else {
+                clone.shells = Math.max(8, Math.round(player.shells * ratio));
+                clone.mg = Math.max(30, Math.round(player.mg * ratio));
+            }
             allies.push(clone); aiTanks.push(clone);
         }
         createParticles(player.x, player.y, 25, '#ce93d8', 2);
         player.ultimateActive = false;
     }
+    if(typeof handleTankEvolutionUltimateStart === 'function') handleTankEvolutionUltimateStart(player);
     updateUltimateUI();
 }
 
@@ -276,9 +284,12 @@ function fireNailShot(tank) {
         if(dist < CONFIG.tankSize + 10) hitTanks.push({tank: t, dist: Math.hypot(t.x - startX, t.y - startY)});
     });
     hitTanks.sort((a, b) => a.dist - b.dist);
-    hitTanks.forEach((hit, index) => {
-        let damage = ult.damageFirst * Math.pow(ult.damageDecay || 0.6, index);
-        if(!ult.armorIgnore) damage = damage / hit.tank.armor;
+    const evolution = tank.evolutionEffects || {};
+    const maxTargets = 1 + (evolution.nailExtraTargets || 0);
+    hitTanks.slice(0, maxTargets).forEach((hit, index) => {
+        let damage = ult.damageFirst * (evolution.nailDamageMult || 1) * Math.pow(ult.damageDecay || 0.6, index);
+        const armorIgnore = Math.max(ult.armorIgnore ? 1 : 0, evolution.nailArmorIgnore || 0);
+        if(armorIgnore < 1) damage = damage / Math.max(.25, hit.tank.armor * (1 - armorIgnore));
         if(hit.tank.reflectActive && hit.tank.fortressActive && hit.tank.ultimateData) {
             const reflectDmg = damage * (hit.tank.ultimateData.reflectDamage || 0.3);
             applyDirectDamage(tank, reflectDmg, hit.tank); showDamageNumber(tank.x, tank.y - 30, Math.floor(reflectDmg));
@@ -399,7 +410,7 @@ function updateTrailEffects(dt) {
         if(t.life <= 0) trailEffects.splice(i, 1);
     }
     const hotTrails = trailEffects.filter(effect =>
-        (effect.kind === 'mastery' || effect.kind === 'mastery-death-flame') && effect.life > 0
+        ['mastery', 'mastery-death-flame', 'poison-cloud', 'rocket-fire'].includes(effect.kind) && effect.life > 0
     );
     if(hotTrails.length === 0 || typeof applyDirectDamage !== 'function') return;
     const livingTanks = [player, ...allies, ...enemies].filter(tank => tank && !tank.dead);
@@ -413,7 +424,9 @@ function updateTrailEffects(dt) {
         });
         if(!hotTrail) return;
         const damage = (hotTrail.damagePerSecond || 55) * dt;
-        const cause = hotTrail.kind === 'mastery-death-flame' ? '熟练度死亡火焰' : '灼热尾焰';
+        const cause = hotTrail.kind === 'poison-cloud' ? '毒雾领域'
+            : hotTrail.kind === 'rocket-fire' ? '燃烧火箭'
+            : hotTrail.kind === 'mastery-death-flame' ? '熟练度死亡火焰' : '灼热尾焰';
         applyDirectDamage(tank, damage, hotTrail.owner, cause);
         tank.masteryTrailDamageCue = (tank.masteryTrailDamageCue || 0) - dt;
         if(tank.masteryTrailDamageCue <= 0) {
@@ -471,6 +484,12 @@ function updateMapElements(dt) {
         } else if(el.type === 'turret') {
             el.duration -= dt;
             el.fireCooldown -= dt;
+            if(el.isEvolutionCover && el.healPerSecond) {
+                allTanks.forEach(tank => {
+                    if(!tank || tank.dead || tank.team !== el.team || Math.hypot(tank.x - el.x, tank.y - el.y) > 150) return;
+                    tank.hp = Math.min(tank.maxHp, tank.hp + el.healPerSecond * dt);
+                });
+            }
             const targets = el.team === 'blue' ? enemies : [player, ...allies];
             let nearest = null, nearestDist = el.range;
             targets.forEach(tank => {

@@ -312,6 +312,7 @@ let playerStats = {
     totalWins: 0, comebackWins: 0, maxSpeedReached: 0, ghostKills: 0,
     perfectGames: 0, modesWon: [], tanksUsed: [], seriesUsed: [], oneShotKills: 0,
     unlockedAchievements: [], unlockedTanks: [], tankMastery: {}, dailyTasks: null, matchStartTime: 0,
+    snowMapWins: 0, selectedTankSkins: {}, pixelSkinUnlocked: false,
     currentLowHpTime: 0, currentMatchLowHpAwarded: false
 };
 let currentMatchMasterySettled = false;
@@ -368,6 +369,11 @@ function loadStats() {
     if(!playerStats.tankMastery || typeof playerStats.tankMastery !== 'object' || Array.isArray(playerStats.tankMastery)) {
         playerStats.tankMastery = {};
     }
+    if(!playerStats.selectedTankSkins || typeof playerStats.selectedTankSkins !== 'object' || Array.isArray(playerStats.selectedTankSkins)) {
+        playerStats.selectedTankSkins = {};
+    }
+    playerStats.snowMapWins = Math.max(0, Number(playerStats.snowMapWins) || 0);
+    playerStats.pixelSkinUnlocked = !!playerStats.pixelSkinUnlocked;
     if(playerStats.dailyTasks && typeof playerStats.dailyTasks !== 'object') playerStats.dailyTasks = null;
 }
 
@@ -500,6 +506,7 @@ function endMatchStats(result) {
 
     if(result === 'victory') {
         playerStats.totalWins++;
+        if(typeof currentMap !== 'undefined' && currentMap === 'snow') playerStats.snowMapWins++;
         if(!playerStats.modesWon.includes(gameMode)) playerStats.modesWon.push(gameMode);
 
         if(gameMode === 'escort') playerStats.escortWins++;
@@ -560,6 +567,7 @@ function recordKill(tank, target, hitInfo = null) {
         return;
     }
     if(typeof awardKillScore === 'function') awardKillScore(tank, target);
+    if(typeof handleTankEvolutionKill === 'function') handleTankEvolutionKill(tank, target);
     if(tank.isPlayer) {
         registerPlayerMultiKill(target);
         playerStats.currentMatchKills++;

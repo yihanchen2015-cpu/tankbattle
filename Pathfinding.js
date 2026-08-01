@@ -461,6 +461,7 @@ function getActualSpeed(tank) {
     }
     let speed = tank.speed;
     let totalSpeedBoost = (tank.speedBoost || 0) + (tank.mapSpeedBoost || 0) + (tank.speedBuffFromCommander || 0) +
+        (tank.evolutionDynamicSpeedBoost || 0) +
         (tank.ricochetSpeedBoost || 0) + (tank.bossBuffSpeed || 0) + (tank.escortRushSpeedBoost || 0);
     if(totalSpeedBoost > 0) speed *= (1 + totalSpeedBoost);
 

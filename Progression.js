@@ -133,6 +133,12 @@ function getTankMasteryProfile(tankType) {
     const xp = Number.isFinite(savedXp) && savedXp >= 0 ? savedXp : getLegacyTankMasteryXp(matches);
     const levelInfo = getTankMasteryLevel(xp);
     const next = TANK_MASTERY_LEVELS.find(entry => entry.xp > xp) || null;
+    const evolution = typeof getTankEvolutionProfile === 'function'
+        ? getTankEvolutionProfile(tankType, levelInfo.level)
+        : null;
+    const nextEvolution = next && typeof getTankEvolutionProfile === 'function'
+        ? getTankEvolutionProfile(tankType, next.level)
+        : null;
     return {
         tankType,
         matches,
@@ -140,11 +146,11 @@ function getTankMasteryProfile(tankType) {
         wins,
         xp,
         level: levelInfo.level,
-        levelName: levelInfo.name,
-        reward: levelInfo.reward,
+        levelName: evolution ? evolution.name : levelInfo.name,
+        reward: evolution ? evolution.reward : levelInfo.reward,
         levelXp: levelInfo.xp,
         nextXp: next ? next.xp : xp,
-        nextReward: next ? next.reward : '已解锁全部奖励',
+        nextReward: next ? (nextEvolution ? nextEvolution.reward : next.reward) : '已解锁全部奖励',
         progress: next ? Math.max(0, Math.min(1, (xp - levelInfo.xp) / Math.max(1, next.xp - levelInfo.xp))) : 1
     };
 }
@@ -230,12 +236,22 @@ function getTankMasteryVisual(tankType, levelOverride = null) {
     const overrideInfo = levelOverride === null
         ? null
         : TANK_MASTERY_LEVELS.find(entry => entry.level === Math.max(1, Math.min(8, Number(levelOverride) || 1)));
-    const profile = overrideInfo ? {
+    let profile = overrideInfo ? {
         ...savedProfile,
         level: overrideInfo.level,
         levelName: overrideInfo.name,
         reward: overrideInfo.reward
     } : savedProfile;
+    const evolutionProfile = typeof getTankEvolutionProfile === 'function'
+        ? getTankEvolutionProfile(tankType, profile.level)
+        : null;
+    if(evolutionProfile) {
+        profile = {
+            ...profile,
+            levelName: evolutionProfile.name,
+            reward: evolutionProfile.reward
+        };
+    }
     if(!data) return {
         ...profile,
         color: '#888888',
@@ -254,6 +270,16 @@ function getTankMasteryVisual(tankType, levelOverride = null) {
         weaponDamageMult: 1,
         levelColor: getMasteryLevelColor(profile.level)
     };
+    const evolutionVisual = typeof getTankEvolutionVisual === 'function'
+        ? getTankEvolutionVisual(tankType, profile.level, data)
+        : null;
+    if(evolutionVisual) {
+        return {
+            ...profile,
+            ...evolutionVisual,
+            levelColor: getMasteryLevelColor(profile.level)
+        };
+    }
     let color = data.color;
     let accent = data.accent;
     if(profile.level >= 2) color = mixMasteryColor(data.color, '#3d5234', .34);
@@ -375,6 +401,21 @@ function renderMasteryPanel() {
         const card = document.createElement('div');
         card.className = `mastery-card mastery-level-${profile.level}`;
         const progressText = profile.level >= TANK_MASTERY_MAX_LEVEL ? 'MAX' : `${profile.xp}/${profile.nextXp} XP`;
+        const evolutionStages = typeof TANK_EVOLUTIONS !== 'undefined' ? TANK_EVOLUTIONS[profile.tankType] : null;
+        if(evolutionStages) card.classList.add('evolution-card');
+        const evolutionTrack = evolutionStages ? `
+            <div class="tank-evolution-track" aria-label="${tank.name} 1至8阶进化路线">
+                ${evolutionStages.map((stage, index) => {
+                    const level = index + 1;
+                    const state = level < profile.level ? 'unlocked' : level === profile.level ? 'current' : 'locked';
+                    return `<article class="tank-evolution-stage ${state}">
+                        <span class="evolution-star">★${level}</span>
+                        <strong>${stage.name}</strong>
+                        <small class="evolution-visual">${stage.visual}</small>
+                        <small>${stage.mechanic}</small>
+                    </article>`;
+                }).join('')}
+            </div>` : '';
         card.innerHTML = `
             <div class="mastery-card-head">
                 <strong>${tank.name}</strong>
@@ -383,6 +424,7 @@ function renderMasteryPanel() {
             <div class="mastery-card-stats">${profile.xp} XP · ${profile.matches} 场 · ${profile.wins} 胜 · ${profile.kills} 击杀</div>
             <div class="mastery-progress"><i style="width:${Math.round(profile.progress * 100)}%"></i></div>
             <div class="mastery-reward">${profile.level >= TANK_MASTERY_MAX_LEVEL ? profile.reward : `下一奖励：${profile.nextReward}`} <b>${progressText}</b></div>
+            ${evolutionTrack}
         `;
         list.appendChild(card);
     });

@@ -43,9 +43,9 @@ assert(render.includes('function updateModeStatusHUD()') &&
 assert(!render.includes('ctx.fillRect(canvas.width / 2 - 150, 64, 300, 34)') &&
     !render.includes('ctx.fillRect(canvas.width / 2 - 220, 62, 440, 48)'),
     'mode panels must not use fixed canvas coordinates beneath DOM HUD elements');
-assert(html.includes('style.css?v=physics-settings-28') &&
-    html.includes('GameCore.js?v=physics-settings-28') &&
-    html.includes('Render.js?v=hud-layout-25'),
+assert(html.includes('style.css?v=armory-skins-29') &&
+    html.includes('GameCore.js?v=armory-skins-29') &&
+    html.includes('Render.js?v=armory-skins-29'),
     'HUD layout assets should use fresh cache keys');
 
 console.log('HUD layout smoke test passed.');

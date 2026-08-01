@@ -224,14 +224,19 @@ function attemptEngineerRepair(engineer, notifyFailure = false) {
         if(notifyFailure && typeof showMessage === 'function') showMessage(`🔧 维修工具冷却 ${engineer.repairCooldown.toFixed(1)}s`, '#ffbf69');
         return false;
     }
+    if((engineer.evolutionSkillDisabledTimer || 0) > 0) return false;
     const targets = getEngineerRepairTargets(engineer).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
     const target = targets[0];
     if(!target) {
         if(notifyFailure && typeof showMessage === 'function') showMessage(`🔧 ${ENGINEER_REPAIR_RANGE} 范围内没有受损队友`, '#ffbf69');
         return false;
     }
-    const amount = Math.min(target.maxHp - target.hp, Math.max(220, target.maxHp * 0.24));
+    const evolution = engineer.evolutionEffects || {};
+    const amount = Math.min(target.maxHp - target.hp,
+        Math.max(220, target.maxHp * 0.24) * (evolution.repairEfficiencyMult || 1) + (evolution.repairInstantBonus || 0));
     target.hp += amount;
+    if(evolution.repairShellAmmo) target.shells = Math.min(target.maxShells || Infinity, (target.shells || 0) + evolution.repairShellAmmo);
+    if(evolution.repairMgAmmo) target.mg = Math.min(target.maxMG || Infinity, (target.mg || 0) + evolution.repairMgAmmo);
     engineer.repairCooldown = ENGINEER_REPAIR_COOLDOWN;
     createParticles(target.x, target.y, 22, '#62ff8d', 1.5);
     if(typeof playWorldSound === 'function') playWorldSound('repair', target.x, target.y, 0.9);
