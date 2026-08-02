@@ -68,6 +68,8 @@ const result = vm.runInContext(`(() => {
         judgment:{timer:marked.evolutionJudgmentTimer,noUlt:marked.evolutionJudgmentNoUltimate},
         covers:mapElements.map(el=>({hp:el.hp,duration:el.duration,damage:el.damage,heal:el.healPerSecond})),
         burst:rocket.evolutionBurstRemaining,
+        rocketOrb:{style:bullets[0].evolutionStyle,scale:bullets[0].evolutionScale,fire:bullets[0].fireData},
+        teleportDistance:TANKS.xingchen27s.ultimate.teleportDist,
         emp:empShell.empData
     };
 })()`, context);
@@ -78,15 +80,19 @@ assert.strictEqual(result.droneInfinite, Infinity);
 assert.strictEqual(result.phantomCount, 4);
 assert.strictEqual(result.phantomDamage, .7);
 assert.strictEqual(result.phantomLife, Infinity);
-assert.strictEqual(result.toxin.chance, .3);
+assert.strictEqual(result.toxin.chance, .45);
 assert.strictEqual(result.toxin.damage, 60);
 assert.strictEqual(result.toxin.spreadRadius, 200);
 assert.strictEqual(result.executed, true);
-assert.strictEqual(result.judgment.timer, 5);
+assert.strictEqual(result.judgment.timer, 6);
 assert.strictEqual(result.judgment.noUlt, true);
 assert.strictEqual(result.covers.length, 3);
 assert(result.covers.every(cover => cover.hp === 1200 && cover.duration === Infinity && cover.damage === 80 && cover.heal === 10));
 assert.strictEqual(result.burst, 3);
+assert.strictEqual(result.rocketOrb.style, 'skyfire-orb');
+assert.strictEqual(result.rocketOrb.scale, 1.5);
+assert.strictEqual(result.rocketOrb.fire.chance, .48);
+assert.strictEqual(result.teleportDistance, 500);
 assert.deepStrictEqual({ ...result.emp }, { minimapJam:10, turretDisable:2, skillDisable:10 });
 
 const three = fs.readFileSync('ThreeRender.js','utf8');

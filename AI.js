@@ -163,18 +163,29 @@ function solveAIGunElevation(tank, target, weaponType) {
 
 function updateAITank(tank, dt) {
     if(tank.dead) return;
+    if(tank.trainingDummy) {
+        if(tank.invincible > 0) tank.invincible -= dt;
+        if(typeof updateStatusEffects === 'function') updateStatusEffects(tank, dt);
+        tank.fireCooldown = 1;
+        tank.mgCooldown = 1;
+        tank.aaCooldown = 1;
+        tank.target = null;
+        tank.canMove = false;
+        return;
+    }
     if(gameMode === 'escort' && tank.isEscortVIP && typeof updateEscortVIPTank === 'function') {
         updateEscortVIPTank(tank, dt);
         return;
     }
     if(tank.invincible > 0) tank.invincible -= dt;
-    
-    if (tank.fireCooldown > 0) tank.fireCooldown -= dt;
-    if (tank.mgCooldown > 0) tank.mgCooldown -= dt;
-    if (tank.aaCooldown > 0) tank.aaCooldown -= dt;
     updateStatusEffects(tank, dt);
+    const actionSpeed = typeof getTankActionSpeedMultiplier === 'function' ? getTankActionSpeedMultiplier(tank) : 1;
+    const actionDt = dt * actionSpeed;
+    if (tank.fireCooldown > 0) tank.fireCooldown -= actionDt;
+    if (tank.mgCooldown > 0) tank.mgCooldown -= actionDt;
+    if (tank.aaCooldown > 0) tank.aaCooldown -= actionDt;
     if(typeof updateTankEvolution === 'function') updateTankEvolution(tank, dt);
-    if(tank.isFlying && typeof updateHelicopterFlight === 'function') updateHelicopterFlight(tank, dt);
+    if(tank.isFlying && typeof updateHelicopterFlight === 'function') updateHelicopterFlight(tank, actionDt);
     if(tank.dead) return;
     
     tank.pathTimer = (tank.pathTimer || 0) - dt;
@@ -184,7 +195,7 @@ function updateAITank(tank, dt) {
     tank.aiBehaviorTimer = (tank.aiBehaviorTimer || 0) - dt;
     tank.aiReactionDelay = Math.max(0, (tank.aiReactionDelay || 0) - dt);
 
-    updateAutoAim(tank, dt);
+    updateAutoAim(tank, actionDt);
 
     tank.prevPos.x = tank.x; tank.prevPos.y = tank.y;
 
@@ -609,7 +620,7 @@ function updateAITank(tank, dt) {
         while (turretDiff < -Math.PI) turretDiff += Math.PI * 2;
         const skillTurnMultiplier = 0.9 + Math.min(1.8, tank.aiSkillLevel || 0.8) * 0.22;
         const baseTurretSpeed = tank.turnSpeed * 1.2 * skillTurnMultiplier;
-        const turretTurnSpeed = baseTurretSpeed * tank.turretSpeedMult;
+        const turretTurnSpeed = baseTurretSpeed * tank.turretSpeedMult * actionSpeed;
         const turnAmount = Math.sign(turretDiff) * Math.min(Math.abs(turretDiff), turretTurnSpeed * 60 * dt);
         tank.turretAngle += turnAmount;
     }
@@ -769,7 +780,7 @@ function updateAITank(tank, dt) {
             let diff = targetAngle2 - tank.angle;
             while(diff > Math.PI) diff -= Math.PI*2;
             while(diff < -Math.PI) diff += Math.PI*2;
-            const turnSpeed = tank.turnSpeed * (tank.turnBoost || 1) * tank.turretSpeedMult;
+            const turnSpeed = tank.turnSpeed * (tank.turnBoost || 1) * tank.turretSpeedMult * actionSpeed;
             tank.angle += diff * turnSpeed * 60 * dt;
             const actualSpeed = getActualSpeed(tank);
             const newX = tank.x + Math.cos(tank.angle) * actualSpeed * 60 * dt;
@@ -1102,6 +1113,7 @@ function updateAIUltimate(tank, dt) {
                     life: 3.0, hitTanks: new Set(), targetX, targetY, isRocket: true,
                     burnDuration: tank.ultimateData.burnDuration, burnDamage: tank.ultimateData.burnDamage
                 };
+                if(typeof applyTankEvolutionToProjectile === 'function') applyTankEvolutionToProjectile(tank, rocket);
                 bullets.push(rocket);
                 if(typeof spawnTankShotAnimation === 'function') spawnTankShotAnimation(tank, rocket, targetAngle);
             }
@@ -1116,15 +1128,7 @@ function updateAIUltimate(tank, dt) {
             tank.ultimateActive = true; 
             tank.ultimateTimer = tank.ultimateData.duration; 
             tank.ultimateCooldown = tank.ultimateData.cooldown;
-            const buffRadius = tank.ultimateData.radius;
-            myTeamList.forEach(ally => {
-                const dist = Math.hypot(ally.x - tank.x, ally.y - tank.y);
-                if(dist < buffRadius) {
-                    ally.fireRateBuff = tank.ultimateData.fireRateBoost;
-                    ally.speedBuffFromCommander = tank.ultimateData.speedBoost;
-                    ally.commanderBuffOwner = tank;
-                }
-            });
+            if(typeof applyEvolutionCommandBuff === 'function') applyEvolutionCommandBuff(tank);
         }
     }
     if(tank.ultimateCooldown > 0 && typeof spawnTankUltimateAnimation === 'function') {

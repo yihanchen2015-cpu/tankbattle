@@ -98,6 +98,14 @@ vm.runInContext(`
         setPixelRatio() {}, setSize() {}
     };
     rebuildThreeWorld(true);
+    const toxicOrbVisual = createThreeBullet({
+        x:0,y:0,vx:8,vy:0,type:'shell',age:.2,evolutionStyle:'toxic-orb',evolutionScale:1.5,
+        evolutionTrail:'#70e779',toxinData:{chance:.2,duration:3,damage:20}
+    });
+    const fireOrbVisual = createThreeBullet({
+        x:0,y:0,vx:8,vy:0,type:'rocket',age:.2,evolutionStyle:'fire-orb',evolutionScale:1.5,
+        evolutionTrail:'#ff6425',fireData:{chance:.2,duration:3,damage:30}
+    });
     bullets.push({ x: 700, y: 1200, z: 100, vz: 120, vx: 10, vy: 0, type: 'aa', altitude: 100, age: 0.5, owner: player });
     renderThreeScene();
     const firstDirection = new THREE.Vector3();
@@ -129,6 +137,7 @@ vm.runInContext(`
     terrainDebris.push({ id:'debris-test', x:1400, y:1100, z:35, size:12, rotation:0.4, color:'#716961', material:'stone', life:3 });
     terrainRevision++;
     player.rescueShieldActive = true; player.shieldActive = true; player.shieldHp = 200;
+    player.elementalFreezeTimer = 1.5; player.toxinDebuffTimer = 3; player.burnTimer = 4;
     gameMode = 'sneak';
     sneakHiddenOutpost = { x:1500, y:1200, discovered:true, triggered:false, signalTimer:0, contested:false, progress:3, captureTime:6 };
     player.angle = Math.PI / 2;
@@ -158,6 +167,7 @@ vm.runInContext(`
     const aaMesh = threeView.bulletMeshes.get(aaBullet);
     const helicopterMesh = threeView.tankMeshes.get('enemy-heli');
     const playerHudLabel = threeView.tankLabels.get('player');
+    const playerElementalFx = threeView.tankMeshes.get('player').userData.elementalFx;
     const viewTop = threeScreenToWorld(640, 0);
     const viewBottom = threeScreenToWorld(640, 720);
     const viewLeft = threeScreenToWorld(0, 360);
@@ -200,6 +210,20 @@ vm.runInContext(`
         masteryTrailMeshes: threeView.trailEffectMeshes.size,
         deathFlameMesh: !!threeView.trailEffectMeshes.get(deathFlameEffect).userData.flames,
         masteryCamouflage: !!threeView.tankMeshes.get('player').userData.camouflage,
+        elementalStatusFx: {
+            ice:playerElementalFx.userData.ice.visible,
+            toxin:playerElementalFx.userData.toxin.visible,
+            fire:playerElementalFx.userData.fire.visible,
+            tinted:threeView.tankMeshes.get('player').userData.elementalTintMeshes.length > 0
+        },
+        elementalOrbs: {
+            toxin:toxicOrbVisual.userData.projectile.userData.isToxicOrb,
+            fire:fireOrbVisual.userData.projectile.userData.isFireOrb,
+            toxinRadius:toxicOrbVisual.userData.projectile.geometry.parameters.radius,
+            fireRadius:fireOrbVisual.userData.projectile.geometry.parameters.radius,
+            toxinBlobs:toxicOrbVisual.userData.projectile.userData.toxinBlobs.children.length,
+            flamePetals:fireOrbVisual.userData.projectile.userData.flamePetals.children.length
+        },
         hiddenOutpostVisible: !!threeView.hiddenOutpostMesh && threeView.hiddenOutpostMesh.visible,
         neutralSniperMesh: threeView.turretMeshes.has(neutralNPCs[0]),
         neutralSniperParts: threeView.turretMeshes.get(neutralNPCs[0]).children.length,
@@ -258,6 +282,11 @@ assert.strictEqual(result.nailTargetRingVisible, true, 'the locked target should
 assert.strictEqual(result.masteryTrailMeshes, 2, 'hot trail and death-flame zones should both be visible in 3D');
 assert.strictEqual(result.deathFlameMesh, true, 'death-flame zone should use animated 3D flame meshes');
 assert.strictEqual(result.masteryCamouflage, true, '3D tanks should carry visible camouflage patches');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(result.elementalStatusFx)), {ice:true,toxin:true,fire:true,tinted:true},
+    'ice, toxin, and fire statuses should tint the tank and display dedicated 3D effects');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(result.elementalOrbs)), {
+    toxin:true,fire:true,toxinRadius:.72,fireRadius:.72,toxinBlobs:4,flamePetals:5
+}, 'toxin and fire rounds should be animated 1.5x spherical projectiles');
 assert.strictEqual(result.hiddenOutpostVisible, true, 'discovered sneak outpost should be visible in the 3D world');
 assert.strictEqual(result.neutralSniperMesh, true, 'the neutral sniper tower should synchronize into the 3D world');
 assert(result.neutralSniperParts >= 5, 'the 3D neutral sniper should include its base, energy ring, turret, gun, and lens');

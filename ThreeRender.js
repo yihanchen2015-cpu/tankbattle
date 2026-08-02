@@ -820,6 +820,60 @@ function createThreeBinaryCodeField() {
     return field;
 }
 
+function createThreeTankElementalEffects() {
+    const root = new THREE.Group();
+
+    const ice = new THREE.Group();
+    const iceShell = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(4.25, 1),
+        new THREE.MeshBasicMaterial({color:0x84eaff, transparent:true, opacity:.22, wireframe:true, depthWrite:false})
+    );
+    iceShell.scale.set(1.15, .62, .82);
+    iceShell.position.y = 2.05;
+    ice.add(iceShell);
+    [[-2.7,2.2,-1.65],[-1.55,3.15,1.5],[-.2,3.55,-1.55],[1.15,3.05,1.6],[2.6,2.25,-1.45],[2.25,3.55,.3]].forEach((position,index) => {
+        const crystal = new THREE.Mesh(
+            new THREE.OctahedronGeometry(.42 + (index % 3) * .1, 0),
+            new THREE.MeshPhysicalMaterial({
+                color:index % 2 ? 0xdfffff : 0x65dfff, emissive:0x2aaed8, emissiveIntensity:1.35,
+                roughness:.08, metalness:.04, transparent:true, opacity:.86, clearcoat:1
+            })
+        );
+        crystal.position.set(...position); crystal.scale.y = 1.9; crystal.userData.phase = index * 1.17;
+        ice.add(crystal);
+    });
+    ice.userData.shell = iceShell;
+
+    const toxin = new THREE.Group();
+    for(let index=0; index<9; index++) {
+        const bubble = new THREE.Mesh(
+            new THREE.SphereGeometry(.18 + (index % 3) * .09, 8, 6),
+            new THREE.MeshBasicMaterial({color:index % 2 ? 0xb9ff52 : 0x48e675, transparent:true, opacity:.75, depthWrite:false})
+        );
+        const angle = index / 9 * Math.PI * 2;
+        bubble.userData.angle = angle; bubble.userData.phase = index / 9;
+        bubble.position.set(Math.cos(angle) * (3.2 + index % 2 * .6), 1.1, Math.sin(angle) * (2.25 + index % 2 * .35));
+        toxin.add(bubble);
+    }
+
+    const fire = new THREE.Group();
+    for(let index=0; index<7; index++) {
+        const flame = new THREE.Mesh(
+            new THREE.ConeGeometry(.38 + index % 2 * .14, 1.8 + index % 3 * .35, 8),
+            new THREE.MeshBasicMaterial({color:index % 2 ? 0xffdc48 : 0xff4a16, transparent:true, opacity:.8, depthWrite:false})
+        );
+        const angle = index / 7 * Math.PI * 2;
+        flame.position.set(Math.cos(angle) * 2.7, 2.55 + index % 2 * .3, Math.sin(angle) * 1.65);
+        flame.userData.phase = index * 1.41;
+        fire.add(flame);
+    }
+
+    ice.visible = toxin.visible = fire.visible = false;
+    root.add(ice, toxin, fire);
+    root.userData.ice = ice; root.userData.toxin = toxin; root.userData.fire = fire;
+    return root;
+}
+
 function createThreeTank(tank) {
     const group = new THREE.Group();
     const bodyColor = new THREE.Color(tank.color || (tank.team === 'blue' ? 0x4488ff : 0xff4444));
@@ -1253,6 +1307,19 @@ function createThreeTank(tank) {
         group.add(crown);
         group.userData.vipCrown = crown;
     }
+    group.userData.elementalTintMeshes = [];
+    group.traverse(child => {
+        if(!child.isMesh || !child.material ||
+           !(child.material.isMeshStandardMaterial || child.material.isMeshPhysicalMaterial) ||
+           child.material.transparent) return;
+        child.userData.elementalBaseColor = child.material.color ? child.material.color.clone() : null;
+        child.userData.elementalBaseEmissive = child.material.emissive ? child.material.emissive.clone() : null;
+        child.userData.elementalBaseEmissiveIntensity = child.material.emissiveIntensity || 0;
+        group.userData.elementalTintMeshes.push(child);
+    });
+    const elementalFx = createThreeTankElementalEffects();
+    group.add(elementalFx);
+    group.userData.elementalFx = elementalFx;
     group.traverse(child => {
         if(!child.isMesh) return;
         if(tank.isEscortVIP && child.material && child.material.isMeshStandardMaterial) {
@@ -1343,6 +1410,61 @@ function syncThreeTanks(now) {
             }
         }
         if(mesh.userData.waterWash) mesh.userData.waterWash.visible = inWater;
+        if(mesh.userData.elementalFx) {
+            const frozen = (tank.elementalFreezeTimer || 0) > 0;
+            const poisoned = (tank.toxinDebuffTimer || 0) > 0;
+            const burning = (tank.burnTimer || 0) > 0;
+            const fx = mesh.userData.elementalFx;
+            fx.userData.ice.visible = frozen;
+            fx.userData.toxin.visible = poisoned;
+            fx.userData.fire.visible = burning;
+            if(frozen) {
+                const freezePulse = 1 + Math.sin(now * .008 + tank.x) * .045;
+                fx.userData.ice.userData.shell.material.opacity = .18 + Math.sin(now * .006) * .055;
+                fx.userData.ice.userData.shell.scale.set(1.15 * freezePulse, .62 * freezePulse, .82 * freezePulse);
+                fx.userData.ice.children.slice(1).forEach((crystal,index) => {
+                    const pulse = .86 + Math.sin(now * .009 + crystal.userData.phase) * .18;
+                    crystal.scale.set(pulse, 1.9 * pulse, pulse);
+                    crystal.material.opacity = .72 + Math.sin(now * .007 + index) * .14;
+                });
+            }
+            if(poisoned) {
+                fx.userData.toxin.children.forEach((bubble,index) => {
+                    const phase = (now * .00038 + bubble.userData.phase) % 1;
+                    const radius = 3.1 + (index % 2) * .65;
+                    bubble.position.x = Math.cos(bubble.userData.angle + now * .00022) * radius;
+                    bubble.position.z = Math.sin(bubble.userData.angle + now * .00022) * (2.1 + index % 2 * .38);
+                    bubble.position.y = .9 + phase * 4.1;
+                    bubble.material.opacity = Math.sin(phase * Math.PI) * .82;
+                });
+            }
+            if(burning) {
+                fx.userData.fire.children.forEach((flame,index) => {
+                    const flicker = .72 + Math.sin(now * .024 + flame.userData.phase) * .24;
+                    flame.scale.set(.8 + flicker * .28, flicker, .8 + flicker * .28);
+                    flame.material.opacity = .62 + flicker * .25;
+                });
+            }
+            const poisonTint = poisoned ? new THREE.Color(0x62d94f) : null;
+            const fireTint = burning ? new THREE.Color(0xff6926) : null;
+            const iceTint = frozen ? new THREE.Color(0x8eeeff) : null;
+            const emissiveTint = frozen ? new THREE.Color(0x35bfe8)
+                : burning ? new THREE.Color(0xff3b12)
+                : poisoned ? new THREE.Color(0x33d65f) : null;
+            (mesh.userData.elementalTintMeshes || []).forEach(part => {
+                const material = part.material;
+                if(part.userData.elementalBaseColor && material.color) material.color.copy(part.userData.elementalBaseColor);
+                if(part.userData.elementalBaseEmissive && material.emissive) material.emissive.copy(part.userData.elementalBaseEmissive);
+                material.emissiveIntensity = part.userData.elementalBaseEmissiveIntensity || 0;
+                if(poisonTint && material.color) material.color.lerp(poisonTint, .34);
+                if(fireTint && material.color) material.color.lerp(fireTint, .32);
+                if(iceTint && material.color) material.color.lerp(iceTint, .58);
+                if(material.emissive && emissiveTint) {
+                    material.emissive.lerp(emissiveTint, frozen ? .55 : .38);
+                    material.emissiveIntensity = Math.max(material.emissiveIntensity, frozen ? .72 : .46);
+                }
+            });
+        }
         if(mesh.userData.masteryExhaust) {
             const active = threeVisualMove > .35;
             mesh.userData.masteryExhaust.visible = active;
@@ -1509,6 +1631,9 @@ function createThreeBipyramidGeometry(length, radius, sides = 6) {
 }
 
 function createThreeBullet(bullet) {
+    const evolutionStyle = bullet.evolutionStyle || '';
+    const isToxicOrb = !!bullet.toxinData || /toxic|toxin|plague|venom/.test(evolutionStyle);
+    const isFireOrb = !!bullet.fireData || /fire|inferno|sun|skyfire/.test(evolutionStyle);
     const color = bullet.evolutionTrail
         ? bullet.evolutionTrail
         : bullet.neutralSniper
@@ -1516,13 +1641,80 @@ function createThreeBullet(bullet) {
         : bullet.masteryGolden
         ? 0xffd629
         : bullet.type === 'bomb' ? 0xff6136 : (bullet.type === 'airmg' ? 0x73f2ff : (bullet.type === 'aa' ? 0xff45ff : (bullet.type === 'shell' ? 0xff9a20 : 0xffef65)));
-    const radius = bullet.bossProjectile ? 1.35 : bullet.neutralSniper ? 1.45 : (bullet.type === 'bomb' ? .72 : (bullet.type === 'aa' ? 0.62 : (bullet.type === 'shell' ? 0.48 : 0.22)));
+    const normalShellRadius = .48;
+    const radius = isToxicOrb || isFireOrb
+        ? normalShellRadius * (bullet.evolutionScale || 1.5)
+        : bullet.bossProjectile ? 1.35 : bullet.neutralSniper ? 1.45 : (bullet.type === 'bomb' ? .72 : (bullet.type === 'aa' ? 0.62 : (bullet.type === 'shell' || bullet.type === 'rocket' ? normalShellRadius : 0.22)));
     const material = makeStandardMaterial(color, { emissive: color, emissiveIntensity: bullet.type === 'mg' || bullet.type === 'airmg' ? 1.2 : 2.4, roughness: 0.25 });
     const group = new THREE.Group();
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(radius, 10, 8), material);
     projectile.userData.baseScale = new THREE.Vector3(1, 1, 1);
     projectile.userData.visualRadius = radius;
-    if(bullet.evolutionStyle && bullet.evolutionStyle.includes('prism')) {
+    if(isToxicOrb) {
+        projectile.geometry.dispose();
+        projectile.geometry = new THREE.SphereGeometry(radius, 20, 15);
+        projectile.material = new THREE.MeshPhysicalMaterial({
+            color:0x72df4b, emissive:0x2e8d43, emissiveIntensity:1.45,
+            roughness:.18, metalness:.02, clearcoat:1, clearcoatRoughness:.08
+        });
+        const toxinCore = new THREE.Mesh(
+            new THREE.SphereGeometry(radius * .62, 16, 12),
+            new THREE.MeshBasicMaterial({color:0x8d35c7,transparent:true,opacity:.7,depthWrite:false})
+        );
+        const toxinBlobs = new THREE.Group();
+        const blobMaterial = new THREE.MeshPhysicalMaterial({
+            color:0xa5ff54, emissive:0x44206f, emissiveIntensity:.75,
+            roughness:.12, clearcoat:1
+        });
+        [[-.58,.52,.22,.34],[-.48,-.45,-.30,.27],[.28,.56,-.38,.24],[.48,-.32,.40,.3]].forEach((data,index) => {
+            const blob = new THREE.Mesh(new THREE.SphereGeometry(radius * data[3], 11, 8), blobMaterial.clone());
+            blob.position.set(radius * data[0], radius * data[1], radius * data[2]);
+            blob.userData.phase = index * 1.7;
+            blob.userData.baseX = blob.position.x;
+            toxinBlobs.add(blob);
+        });
+        const toxinMist = new THREE.Mesh(
+            new THREE.SphereGeometry(radius * 1.38, 16, 12),
+            new THREE.MeshBasicMaterial({color:0x7f32bb,transparent:true,opacity:.16,depthWrite:false})
+        );
+        projectile.add(toxinCore, toxinBlobs, toxinMist);
+        projectile.userData.toxinCore = toxinCore;
+        projectile.userData.toxinBlobs = toxinBlobs;
+        projectile.userData.toxinMist = toxinMist;
+        projectile.userData.isToxicOrb = true;
+    } else if(isFireOrb) {
+        projectile.geometry.dispose();
+        projectile.geometry = new THREE.SphereGeometry(radius, 20, 15);
+        projectile.material = new THREE.MeshPhysicalMaterial({
+            color:0xff5523, emissive:0xff2608, emissiveIntensity:2.35,
+            roughness:.16, metalness:.02, clearcoat:.82, clearcoatRoughness:.1
+        });
+        const fireCore = new THREE.Mesh(
+            new THREE.SphereGeometry(radius * .62, 16, 12),
+            new THREE.MeshBasicMaterial({color:0xffe36a,transparent:true,opacity:.92,depthWrite:false})
+        );
+        const fireGlow = new THREE.Mesh(
+            new THREE.SphereGeometry(radius * 1.42, 16, 12),
+            new THREE.MeshBasicMaterial({color:0xff5722,transparent:true,opacity:.2,depthWrite:false})
+        );
+        const flamePetals = new THREE.Group();
+        for(let index=0; index<5; index++) {
+            const flame = new THREE.Mesh(
+                new THREE.ConeGeometry(radius * (.25 + index * .025), radius * (.85 + index * .1), 8),
+                new THREE.MeshBasicMaterial({color:index % 2 ? 0xff3b14 : 0xffb52d,transparent:true,opacity:.8,depthWrite:false})
+            );
+            const orbit = index / 5 * Math.PI * 2;
+            flame.rotation.z = Math.PI / 2;
+            flame.position.set(-radius * (1.02 + index * .08), Math.cos(orbit) * radius * .43, Math.sin(orbit) * radius * .43);
+            flame.userData.phase = orbit;
+            flamePetals.add(flame);
+        }
+        projectile.add(fireCore, fireGlow, flamePetals);
+        projectile.userData.fireCore = fireCore;
+        projectile.userData.fireGlow = fireGlow;
+        projectile.userData.flamePetals = flamePetals;
+        projectile.userData.isFireOrb = true;
+    } else if(bullet.evolutionStyle && bullet.evolutionStyle.includes('prism')) {
         projectile.geometry.dispose();
         projectile.geometry = createThreeBipyramidGeometry(radius * 6.8, radius * 1.32, 6);
         projectile.material = new THREE.MeshPhysicalMaterial({
@@ -1590,15 +1782,6 @@ function createThreeBullet(bullet) {
             rings.add(ring);
         }
         projectile.add(rings); projectile.userData.empRings = rings;
-    } else if(bullet.toxinData) {
-        projectile.material.color.setHex(0x8cff58);
-        projectile.material.emissive.setHex(0x2dcf65);
-        const toxinHalo = new THREE.Mesh(
-            new THREE.TorusGeometry(radius * 1.65, radius * .12, 8, 24),
-            new THREE.MeshBasicMaterial({color:0xbaff68,transparent:true,opacity:.68,depthWrite:false})
-        );
-        toxinHalo.rotation.y = Math.PI / 2;
-        projectile.add(toxinHalo); projectile.userData.toxinHalo = toxinHalo;
     } else if(bullet.type === 'mg' || bullet.type === 'airmg') {
         projectile.userData.baseScale.set(2.5, .46, .46);
     } else if(bullet.type === 'shell') {
@@ -1621,7 +1804,7 @@ function createThreeBullet(bullet) {
     if(bullet.type === 'bomb') projectile.scale.set(.72, 1.7, .72);
     group.add(projectile);
     group.userData.projectile = projectile;
-    const needsTrail = ['aa','shell','rocket','drone','mg','airmg'].includes(bullet.type) || bullet.isDrone || bullet.empData || bullet.toxinData;
+    const needsTrail = ['aa','shell','rocket','drone','mg','airmg'].includes(bullet.type) || bullet.isDrone || bullet.empData || bullet.toxinData || bullet.fireData;
     if(needsTrail) {
         const trailGeometry = new THREE.BufferGeometry();
         const trailCapacity = bullet.type === 'mg' || bullet.type === 'airmg' ? 7 : 18;
@@ -1785,15 +1968,12 @@ function syncThreeBullets() {
         const baseScale = projectile.userData.baseScale || new THREE.Vector3(1,1,1);
         projectile.scale.set(baseScale.x * pulse, baseScale.y * pulse, baseScale.z * pulse);
         if(projectile.userData.isIcePrism) {
-            const visualRadius = projectile.userData.visualRadius || .48;
-            projectile.rotation.x = (bullet.age || 0) * 7.5;
+            projectile.rotation.x = 0;
             projectile.userData.prismGlow.material.opacity = .14 + Math.sin((bullet.age || 0) * 22) * .08;
-            projectile.userData.iceShards.rotation.x = -(bullet.age || 0) * 11;
+            projectile.userData.iceShards.rotation.set(0, 0, 0);
             projectile.userData.iceShards.children.forEach((shard, index) => {
-                const orbit = shard.userData.phase + (bullet.age || 0) * 9;
-                shard.position.y = Math.cos(orbit) * visualRadius * 1.35;
-                shard.position.z = Math.sin(orbit) * visualRadius * 1.35;
-                shard.rotation.x += .16 + index * .01;
+                const shimmer = .86 + Math.sin((bullet.age || 0) * 18 + index) * .14;
+                shard.scale.set(1.8 * shimmer, .55 * shimmer, .55 * shimmer);
             });
         }
         if(projectile.userData.droneWing) projectile.userData.droneWing.rotation.x = (bullet.age || 0) * 18;
@@ -1808,6 +1988,30 @@ function syncThreeBullets() {
         if(projectile.userData.toxinHalo) {
             projectile.userData.toxinHalo.rotation.x = (bullet.age || 0) * 7;
             projectile.userData.toxinHalo.rotation.y = Math.PI / 2 + (bullet.age || 0) * 5;
+        }
+        if(projectile.userData.isToxicOrb) {
+            const age = bullet.age || 0;
+            projectile.userData.toxinCore.scale.setScalar(.94 + Math.sin(age * 11) * .08);
+            projectile.userData.toxinMist.scale.setScalar(.96 + Math.sin(age * 7) * .1);
+            projectile.userData.toxinMist.material.opacity = .12 + Math.sin(age * 9) * .045;
+            projectile.userData.toxinBlobs.children.forEach((blob,index) => {
+                const wobble = .86 + Math.sin(age * 13 + blob.userData.phase) * .18;
+                blob.scale.set(wobble, 1.06 / wobble, wobble);
+                blob.position.x = blob.userData.baseX + Math.sin(age * 8 + index) * .035;
+            });
+        }
+        if(projectile.userData.isFireOrb) {
+            const age = bullet.age || 0;
+            const visualRadius = projectile.userData.visualRadius || .72;
+            const glowPulse = 1 + Math.sin(age * 17) * .1;
+            projectile.userData.fireCore.scale.setScalar(.92 + Math.sin(age * 21) * .1);
+            projectile.userData.fireGlow.scale.setScalar(glowPulse);
+            projectile.userData.fireGlow.material.opacity = .15 + Math.sin(age * 15) * .055;
+            projectile.userData.flamePetals.children.forEach((flame,index) => {
+                const flicker = .7 + Math.sin(age * 31 + flame.userData.phase) * .22;
+                flame.scale.set(1, flicker, flicker);
+                flame.position.x = -visualRadius * (1.02 + index * .08 + Math.sin(age * 19 + index) * .06);
+            });
         }
         if(mesh.userData.trail && (bullet.age || 0) - mesh.userData.lastTrailAge >= (bullet.type === 'mg' ? .018 : .032)) {
             mesh.userData.lastTrailAge = bullet.age || 0;

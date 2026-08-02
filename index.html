@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>坦克大战 - 据点争夺</title>
-    <link rel="stylesheet" href="style.css?v=armory-skins-29&tank-evolution-30">
+    <link rel="stylesheet" href="style.css?v=armory-skins-29&ranked-training-36">
     <base target="_blank">
 </head>
 <body>
@@ -19,19 +19,23 @@
                 <div class="start-highlights" aria-label="游戏特色">
                     <span>◈ 真 3D 战场</span>
                     <span>⚡ 强化升级</span>
-                    <span>💥 连续击杀反馈</span>
+                    <span id="seasonHomeSummary">◆ 定级赛 0/5 · 0 RP</span>
                 </div>
             </header>
 
             <main class="start-mode-panel">
                 <div class="mode-select-title">
                     <span>选择战役</span>
-                    <small>7 种可用模式</small>
+                    <small>9 种可用模式</small>
                 </div>
                 <div class="mode-buttons">
                 <button class="mode-btn mode-classic" id="btnModeClassic" onclick="selectMode('classic')">
                     <span class="mode-name">🏛 经典模式</span>
                     <span class="mode-desc">10v10据点争夺战 | 占领据点、摧毁敌方基地 | 标准对战体验</span>
+                </button>
+                <button class="mode-btn mode-ranked" id="btnModeRanked" onclick="selectMode('ranked')">
+                    <span class="mode-name">🏅 赛季排位</span>
+                    <span class="mode-desc">10v10竞技据点战 | 胜负与个人表现影响RP | 冲击传奇战神段位</span>
                 </button>
                 <button class="mode-btn mode-defense" id="btnModeDefense" onclick="selectMode('defense')">
                     <span class="mode-name">🛡 守点模式</span>
@@ -53,6 +57,10 @@
                     <span class="mode-name">👑 首领模式</span>
                     <span class="mode-desc">争夺中央巨型BOSS最后一击 | 获得大量分数与全队增益</span>
                 </button>
+                <button class="mode-btn mode-training" id="btnModeTraining" onclick="selectMode('training')">
+                    <span class="mode-name">🎯 训练场</span>
+                    <span class="mode-desc">无限弹药与技能 | 静止、重甲、移动靶车 | 无战绩压力自由练习</span>
+                </button>
                 <button class="mode-btn mode-custom" id="btnModeCustom" onclick="selectMode('custom')">
                     <span class="mode-name">🧰 自定义房间</span>
                     <span class="mode-desc">自由设置地图、胜利规则、队伍规模、坦克池、弹药与增援</span>
@@ -63,11 +71,23 @@
             <nav class="start-actions" aria-label="档案与帮助">
                 <button class="start-btn-secondary" id="btnTutorial" onclick="startTutorial()">🎓 新手教程</button>
                 <button class="start-btn-secondary" id="btnMastery" onclick="showMasteryPanel()">★ 坦克熟练度</button>
+                <button class="start-btn-secondary start-btn-ranked" id="btnRankedSeason" onclick="showRankedSeasonPanel()">🏅 赛季段位</button>
                 <button class="start-btn-secondary" id="btnDailyTasks" onclick="showDailyTasksPanel()">📅 每日任务 0/4</button>
                 <button class="start-btn-secondary" id="btnAchievements" onclick="showAchievementPanel()">🏆 成就系统</button>
                 <button class="start-btn-secondary" id="btnGameIntro" onclick="showIntroPanel()">📖 游戏介绍</button>
                 <button class="start-btn-secondary start-btn-settings" id="btnSettings" onclick="showSettingsPanel()">⚙ 战场设置</button>
             </nav>
+        </div>
+
+        <div id="rankedSeasonPanel" class="ranked-season-panel" role="dialog" aria-modal="true" aria-labelledby="rankedSeasonTitle">
+            <div class="ranked-season-shell">
+                <div class="ranked-season-head">
+                    <div><small>RANKED OPERATIONS</small><h2 id="rankedSeasonTitle">🏅 赛季段位</h2></div>
+                    <button type="button" onclick="closeRankedSeasonPanel()" aria-label="关闭赛季段位">×</button>
+                </div>
+                <div id="rankedSeasonContent"></div>
+                <button type="button" class="ranked-season-close" onclick="closeRankedSeasonPanel()">返回主页</button>
+            </div>
         </div>
 
         <!-- ========== 战场设置 ========== -->
@@ -737,6 +757,12 @@
             <h1>⚔ 坦克大战 ⚔</h1>
             <div class="subtitle" id="menuSubtitle">紧凑战场 | 3 据点争夺 | 基地持续增援</div>
             <div class="mode-badge" id="modeBadge">经典模式</div>
+            <div id="rankedQueueSummary" class="mode-brief ranked-brief" style="display:none;">
+                <strong>🏅 标准竞技规则</strong><span>固定白天、标准AI强度；完成5场定级后显示正式段位。</span>
+            </div>
+            <div id="trainingMenuSummary" class="mode-brief training-brief" style="display:none;">
+                <strong>🎯 无压力练习</strong><span>不记录成就、熟练度和排位；靶车自动复位，可测试所有1–8阶元素效果。</span>
+            </div>
 
             <div class="section">
                 <h3>🎯 选择你的坦克</h3>
@@ -892,7 +918,7 @@
                 <h2>★ 坦克熟练度档案</h2>
                 <p id="masterySummary"></p>
                 <div class="mastery-unlock-guide">
-                    <span>20 辆核心载具拥有彼此独立的 1–8 阶名称、造型与机制</span>
+                    <span>21 辆核心载具拥有彼此独立的 1–8 阶名称、造型与机制</span>
                     <span>★2 · 300 XP</span>
                     <span>★3 · 800 XP</span>
                     <span>★4 · 1500 XP</span>
@@ -926,6 +952,7 @@
                     <div>红方据点: <span style="color:#ff4444" id="redOutposts">0</span></div>
                     <div id="autoAimStatus" style="color:#ffcc00;font-size:12px;display:none;">🎯 自动瞄准中</div>
                     <div id="environmentInfo" style="color:#bdeaff;font-size:12px;display:none;"></div>
+                    <div id="elementalStatusInfo" style="color:#9eefff;font-size:12px;font-weight:800;display:none;"></div>
                     <div id="weaponAttachmentHud" class="weapon-attachment-hud"></div>
                 </div>
                 <div id="speedPenalty">⚠ 负重过多，移动速度降低</div>
@@ -945,6 +972,12 @@
                 <div id="defenseWaveInfo">🛡 守点模式 - 撑过 03:00</div>
                 <div id="sneakModeInfo">🌙 黑夜奇袭 - 摧毁敌方基地</div>
                 <div id="specialModeInfo" style="display:none;"></div>
+                <div id="trainingControls">
+                    <span id="trainingHint">提示：WASD移动，鼠标瞄准</span>
+                    <button type="button" id="trainingNextHint" onclick="nextTrainingHint()">下一提示</button>
+                    <button type="button" id="trainingResetTargets" onclick="resetTrainingTargets()">复位靶车</button>
+                    <button type="button" id="trainingExit" class="training-exit" onclick="endTrainingSession()">退出训练</button>
+                </div>
                 <div id="weaponIndicator">1/2/3/4 选武器 · T切换 · [ / ] 调仰角</div>
             </div>
             <div id="suddenDeathBanner">⚔ 绝地肉搏 · 无限弹药</div>
@@ -1016,6 +1049,7 @@
             <div class="result-team red"><span>红方</span><strong id="resultRedScore">0</strong></div>
         </div>
         <div id="resultMasteryXp"></div>
+        <div id="resultRankedRating"></div>
         <div class="match-result-actions">
             <button type="button" onclick="returnToHome()">返回主页</button>
             <button type="button" class="primary" onclick="restartLastGame()">再来一局</button>
@@ -1024,7 +1058,7 @@
 
     <script src="vendor/three.min.js"></script>
     <script src="vendor/ammo.wasm.js"></script>
-    <script src="Config.js?v=physics-settings-28"></script>
+    <script src="Config.js?v=physics-settings-28&tank-evolution-34-elemental-trees"></script>
     <script src="Settings.js?v=physics-settings-28"></script>
     <script src="Audio.js?v=physics-settings-28"></script>
     <script src="Score.js?v=new-modes-20"></script>
@@ -1033,18 +1067,19 @@
     <script src="TerrainDestruction.js"></script>
     <script src="Achievement.js?v=armory-skins-29"></script>
     <script src="Progression.js?v=physics-settings-28&tank-evolution-30"></script>
-    <script src="TankEvolution.js?v=tank-evolution-32-vfx"></script>
+    <script src="TankEvolution.js?v=tank-evolution-34-elemental-trees"></script>
     <script src="Armory.js?v=armory-skins-29"></script>
     <script src="DailyTasks.js?v=daily-tasks-22"></script>
-    <script src="Pathfinding.js?v=escort-rush-21"></script>
-    <script src="UI.js?v=armory-skins-29&tank-evolution-30"></script>
-    <script src="Ultimate.js?v=physics-settings-28&tank-evolution-32-vfx"></script>
-    <script src="GameCore.js?v=armory-skins-29&tank-evolution-30"></script>
+    <script src="RankedTraining.js?v=ranked-training-36"></script>
+    <script src="Pathfinding.js?v=escort-rush-21&tank-evolution-34-elemental-trees"></script>
+    <script src="UI.js?v=armory-skins-29&ranked-training-36"></script>
+    <script src="Ultimate.js?v=physics-settings-28&tank-evolution-34-elemental-trees"></script>
+    <script src="GameCore.js?v=armory-skins-29&ranked-training-36"></script>
     <script src="MapMechanics.js?v=mastery-custom-2"></script>
     <script src="FactoryPhysics.js?v=mastery-custom-2"></script>
-    <script src="AI.js?v=escort-rush-21&tank-evolution-32-vfx"></script>
-    <script src="Combat.js?v=armory-skins-29&tank-evolution-32-vfx"></script>
-    <script src="Render.js?v=armory-skins-29&tank-evolution-32-vfx"></script>
-    <script src="ThreeRender.js?v=armory-skins-29&tank-evolution-32-vfx"></script>
+    <script src="AI.js?v=escort-rush-21&ranked-training-36"></script>
+    <script src="Combat.js?v=armory-skins-29&ranked-training-36"></script>
+    <script src="Render.js?v=armory-skins-29&tank-evolution-34-elemental-trees"></script>
+    <script src="ThreeRender.js?v=armory-skins-29&tank-evolution-34-elemental-trees"></script>
 </body>
 </html>

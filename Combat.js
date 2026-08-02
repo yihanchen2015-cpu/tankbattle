@@ -441,9 +441,15 @@ function applyTankHitReaction(tank, projectile) {
     } else if(zone === 'fuel') {
         const recoveryMult = tank.evolutionEffects && tank.evolutionEffects.hitRecoveryMult || 1;
         tank.fuelFireTimer = Math.max(tank.fuelFireTimer || 0, CONFIG.fuelFireDuration * recoveryMult);
-        tank.burnTimer = Math.max(tank.burnTimer || 0, CONFIG.fuelFireDuration * recoveryMult);
-        tank.burnTickTimer = Math.min(tank.burnTickTimer || 1, .5);
-        tank.burnDamage = Math.max(tank.burnDamage || 0, CONFIG.fuelFireDamage);
+        if(typeof applyTankElementalStatus === 'function') {
+            applyTankElementalStatus(tank, 'fire', CONFIG.fuelFireDuration * recoveryMult, {
+                interval:.5, damage:CONFIG.fuelFireDamage, source:projectile.owner || null
+            });
+        } else {
+            tank.burnTimer = Math.max(tank.burnTimer || 0, CONFIG.fuelFireDuration * recoveryMult);
+            tank.burnTickTimer = Math.min(tank.burnTickTimer || 1, .5);
+            tank.burnDamage = Math.max(tank.burnDamage || 0, CONFIG.fuelFireDamage);
+        }
         createParticles(tank.x, tank.y, 15, '#ff681f', 1.5);
         if(tank === player && typeof showMessage === 'function') showMessage('🔥 侧面油箱起火！', '#ff6f32');
     }
@@ -469,6 +475,7 @@ function consumeGoldenShield(tank, source, projectile) {
 
 function applyDirectDamage(tank, damage, source, cause = null, projectile = null, evolutionShared = false) {
     if(!tank || tank.dead || damage <= 0) return 0;
+    if(typeof gameMode !== 'undefined' && gameMode === 'training' && tank === player) return 0;
     if((tank.evolutionUndyingTimer || 0) > 0) return 0;
     if(!evolutionShared && source && source.team !== tank.team) {
         const linkOwner = tank.linkedTo && !tank.linkedTo.dead ? tank.linkedTo : null;
@@ -594,6 +601,9 @@ function explodeBomb(bomb) {
             (1 - Math.max(0, Math.min(.95, bomb.armorIgnorePercent || 0)));
         const dealt = applyDirectDamage(tank, bomb.damage * falloff / Math.max(.35, bombArmor), bomb.owner, '垂直炸药包', bomb);
         if(dealt > 0) showDamageNumber(tank.x, tank.y - 34, Math.round(dealt));
+        if(dealt > 0 && typeof tryApplyProjectileElementalStatus === 'function') {
+            tryApplyProjectileElementalStatus(bomb, tank);
+        }
     });
     const enemyBase = bomb.team === 'blue' ? bases.red : bases.blue;
     if(enemyBase && enemyBase.hp > 0 && !enemyBase.invulnerable) {
@@ -620,12 +630,12 @@ function explodeRocket(b) {
         if(distance > radius) return;
         if(Number.isFinite(b.z) && Math.abs(getProjectileTargetHeight(tank) - b.z) > 70) return;
         const falloff = Math.max(0.35, 1 - distance / radius);
-        const armor = Math.max(0.25, tank.armor * (1 + (tank.armorBoost || 0)) + (tank.mapArmorBonus || 0));
+        const armor = Math.max(0.25, tank.armor * (1 + (tank.armorBoost || 0) + (tank.commanderArmorBoost || 0)) + (tank.mapArmorBonus || 0));
         const dealt = applyDirectDamage(tank, b.damage * falloff / armor, b.owner, getWeaponCause(b.type), b);
         if(dealt > 0) showDamageNumber(tank.x, tank.y - 30, Math.floor(dealt));
-        tank.burnTimer = Math.max(tank.burnTimer || 0, b.burnDuration || 0);
-        tank.burnTickTimer = 1;
-        tank.burnDamage = Math.max(tank.burnDamage || 0, b.burnDamage || 0);
+        if(dealt > 0 && typeof tryApplyProjectileElementalStatus === 'function') {
+            tryApplyProjectileElementalStatus(b, tank);
+        }
     });
     createParticles(b.x, b.y, 25, '#ff6600', 2);
 }
@@ -732,7 +742,7 @@ function checkCollisions() {
                     if(b.hitTanks) b.hitTanks.add(tank.id);
                     continue;
                 }
-                let actualArmor = tank.armor * (1 + (tank.armorBoost || 0)) + (tank.mapArmorBonus || 0);
+                let actualArmor = tank.armor * (1 + (tank.armorBoost || 0) + (tank.commanderArmorBoost || 0)) + (tank.mapArmorBonus || 0);
                 if(tank.fortressActive && tank.ultimateData) actualArmor = tank.armor * (tank.ultimateData.armorMult || 5.0);
                 if(tryTankArmorRicochet(tank, b, actualArmor)) {
                     hitCount++;
@@ -772,14 +782,8 @@ function checkCollisions() {
                 if(dealtToTank > 0 && !tank.dead) applyTankHitReaction(tank, b);
                 if(typeof handleTankEvolutionProjectileHit === 'function') handleTankEvolutionProjectileHit(b, tank, dealtToTank);
                 if(typeof spawnTankImpactAnimation === 'function') spawnTankImpactAnimation(b, tank);
-                if(b.toxinData && Math.random() < (b.toxinData.chance || 1)) {
-                    tank.toxinDebuffTimer = Math.max(tank.toxinDebuffTimer || 0, b.toxinData.duration || 0);
-                    tank.toxinTickTimer = b.toxinData.interval || 1;
-                    tank.toxinDamage = Math.max(tank.toxinDamage || 0, b.toxinData.damage || 0);
-                    tank.toxinSlow = Math.max(tank.toxinSlow || 0, b.toxinData.slow || 0);
-                    tank.toxinSource = b.toxinData.source || b.owner || null;
-                    tank.toxinSpreadRadius = Math.max(tank.toxinSpreadRadius || 0, b.toxinData.spreadRadius || 0);
-                    tank.evolutionToxinSpreadDone = false;
+                if(dealtToTank > 0 && typeof tryApplyProjectileElementalStatus === 'function') {
+                    tryApplyProjectileElementalStatus(b, tank);
                 }
                 if(b.explosionRadius > 0) {
                     getNearbyTanks(b.x, b.y, b.explosionRadius).forEach(other => {
@@ -788,7 +792,7 @@ function checkCollisions() {
                         const distance = Math.hypot(other.x - b.x, other.y - b.y);
                         if(distance > b.explosionRadius) return;
                         const splash = b.damage * 0.5 * Math.max(0.25, 1 - distance / b.explosionRadius);
-                        const splashArmor = Math.max(0.25, other.armor * (1 + (other.armorBoost || 0)) + (other.mapArmorBonus || 0));
+                        const splashArmor = Math.max(0.25, other.armor * (1 + (other.armorBoost || 0) + (other.commanderArmorBoost || 0)) + (other.mapArmorBonus || 0));
                         applyDirectDamage(other, splash / splashArmor, b.owner, `${getWeaponCause(b.type) || '爆炸'}溅射`, b);
                     });
                 }

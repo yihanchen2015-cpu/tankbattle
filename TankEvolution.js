@@ -1,7 +1,7 @@
 // ==================== 坦克专属 1–8 阶进化 ====================
 // 与熟练度 XP 共用等级，但每辆核心载具拥有独立名称、外观和战斗机制。
 const EVOLUTION_TANK_TYPES = Object.freeze([
-    'zuoyan29', 'zuoyan30', 'zuoyan1',
+    'zuoyan29', 'zuoyan30', 'zuoyan1', 'zuoyan_x',
     'zuoyan31', 'zuoyan32', 'zuoyan33',
     'xingchen27a', 'xingchen27b', 'xingchen27s',
     'xingchen27c', 'xingchen27d', 'xingchen27e',
@@ -19,10 +19,10 @@ const TANK_EVOLUTIONS = Object.freeze({
         evolutionStage('新兵', '原版灰色', '无效果'),
         evolutionStage('老兵', '炮口带淡蓝光晕', '炮弹有少量击退（30）', { shellKnockback: 30, muzzleGlow: '#8deaff' }),
         evolutionStage('精英', '炮弹变成棱柱形', '10% 概率穿透 1 辆', { shellKnockback: 30, penetrationChance: .10, projectileStyle: 'prism', muzzleGlow: '#8deaff' }),
-        evolutionStage('冰霜突击', '炮弹带冰蓝拖尾', '15% 概率冰冻 0.5 秒', { shellKnockback: 30, penetrationChance: .10, freezeChance: .15, freezeDuration: .5, projectileStyle: 'ice-prism', projectileTrail: '#76e8ff', muzzleGlow: '#8deaff' }),
-        evolutionStage('冰晶王牌', '车身覆盖薄冰晶', '冰冻概率 25%，持续 1 秒', { shellKnockback: 30, penetrationChance: .10, freezeChance: .25, freezeDuration: 1, projectileStyle: 'ice-prism', projectileTrail: '#76e8ff', bodyStyle: 'ice-crystal', palette: ['#8ed8e8', '#d9fbff'] }),
-        evolutionStage('极寒突袭', '开大时全屏飘雪', '大招首次命中必定冰冻', { shellKnockback: 30, penetrationChance: .10, freezeChance: .25, freezeDuration: 1, ultimateFirstFreeze: true, projectileStyle: 'ice-prism', projectileTrail: '#76e8ff', bodyStyle: 'ice-crystal', weatherFx: 'snow', palette: ['#78cfe5', '#e7fdff'] }),
-        evolutionStage('冰霜传奇', '车身被冰甲覆盖', '受击时 20% 概率减速攻击者', { shellKnockback: 30, penetrationChance: .10, freezeChance: .25, freezeDuration: 1, ultimateFirstFreeze: true, retaliateSlowChance: .20, projectileStyle: 'ice-prism', projectileTrail: '#76e8ff', bodyStyle: 'ice-armor', weatherFx: 'snow', palette: ['#5eb6d7', '#d8f8ff'] }),
+        evolutionStage('冰霜突击', '炮弹带冰蓝拖尾', '15% 概率冰冻 1.5 秒，动作 -50%', { shellKnockback: 30, penetrationChance: .10, freezeChance: .15, freezeDuration: 1.5, projectileStyle: 'ice-prism', projectileTrail: '#76e8ff', muzzleGlow: '#8deaff' }),
+        evolutionStage('冰晶王牌', '车身覆盖薄冰晶', '冰冻概率 25%，持续 1.5 秒', { shellKnockback: 30, penetrationChance: .10, freezeChance: .25, freezeDuration: 1.5, projectileStyle: 'ice-prism', projectileTrail: '#76e8ff', bodyStyle: 'ice-crystal', palette: ['#8ed8e8', '#d9fbff'] }),
+        evolutionStage('极寒突袭', '开大时全屏飘雪', '大招首次命中必定冰冻 1.5 秒', { shellKnockback: 30, penetrationChance: .10, freezeChance: .25, freezeDuration: 1.5, ultimateFirstFreeze: true, projectileStyle: 'ice-prism', projectileTrail: '#76e8ff', bodyStyle: 'ice-crystal', weatherFx: 'snow', palette: ['#78cfe5', '#e7fdff'] }),
+        evolutionStage('冰霜传奇', '车身被冰甲覆盖', '冰冻可叠加至 15 秒；受击可减速攻击者', { shellKnockback: 30, penetrationChance: .10, freezeChance: .25, freezeDuration: 1.5, ultimateFirstFreeze: true, retaliateSlowChance: .20, projectileStyle: 'ice-prism', projectileTrail: '#76e8ff', bodyStyle: 'ice-armor', weatherFx: 'snow', palette: ['#5eb6d7', '#d8f8ff'] }),
         evolutionStage('永冻战神', '金蓝冰晶混合', '冰冻 35%/1.5 秒，穿透 +1', { shellKnockback: 30, penetrationChance: 1, extraPenetration: 1, freezeChance: .35, freezeDuration: 1.5, ultimateFirstFreeze: true, retaliateSlowChance: .20, projectileStyle: 'gold-ice-prism', projectileTrail: '#8defff', bodyStyle: 'eternal-ice', weatherFx: 'snow', palette: ['#4ca8d8', '#ffd95c'] })
     ]),
     zuoyan30: Object.freeze([
@@ -36,24 +36,34 @@ const TANK_EVOLUTIONS = Object.freeze({
         evolutionStage('虚空战神', '若隐若现，星点环绕', '隐身攻击 +30%，永久半透明', { passiveStealth: true, stealthOpacity: .24, permanentOpacity: .56, stealthSpeed: .15, stealthFirstCrit: 1.5, stealthDamage: 1.3, phaseTanks: true, ultimateNoReveal: true, ultimateOpacity: .03, stealthExitStun: .5, trailColor: '#c075ff', bodyStyle: 'star-void', palette: ['#2d2447', '#d59cff'] })
     ]),
     zuoyan1: Object.freeze([
-        evolutionStage('新兵', '原版灰色', '无效果'),
-        evolutionStage('过载新兵', '引擎冒橙色火花', '加速时尾焰变长', { trailColor: '#ff8b2d', bodyStyle: 'overload' }),
-        evolutionStage('过载精英', '车体带暗红条纹', '生命低于 30% 时移速 +20%', { lowHpThreshold: .30, lowHpSpeed: .20, trailColor: '#ff7a28', bodyStyle: 'red-stripe' }),
-        evolutionStage('狂战士', '红色裂纹发光', '生命低于 30% 时攻击 +25%', { lowHpThreshold: .30, lowHpSpeed: .20, lowHpDamage: .25, trailColor: '#ff5b24', bodyStyle: 'red-cracks' }),
-        evolutionStage('血怒王牌', '裂纹变成熔岩色', '残血时大招充能加速 50%', { lowHpThreshold: .30, lowHpSpeed: .20, lowHpDamage: .25, lowHpUltCharge: .50, trailColor: '#ff4d1f', bodyStyle: 'lava-cracks', palette: ['#6b2c1f', '#ff7a1c'] }),
-        evolutionStage('狂暴突袭', '车体燃烧', '开大后对周围敌人每秒造成 30 伤害', { lowHpThreshold: .30, lowHpSpeed: .20, lowHpDamage: .25, lowHpUltCharge: .50, ultimateBurnDps: 30, trailColor: '#ff351b', bodyStyle: 'burning' }),
-        evolutionStage('熔岩传奇', '熔岩裂纹蔓延全车', '阵亡时范围 150 爆炸，伤害 200', { lowHpThreshold: .30, lowHpSpeed: .20, lowHpDamage: .25, lowHpUltCharge: .50, ultimateBurnDps: 30, deathExplosionRadius: 150, deathExplosionDamage: 200, trailColor: '#ff2c16', bodyStyle: 'full-lava' }),
-        evolutionStage('末日战神', '熔岩流动并冒黑烟', '生命低于 50% 全属性 +25%，死亡爆炸翻倍', { lowHpThreshold: .50, lowHpSpeed: .25, lowHpDamage: .25, lowHpFireRate: .25, lowHpDefense: .25, lowHpUltCharge: .50, ultimateBurnDps: 30, deathExplosionRadius: 300, deathExplosionDamage: 400, trailColor: '#ffbd42', bodyStyle: 'doomsday-lava', palette: ['#271b19', '#ff5b1d'] })
+        evolutionStage('火种新兵', '原版灰色，炮膛藏有微弱火种', '无元素效果'),
+        evolutionStage('烈焰芽弹', '主炮变为红橙色浓缩火球', '10% 概率点燃：20/秒，持续 3 秒', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff8a38', igniteChance:.10, igniteDamage:20, igniteDuration:3, bodyStyle:'fire-sprout' }),
+        evolutionStage('炙热核心', '火球内核变为亮黄色', '点燃概率 15%，主炮伤害 +8%', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff7a2d', igniteChance:.15, igniteDamage:20, igniteDuration:3, shellDamageMult:1.08, bodyStyle:'hot-core' }),
+        evolutionStage('爆炎豌豆', '火球外层喷出短促焰瓣', '点燃概率 20%，触发时波及 70 范围', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff6426', igniteChance:.20, igniteDamage:25, igniteDuration:3, fireSplashRadius:70, shellDamageMult:1.08, bodyStyle:'blast-pea' }),
+        evolutionStage('熔火王牌', '车身浮现熔红火焰纹', '点燃概率 25%，35/秒，持续 4 秒', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff4e20', igniteChance:.25, igniteDamage:35, igniteDuration:4, fireSplashRadius:70, shellDamageMult:1.12, bodyStyle:'molten-ace', palette:['#7b2a1d','#ff8b28'] }),
+        evolutionStage('火焰过载', '开大时车身形成旋转火环', '过载期间周围敌人受到 30/秒火焰伤害', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff3d18', igniteChance:.28, igniteDamage:35, igniteDuration:4, fireSplashRadius:85, shellDamageMult:1.12, ultimateBurnDps:30, ultimateIgniteChance:.25, bodyStyle:'flame-overload' }),
+        evolutionStage('业火传奇', '火球拖出金红业火尾迹', '点燃概率 32%，对燃烧目标伤害 +25%', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ffbf39', igniteChance:.32, igniteDamage:45, igniteDuration:5, fireSplashRadius:100, shellDamageMult:1.15, ultimateBurnDps:35, ultimateIgniteChance:.30, burningTargetDamageMult:1.25, bodyStyle:'karma-fire' }),
+        evolutionStage('太阳战神', '金红太阳火球与黑烟环绕全车', '点燃 42%，55/秒持续 6 秒；燃烧目标伤害 +35%', { projectileStyle:'sun-fire-orb', projectileScale:1.5, projectileTrail:'#ffd45a', igniteChance:.42, igniteDamage:55, igniteDuration:6, fireSplashRadius:130, shellDamageMult:1.20, ultimateBurnDps:45, ultimateIgniteChance:.40, burningTargetDamageMult:1.35, deathExplosionRadius:180, deathExplosionDamage:240, bodyStyle:'sun-god', palette:['#351a16','#ffd04e'] })
+    ]),
+    zuoyan_x: Object.freeze([
+        evolutionStage('战术学员', '原版紫色指挥车', '无额外效果'),
+        evolutionStage('指挥链路', '车顶展开紫色通信阵列', '战术指挥范围 250', { commandRadiusBonus:50, auraColor:'#a987ff', bodyStyle:'command-link' }),
+        evolutionStage('火力校准', '友军连线出现紫色瞄准刻度', '指挥额外提供 10% 射速', { commandRadiusBonus:50, commandFireRateBonus:.10, auraColor:'#aa82ff', bodyStyle:'fire-control' }),
+        evolutionStage('机动调度', '车身两侧流动蓝紫箭头', '指挥额外提供 10% 移速', { commandRadiusBonus:50, commandFireRateBonus:.10, commandSpeedBonus:.10, trailColor:'#9970ff', bodyStyle:'mobile-command' }),
+        evolutionStage('装甲协同', '紫色六边形装甲网投射至友军', '指挥额外提供 20% 装甲', { commandRadiusBonus:80, commandFireRateBonus:.10, commandSpeedBonus:.10, commandArmorBonus:.20, auraColor:'#bd9aff', bodyStyle:'armor-network' }),
+        evolutionStage('战场中枢', '车顶升起双层全息战术环', '指挥范围 350，持续时间 +2 秒', { commandRadiusBonus:150, commandDurationBonus:2, commandFireRateBonus:.15, commandSpeedBonus:.10, commandArmorBonus:.20, auraColor:'#c39cff', bodyStyle:'battle-hub' }),
+        evolutionStage('全域指挥', '金紫战术网覆盖周围友军', '友军伤害 +20%，获得 200 护盾', { commandRadiusBonus:200, commandDurationBonus:3, commandFireRateBonus:.15, commandSpeedBonus:.15, commandArmorBonus:.25, commandDamageBonus:.20, commandShield:200, auraColor:'#e1c36e', bodyStyle:'global-command' }),
+        evolutionStage('统御战神', '大型金紫指挥星图环绕车身', '范围 500、持续 10 秒，全面强化并赋予 400 护盾', { commandRadiusBonus:300, commandDurationBonus:4, commandFireRateBonus:.25, commandSpeedBonus:.20, commandArmorBonus:.30, commandDamageBonus:.30, commandShield:400, auraColor:'#ffe06d', bodyStyle:'supreme-command', palette:['#6448a8','#ffd95d'] })
     ]),
     xingchen27a: Object.freeze([
-        evolutionStage('新兵', '原版灰色', '无效果'),
-        evolutionStage('护盾新兵', '车身带淡绿色光晕', '护盾持续 +1 秒', { shieldDurationBonus: 1, auraColor: '#8df5a5' }),
-        evolutionStage('护卫精英', '光晕变翠绿色', '护盾期间周围友军回血 5/秒', { shieldDurationBonus: 1, shieldHealAura: 5, auraColor: '#38df7b' }),
-        evolutionStage('钢铁护卫', '车身增加绿色甲片', '护盾 HP +30%', { shieldDurationBonus: 1, shieldHealAura: 5, shieldHpMult: 1.3, bodyStyle: 'green-plates', auraColor: '#38df7b' }),
-        evolutionStage('守护王牌', '甲片带金色描边', '护盾破碎时震退周围敌人', { shieldDurationBonus: 1, shieldHealAura: 5, shieldHpMult: 1.3, shieldBreakKnockback: 90, bodyStyle: 'gold-green-plates', auraColor: '#8bea86' }),
-        evolutionStage('圣盾护卫', '护盾带金色光芒', '大招期间全队获得 300 护盾', { shieldDurationBonus: 1, shieldHealAura: 5, shieldHpMult: 1.3, shieldBreakKnockback: 90, teamShield: 300, bodyStyle: 'holy-shield', auraColor: '#ffe475' }),
-        evolutionStage('守护传奇', '金光化为圣光', '护盾持续期间免疫控制', { shieldDurationBonus: 1, shieldHealAura: 5, shieldHpMult: 1.3, shieldBreakKnockback: 90, teamShield: 300, shieldControlImmune: true, bodyStyle: 'holy-light', auraColor: '#fff0a1' }),
-        evolutionStage('圣盾战神', '金绿圣光环绕', '护盾 HP 翻倍，破碎时全队回血 20%', { shieldDurationBonus: 1, shieldHealAura: 5, shieldHpMult: 2, shieldBreakKnockback: 90, teamShield: 300, shieldControlImmune: true, shieldBreakTeamHeal: .20, bodyStyle: 'divine-shield', auraColor: '#eaff94', palette: ['#2f8f55', '#ffe270'] })
+        evolutionStage('毒芽护卫', '原版绿色护卫车', '无元素效果'),
+        evolutionStage('毒液芽弹', '主炮变为绿紫色浓稠毒球', '10% 概率中毒：18/秒，持续 3 秒', { projectileStyle:'toxic-orb', projectileScale:1.5, projectileTrail:'#70e779', toxinChance:.10, toxinDamage:18, toxinDuration:3, bodyStyle:'toxic-guard' }),
+        evolutionStage('黏毒护卫', '毒球留下紫绿黏液拖尾', '中毒概率 15%，中毒目标减速 10%', { projectileStyle:'toxic-orb', projectileScale:1.5, projectileTrail:'#63d96f', toxinChance:.15, toxinDamage:18, toxinDuration:3, toxinSlow:.10, bodyStyle:'sticky-guard' }),
+        evolutionStage('毒雾护罩', '绿色半圆护罩内流动紫色毒雾', '护盾每秒伤害周围敌人 20，并有 12% 概率施毒', { projectileStyle:'toxic-orb', projectileScale:1.5, projectileTrail:'#5fd56b', toxinChance:.15, toxinDamage:22, toxinDuration:3, toxinSlow:.10, shieldToxinDps:20, shieldToxinChance:.12, bodyStyle:'toxic-dome', auraColor:'#56e476' }),
+        evolutionStage('共生毒液', '车身形成紫绿共生脉络', '中毒概率 20%，攻击中毒目标吸血 15%', { projectileStyle:'toxic-orb', projectileScale:1.5, projectileTrail:'#8be94f', toxinChance:.20, toxinDamage:30, toxinDuration:4, toxinSlow:.12, shieldToxinDps:20, shieldToxinChance:.15, toxinLeech:.15, bodyStyle:'toxic-symbiosis' }),
+        evolutionStage('腐蚀圣盾', '护罩表面滴落荧光毒液', '中毒目标承受伤害 +20%，护盾毒伤 30/秒', { projectileStyle:'toxic-orb', projectileScale:1.5, projectileTrail:'#9eff4f', toxinChance:.25, toxinDamage:35, toxinDuration:4, toxinSlow:.15, shieldToxinDps:30, shieldToxinChance:.20, toxinLeech:.15, toxinTargetDamageMult:1.20, bodyStyle:'corrosive-shield' }),
+        evolutionStage('瘟疫守望', '紫绿毒球外围出现瘟疫光环', '中毒概率 32%，触发时波及 110 范围', { projectileStyle:'plague-orb', projectileScale:1.5, projectileTrail:'#a8ff58', toxinChance:.32, toxinDamage:45, toxinDuration:5, toxinSlow:.15, toxinSplashRadius:110, shieldToxinDps:38, shieldToxinChance:.25, toxinLeech:.18, toxinTargetDamageMult:1.25, bodyStyle:'plague-guardian' }),
+        evolutionStage('毒液圣神', '金绿半圆毒罩与紫色毒液星环', '中毒 42%、55/秒；毒罩 50/秒并传染附近敌人', { projectileStyle:'divine-toxic-orb', projectileScale:1.5, projectileTrail:'#d4ff65', toxinChance:.42, toxinDamage:55, toxinDuration:6, toxinSlow:.18, toxinSplashRadius:150, toxinSpreadRadius:180, shieldToxinDps:50, shieldToxinChance:.35, toxinLeech:.20, toxinTargetDamageMult:1.30, bodyStyle:'divine-toxin', auraColor:'#caff5b', palette:['#3f8751','#c7ff58'] })
     ]),
     xingchen27b: Object.freeze([
         evolutionStage('新兵', '原版灰色', '无效果'),
@@ -126,14 +136,14 @@ const TANK_EVOLUTIONS = Object.freeze({
         evolutionStage('千面幻影', '车身化为流动星紫全息面', '幻影无限持续并独立追击', { phantomCount: 4, phantomStatRatio: .4, phantomCanFire: true, phantomDamageMult: .7, phantomExplosionStun: 1, phantomInfinite: true, phantomIndependent: true, bodyStyle: 'thousand-phantoms', palette: ['#624aa6', '#e2b9ff'] })
     ]),
     zuoyan33: Object.freeze([
-        evolutionStage('无', '白板毒素车', '无效果'),
-        evolutionStage('神经毒素', '炮弹附着淡绿毒液', '10% 概率中毒：20/秒，持续 3 秒', { toxinChance: .1, toxinDamage: 20, toxinDuration: 3, projectileTrail: '#63e78c' }),
-        evolutionStage('剧毒扩散', '毒液拖尾扩散成雾', '中毒目标减速 15%', { toxinChance: .1, toxinDamage: 20, toxinDuration: 3, toxinSlow: .15, projectileTrail: '#52df7e' }),
-        evolutionStage('毒雾领域', '大招留下绿色毒雾领域', '毒雾 30/秒，持续 5 秒', { toxinChance: .1, toxinDamage: 20, toxinDuration: 3, toxinSlow: .15, poisonCloudDps: 30, poisonCloudDuration: 5, poisonCloudRadius: 120, bodyStyle: 'poison-cloud' }),
-        evolutionStage('致命毒液', '毒液变为荧光黄绿', '中毒概率 20%，伤害 40/秒', { toxinChance: .2, toxinDamage: 40, toxinDuration: 3, toxinSlow: .15, poisonCloudDps: 30, poisonCloudDuration: 5, poisonCloudRadius: 120, projectileTrail: '#a6ff4f', bodyStyle: 'deadly-toxin' }),
-        evolutionStage('毒性爆发', '中毒目标浮现紫绿弱点纹', '攻击中毒目标时暴击率 +30%', { toxinChance: .2, toxinDamage: 40, toxinDuration: 3, toxinSlow: .15, toxinCritChance: .3, poisonCloudDps: 30, poisonCloudDuration: 5, poisonCloudRadius: 120, bodyStyle: 'toxic-burst' }),
-        evolutionStage('瘟疫使者', '毒雾化为浓烈紫绿漩涡', '中毒 30%，毒雾范围 +50%、伤害 +50%', { toxinChance: .3, toxinDamage: 40, toxinDuration: 3, toxinSlow: .15, toxinCritChance: .3, poisonCloudDps: 45, poisonCloudDuration: 5, poisonCloudRadius: 180, bodyStyle: 'plague-bringer' }),
-        evolutionStage('致命瘟疫', '紫绿瘟疫符文笼罩车身', '毒素在 200 范围传染，伤害 60/秒', { toxinChance: .3, toxinDamage: 60, toxinDuration: 3, toxinSlow: .15, toxinCritChance: .3, poisonCloudDps: 45, poisonCloudDuration: 5, poisonCloudRadius: 180, toxinSpreadRadius: 200, bodyStyle: 'fatal-plague', palette: ['#3a7d4d', '#c5ff55'] })
+        evolutionStage('毒芽新兵', '白板毒素车', '无元素效果'),
+        evolutionStage('毒液豌豆', '主炮变为绿紫色浓稠毒球', '10% 概率中毒：20/秒，持续 3 秒', { projectileStyle:'toxic-orb', projectileScale:1.5, toxinChance:.10, toxinDamage:20, toxinDuration:3, projectileTrail:'#63e78c', bodyStyle:'toxic-pea' }),
+        evolutionStage('黏液毒豆', '毒球表面流动紫色黏液斑', '中毒概率 15%，目标减速 15%', { projectileStyle:'toxic-orb', projectileScale:1.5, toxinChance:.15, toxinDamage:20, toxinDuration:3, toxinSlow:.15, projectileTrail:'#52df7e', bodyStyle:'sticky-toxin' }),
+        evolutionStage('毒雾喷射', '炮口喷出紫绿毒雾', '大招留下 30/秒、持续 5 秒的毒雾', { projectileStyle:'toxic-orb', projectileScale:1.5, toxinChance:.18, toxinDamage:25, toxinDuration:3, toxinSlow:.15, poisonCloudDps:30, poisonCloudDuration:5, poisonCloudRadius:120, projectileTrail:'#55df74', bodyStyle:'poison-cloud' }),
+        evolutionStage('强酸毒液', '毒球变为荧光绿紫酸液核心', '中毒概率 24%，40/秒；触发波及 80 范围', { projectileStyle:'acid-toxic-orb', projectileScale:1.5, toxinChance:.24, toxinDamage:40, toxinDuration:4, toxinSlow:.15, toxinSplashRadius:80, poisonCloudDps:30, poisonCloudDuration:5, poisonCloudRadius:130, projectileTrail:'#a6ff4f', bodyStyle:'acid-toxin' }),
+        evolutionStage('毒性爆发', '中毒目标浮现紫绿弱点纹', '中毒概率 28%，对中毒目标伤害 +25%', { projectileStyle:'acid-toxic-orb', projectileScale:1.5, toxinChance:.28, toxinDamage:45, toxinDuration:4, toxinSlow:.18, toxinSplashRadius:90, toxinTargetDamageMult:1.25, poisonCloudDps:35, poisonCloudDuration:5, poisonCloudRadius:145, projectileTrail:'#b4ff55', bodyStyle:'toxic-burst' }),
+        evolutionStage('瘟疫毒豆', '浓稠毒球外围环绕紫色瘟疫雾', '中毒概率 34%，50/秒，触发波及 125 范围', { projectileStyle:'plague-orb', projectileScale:1.5, toxinChance:.34, toxinDamage:50, toxinDuration:5, toxinSlow:.20, toxinSplashRadius:125, toxinTargetDamageMult:1.30, poisonCloudDps:45, poisonCloudDuration:6, poisonCloudRadius:180, projectileTrail:'#c1ff5a', bodyStyle:'plague-bringer' }),
+        evolutionStage('毒液魔王', '金绿毒液核心裹挟深紫瘟疫旋涡', '中毒 45%、60/秒；触发波及 170 并在 200 范围传染', { projectileStyle:'venom-king-orb', projectileScale:1.5, toxinChance:.45, toxinDamage:60, toxinDuration:6, toxinSlow:.22, toxinSplashRadius:170, toxinSpreadRadius:200, toxinTargetDamageMult:1.35, poisonCloudDps:55, poisonCloudDuration:7, poisonCloudRadius:210, projectileTrail:'#d4ff65', bodyStyle:'venom-king', palette:['#352452','#caff55'] })
     ]),
     xingchen27c: Object.freeze([
         evolutionStage('无', '白板反隐车', '无效果'),
@@ -156,14 +166,14 @@ const TANK_EVOLUTIONS = Object.freeze({
         evolutionStage('命运共同体', '全队被大型金绿网络连接', '全队分摊 50% 伤害，恢复速度翻倍', { linkHealShare: .15, linkDamageShare: .4, linkRegen: 10, linkDeathShield: 300, linkUndyingDuration: 3, teamDamageShare: .5, teamRegenMult: 2, bodyStyle: 'shared-destiny', palette: ['#4d9c63', '#ffe779'] })
     ]),
     xingchen27e: Object.freeze([
-        evolutionStage('无', '白板审判车', '无效果'),
-        evolutionStage('审判标记', '命中目标浮现金色准星', '标记 3 秒，队友伤害 +15%', { judgmentDuration: 3, judgmentDamageBonus: .15, judgmentTargets: 1, bodyStyle: 'judgment-mark' }),
-        evolutionStage('罪孽深重', '标记增加红色罪纹', '击杀标记敌人，大招充能 +20%', { judgmentDuration: 3, judgmentDamageBonus: .15, judgmentTargets: 1, judgmentKillUltCharge: .2, bodyStyle: 'sin-mark' }),
-        evolutionStage('处决时刻', '标记变为旋转处决准星', '对标记敌人暴击率 +30%', { judgmentDuration: 3, judgmentDamageBonus: .15, judgmentTargets: 1, judgmentKillUltCharge: .2, judgmentCritChance: .3, bodyStyle: 'execution-time' }),
-        evolutionStage('最终审判', '金红审判光柱锁定目标', '标记 5 秒，伤害加成 30%', { judgmentDuration: 5, judgmentDamageBonus: .3, judgmentTargets: 1, judgmentKillUltCharge: .2, judgmentCritChance: .3, bodyStyle: 'final-judgment' }),
-        evolutionStage('赎罪之击', '击杀时回流翠金生命光', '击杀标记敌人恢复 200 HP', { judgmentDuration: 5, judgmentDamageBonus: .3, judgmentTargets: 1, judgmentKillUltCharge: .2, judgmentCritChance: .3, judgmentKillHeal: 200, bodyStyle: 'atonement' }),
-        evolutionStage('审判长', '双重金红标记轨道环绕', '可标记 2 个敌人，处决伤害 +50%', { judgmentDuration: 5, judgmentDamageBonus: .3, judgmentTargets: 2, judgmentKillUltCharge: .2, judgmentCritChance: .3, judgmentKillHeal: 200, judgmentExecuteDamageMult: 1.5, bodyStyle: 'chief-judge' }),
-        evolutionStage('天罚裁决', '天罚符文与金红雷光覆盖车身', '标记禁用大招，死亡后范围 200 爆炸', { judgmentDuration: 5, judgmentDamageBonus: .3, judgmentTargets: 2, judgmentKillUltCharge: .2, judgmentCritChance: .3, judgmentKillHeal: 200, judgmentExecuteDamageMult: 1.5, judgmentDisableUltimate: true, judgmentDeathExplosionRadius: 200, judgmentDeathExplosionDamage: 200, bodyStyle: 'heavenly-verdict', palette: ['#589b42', '#ffd65a'] })
+        evolutionStage('火种裁决', '白板审判车', '无元素效果'),
+        evolutionStage('审判火豆', '主炮变为红橙色浓稠火球', '10% 概率点燃，并标记目标 3 秒', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff8b37', igniteChance:.10, igniteDamage:20, igniteDuration:3, judgmentDuration:3, judgmentDamageBonus:.10, judgmentTargets:1, bodyStyle:'judgment-fire' }),
+        evolutionStage('灼罪火焰', '火球内浮现红色罪纹', '点燃概率 15%，对燃烧目标伤害 +15%', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff762b', igniteChance:.15, igniteDamage:22, igniteDuration:3, burningTargetDamageMult:1.15, judgmentDuration:3, judgmentDamageBonus:.12, judgmentTargets:1, bodyStyle:'sin-fire' }),
+        evolutionStage('火刑时刻', '火球外层形成旋转处决焰环', '点燃概率 20%，对标记目标暴击率 +30%', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff6325', igniteChance:.20, igniteDamage:28, igniteDuration:4, burningTargetDamageMult:1.18, judgmentDuration:3, judgmentDamageBonus:.15, judgmentTargets:1, judgmentCritChance:.30, bodyStyle:'execution-fire' }),
+        evolutionStage('最终火刑', '金红火柱锁定被标记目标', '点燃 26%、35/秒；标记 5 秒并增伤 25%', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff4c1d', igniteChance:.26, igniteDamage:35, igniteDuration:4, fireSplashRadius:75, burningTargetDamageMult:1.22, judgmentDuration:5, judgmentDamageBonus:.25, judgmentTargets:1, judgmentCritChance:.30, bodyStyle:'final-pyre' }),
+        evolutionStage('赎罪烈焰', '击杀时火焰回流为金色生命光', '击杀燃烧或标记敌人恢复 200 HP', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ffbc3e', igniteChance:.30, igniteDamage:40, igniteDuration:5, fireSplashRadius:90, burningTargetDamageMult:1.25, burningKillHeal:200, judgmentDuration:5, judgmentDamageBonus:.25, judgmentTargets:1, judgmentCritChance:.30, judgmentKillHeal:200, bodyStyle:'atonement-fire' }),
+        evolutionStage('炎之审判长', '双重金红火球轨道环绕车身', '点燃 35%，波及 120；可标记 2 个目标', { projectileStyle:'inferno-orb', projectileScale:1.5, projectileTrail:'#ffd04b', igniteChance:.35, igniteDamage:48, igniteDuration:5, fireSplashRadius:120, burningTargetDamageMult:1.30, burningKillHeal:200, judgmentDuration:5, judgmentDamageBonus:.30, judgmentTargets:2, judgmentCritChance:.30, judgmentExecuteDamageMult:1.5, bodyStyle:'inferno-judge' }),
+        evolutionStage('天罚太阳', '金红太阳火球与天罚符文覆盖车身', '点燃 45%、60/秒；燃烧死亡后产生 200 范围爆炎', { projectileStyle:'heaven-fire-orb', projectileScale:1.5, projectileTrail:'#ffe064', igniteChance:.45, igniteDamage:60, igniteDuration:6, fireSplashRadius:160, burningTargetDamageMult:1.40, burningKillHeal:250, judgmentDuration:6, judgmentDamageBonus:.35, judgmentTargets:2, judgmentCritChance:.35, judgmentExecuteDamageMult:1.5, judgmentDisableUltimate:true, judgmentDeathExplosionRadius:200, judgmentDeathExplosionDamage:240, bodyStyle:'heaven-sun', palette:['#783522','#ffd85b'] })
     ]),
     duoduo_eng: Object.freeze([
         evolutionStage('无', '白板工程车', '无效果'),
@@ -176,14 +186,14 @@ const TANK_EVOLUTIONS = Object.freeze({
         evolutionStage('移动基地', '车身展开金色移动维修基地', '掩体永久存在并治疗周围友军 10 HP/秒', { repairEfficiencyMult: 1.3, coverCount: 3, coverHp: 1200, coverDuration: Infinity, repairShellAmmo: 5, repairMgAmmo: 20, repairInstantBonus: 50, coverAutoAttack: true, coverDamage: 80, coverHealPerSecond: 10, bodyStyle: 'mobile-base', palette: ['#b3712e', '#ffd45c'] })
     ]),
     duoduo_rocket: Object.freeze([
-        evolutionStage('无', '白板火箭车', '无效果'),
-        evolutionStage('火箭弹幕', '发射架增加双联装导轨', '主炮 2 连发，间隔 0.1 秒', { rocketBurstCount: 2, rocketBurstInterval: .1, bodyStyle: 'double-rocket' }),
-        evolutionStage('爆炸溅射', '弹头增加橙色爆炸环', '爆炸范围 +30%', { rocketBurstCount: 2, rocketBurstInterval: .1, rocketSplashMult: 1.3, bodyStyle: 'blast-rocket' }),
-        evolutionStage('燃烧火箭', '火箭带红色燃烧尾焰', '命中留下 2 秒火焰，30/秒', { rocketBurstCount: 2, rocketBurstInterval: .1, rocketSplashMult: 1.3, rocketFireDuration: 2, rocketFireDps: 30, projectileTrail: '#ff7138', bodyStyle: 'burning-rocket' }),
-        evolutionStage('火力覆盖', '发射架升级为三联装', '主炮 3 连发，爆炸范围 +50%', { rocketBurstCount: 3, rocketBurstInterval: .1, rocketSplashMult: 1.5, rocketFireDuration: 2, rocketFireDps: 30, bodyStyle: 'triple-rocket' }),
-        evolutionStage('毁灭轰炸', '火箭尾焰变为熔红色', '火焰持续 4 秒，45/秒', { rocketBurstCount: 3, rocketBurstInterval: .1, rocketSplashMult: 1.5, rocketFireDuration: 4, rocketFireDps: 45, projectileTrail: '#ff4b24', bodyStyle: 'devastation-bombardment' }),
-        evolutionStage('末日火箭', '四联装金红发射架完全展开', '主炮 4 连发，爆炸范围翻倍', { rocketBurstCount: 4, rocketBurstInterval: .1, rocketSplashMult: 2, rocketFireDuration: 4, rocketFireDps: 45, bodyStyle: 'doomsday-rocket' }),
-        evolutionStage('天火降世', '金色熔火弹头环绕火箭架', '火箭分裂 3 枚子炸弹，覆盖 200，火焰持续 6 秒', { rocketBurstCount: 4, rocketBurstInterval: .1, rocketSplashMult: 2, rocketFireDuration: 6, rocketFireDps: 45, rocketSplitCount: 3, rocketSplitRadius: 200, bodyStyle: 'skyfire', palette: ['#a54225', '#ffd159'] })
+        evolutionStage('火种炮架', '白板火箭车', '无元素效果'),
+        evolutionStage('双发火豆', '双联装发射红橙色浓缩火球', '主炮 2 连发；10% 概率点燃', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff8a38', rocketBurstCount:2, rocketBurstInterval:.1, igniteChance:.10, igniteDamage:20, igniteDuration:3, bodyStyle:'double-fire-pea' }),
+        evolutionStage('爆燃溅射', '火球外层增加橙色爆炸焰环', '点燃概率 15%，爆炸范围 +30%', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff762d', rocketBurstCount:2, rocketBurstInterval:.1, rocketSplashMult:1.3, igniteChance:.15, igniteDamage:22, igniteDuration:3, fireSplashRadius:70, bodyStyle:'blast-fire-pea' }),
+        evolutionStage('燃烧火球', '浓稠火球拖出红橙火焰尾迹', '点燃概率 22%，30/秒持续 3 秒；地面留火 2 秒', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff6425', rocketBurstCount:2, rocketBurstInterval:.1, rocketSplashMult:1.3, igniteChance:.22, igniteDamage:30, igniteDuration:3, fireSplashRadius:80, rocketFireDuration:2, rocketFireDps:30, bodyStyle:'burning-fireball' }),
+        evolutionStage('三重火力', '三联装火球发射架展开', '主炮 3 连发，点燃 26%，爆炸范围 +50%', { projectileStyle:'fire-orb', projectileScale:1.5, projectileTrail:'#ff5420', rocketBurstCount:3, rocketBurstInterval:.1, rocketSplashMult:1.5, igniteChance:.26, igniteDamage:35, igniteDuration:4, fireSplashRadius:90, rocketFireDuration:2, rocketFireDps:30, bodyStyle:'triple-fireball' }),
+        evolutionStage('熔火轰炸', '火球内核变为白热熔岩色', '点燃 32%、45/秒持续 4 秒；地面火焰 4 秒', { projectileStyle:'inferno-orb', projectileScale:1.5, projectileTrail:'#ff431b', rocketBurstCount:3, rocketBurstInterval:.1, rocketSplashMult:1.6, igniteChance:.32, igniteDamage:45, igniteDuration:4, fireSplashRadius:110, rocketFireDuration:4, rocketFireDps:45, bodyStyle:'molten-bombardment' }),
+        evolutionStage('末日火豆', '四联装金红火球炮架完全展开', '主炮 4 连发，点燃 38%，爆炸范围翻倍', { projectileStyle:'inferno-orb', projectileScale:1.5, projectileTrail:'#ffc03f', rocketBurstCount:4, rocketBurstInterval:.1, rocketSplashMult:2, igniteChance:.38, igniteDamage:50, igniteDuration:5, fireSplashRadius:135, rocketFireDuration:4, rocketFireDps:45, burningTargetDamageMult:1.20, bodyStyle:'doomsday-fire-pea' }),
+        evolutionStage('天火太阳', '金色太阳火球环绕四联发射架', '点燃 48%、60/秒；分裂 3 枚子火球并留下 6 秒火海', { projectileStyle:'skyfire-orb', projectileScale:1.5, projectileTrail:'#ffe05c', rocketBurstCount:4, rocketBurstInterval:.1, rocketSplashMult:2, igniteChance:.48, igniteDamage:60, igniteDuration:6, fireSplashRadius:170, rocketFireDuration:6, rocketFireDps:55, rocketSplitCount:3, rocketSplitRadius:200, burningTargetDamageMult:1.30, bodyStyle:'skyfire-sun', palette:['#963921','#ffd75b'] })
     ]),
     duoduo_emp: Object.freeze([
         evolutionStage('无', '白板磁暴车', '无效果'),
@@ -289,12 +299,26 @@ function applyTankEvolution(tank, evolutionVisual = null) {
     tank.evolutionShieldBrokenHandled = false;
     tank.evolutionRegenCue = 0;
     tank.evolutionBurnTick = 0;
+    tank.evolutionShieldToxinTick = 0;
     tank.evolutionRevealTimer = 0;
     if(stage && stage.effects.fireRateMult) tank.fireRate *= stage.effects.fireRateMult;
     if(stage && stage.effects.altitudeMult) tank.maxAltitudeMult = stage.effects.altitudeMult;
     if(stage && stage.effects.climbSpeedMult) tank.climbSpeedMult = stage.effects.climbSpeedMult;
     if(stage && stage.effects.ultimateCooldownMult && tank.ultimateData) {
         tank.ultimateData = { ...tank.ultimateData, cooldown: tank.ultimateData.cooldown * stage.effects.ultimateCooldownMult };
+    }
+    if(tank.tankType === 'zuoyan_x' && tank.ultimateData) {
+        const effects = stage ? stage.effects : {};
+        tank.ultimateData = {
+            ...tank.ultimateData,
+            radius:(tank.ultimateData.radius || 200) + (effects.commandRadiusBonus || 0),
+            duration:(tank.ultimateData.duration || 6) + (effects.commandDurationBonus || 0),
+            fireRateBoost:(tank.ultimateData.fireRateBoost || 0) + (effects.commandFireRateBonus || 0),
+            speedBoost:(tank.ultimateData.speedBoost || 0) + (effects.commandSpeedBonus || 0),
+            armorBoost:(tank.ultimateData.armorBoost || 0) + (effects.commandArmorBonus || 0),
+            damageBoost:effects.commandDamageBonus || 0,
+            teamShield:effects.commandShield || 0
+        };
     }
     return tank;
 }
@@ -317,6 +341,67 @@ function getEvolutionTeamList(tank) {
             ...(typeof allies !== 'undefined' ? allies : [])
         ]
         : (typeof enemies !== 'undefined' ? enemies : []);
+}
+
+function applyEvolutionCommandBuff(tank) {
+    if(!tank || !tank.ultimateData) return 0;
+    const ult = tank.ultimateData;
+    let count = 0;
+    getEvolutionTeamList(tank).forEach(ally => {
+        if(!ally || ally.dead || Math.hypot(ally.x - tank.x, ally.y - tank.y) > ult.radius) return;
+        ally.fireRateBuff = Math.max(ally.fireRateBuff || 0, ult.fireRateBoost || 0);
+        ally.speedBuffFromCommander = Math.max(ally.speedBuffFromCommander || 0, ult.speedBoost || 0);
+        ally.commanderArmorBoost = Math.max(ally.commanderArmorBoost || 0, ult.armorBoost || 0);
+        ally.commanderDamageBoost = Math.max(ally.commanderDamageBoost || 0, ult.damageBoost || 0);
+        ally.commanderBuffTimer = Math.max(ally.commanderBuffTimer || 0, ult.duration || 6);
+        ally.commanderBuffOwner = tank;
+        if(ult.teamShield) {
+            ally.shieldActive = true;
+            ally.shieldHp = Math.max(ally.shieldHp || 0, ult.teamShield);
+        }
+        count++;
+    });
+    return count;
+}
+
+const ELEMENTAL_STATUS_MAX_DURATION = 15;
+const ELEMENTAL_FREEZE_DURATION = 1.5;
+const ELEMENTAL_FREEZE_ACTION_MULTIPLIER = .5;
+
+function getTankActionSpeedMultiplier(tank) {
+    return tank && (tank.elementalFreezeTimer || 0) > 0
+        ? ELEMENTAL_FREEZE_ACTION_MULTIPLIER
+        : 1;
+}
+
+function applyTankElementalStatus(tank, type, duration, options = {}) {
+    if(!tank || tank.dead || !Number.isFinite(duration) || duration <= 0) return 0;
+    const addDuration = (field, amount) => {
+        tank[field] = Math.min(ELEMENTAL_STATUS_MAX_DURATION, Math.max(0, tank[field] || 0) + amount);
+        return tank[field];
+    };
+    if(type === 'ice') {
+        tank.elementalFreezeSlow = ELEMENTAL_FREEZE_ACTION_MULTIPLIER;
+        return addDuration('elementalFreezeTimer', duration);
+    }
+    if(type === 'toxin') {
+        const remaining = addDuration('toxinDebuffTimer', duration);
+        tank.toxinTickTimer = Math.min(tank.toxinTickTimer > 0 ? tank.toxinTickTimer : Infinity, options.interval || 1);
+        tank.toxinDamage = Math.max(tank.toxinDamage || 0, options.damage || 0);
+        tank.toxinSlow = Math.max(tank.toxinSlow || 0, options.slow || 0);
+        tank.toxinSource = options.source || tank.toxinSource || null;
+        tank.toxinSpreadRadius = Math.max(tank.toxinSpreadRadius || 0, options.spreadRadius || 0);
+        tank.evolutionToxinSpreadDone = false;
+        return remaining;
+    }
+    if(type === 'fire') {
+        const remaining = addDuration('burnTimer', duration);
+        tank.burnTickTimer = Math.min(tank.burnTickTimer > 0 ? tank.burnTickTimer : Infinity, options.interval || 1);
+        tank.burnDamage = Math.max(tank.burnDamage || 0, options.damage || 0);
+        tank.burnSource = options.source || tank.burnSource || null;
+        return remaining;
+    }
+    return 0;
 }
 
 function pushTankVisualEffect(kind, x, y, options = {}) {
@@ -343,11 +428,13 @@ function pushTankVisualEffect(kind, x, y, options = {}) {
 }
 
 function getTankWeaponAnimationTheme(tank, projectile = null) {
+    const style = projectile && projectile.evolutionStyle || '';
     if(projectile && projectile.isDrone || tank && tank.tankType === 'zuoyan31') return 'drone';
     if(tank && tank.tankType === 'duoduo_emp') return 'emp';
-    if(tank && tank.tankType === 'zuoyan33') return 'toxin';
-    if(tank && tank.tankType === 'duoduo_rocket' || projectile && (projectile.isRocket || projectile.type === 'rocket')) return 'rocket';
+    if(projectile && projectile.toxinData || /toxic|toxin|plague|venom/.test(style)) return 'toxin';
+    if(projectile && projectile.fireData || /fire|inferno|sun|skyfire/.test(style)) return 'fire';
     if(projectile && projectile.evolutionStyle && projectile.evolutionStyle.includes('prism')) return 'ice';
+    if(projectile && (projectile.isRocket || projectile.type === 'rocket')) return 'rocket';
     if(projectile && (projectile.type === 'mg' || projectile.type === 'airmg')) return 'mg';
     return 'shell';
 }
@@ -357,7 +444,8 @@ function spawnTankShotAnimation(tank, projectile, angle) {
     const theme = getTankWeaponAnimationTheme(tank, projectile);
     const distance = projectile.type === 'bomb' ? 0 : (tank.turretSize || 24) + 16;
     const colors = {
-        ice: ['#d9fbff', '#4bdcff'], emp: ['#fff0a8', '#ff7b29'], toxin: ['#d9ff79', '#4be579'],
+        ice: ['#d9fbff', '#4bdcff'], emp: ['#fff0a8', '#ff7b29'], toxin: ['#d9ff79', '#7a35c9'],
+        fire: ['#fff0a0', '#ff3b18'],
         rocket: ['#fff0a0', '#ff4c1f'], drone: ['#d9f5ff', '#4daeff'], mg: ['#fffad0', '#ffd12e'],
         shell: ['#fff4b8', '#ff7626']
     }[theme];
@@ -374,7 +462,8 @@ function spawnTankImpactAnimation(projectile, target = null) {
     if(!projectile) return;
     const theme = getTankWeaponAnimationTheme(projectile.owner, projectile);
     const colors = {
-        ice: ['#e8fdff', '#4bdcff'], emp: ['#ffe787', '#ff6c26'], toxin: ['#caff62', '#3ddc74'],
+        ice: ['#e8fdff', '#4bdcff'], emp: ['#ffe787', '#ff6c26'], toxin: ['#caff62', '#7d2fc4'],
+        fire: ['#fff1a0', '#ff3518'],
         rocket: ['#fff0a0', '#ff3e18'], drone: ['#c8f3ff', '#429dff'], mg: ['#fff8bc', '#ffcf31'],
         shell: ['#fff0af', '#ff5724']
     }[theme];
@@ -393,14 +482,15 @@ function spawnTankUltimateAnimation(tank) {
     tank.evolutionLastUltimateVisualAt = visualClock;
     const themes = {
         zuoyan29:['ice','#bdf8ff','#42d8ff'], zuoyan30:['shadow','#d5a4ff','#6f2aff'],
-        zuoyan1:['fire','#fff09a','#ff391b'], zuoyan31:['drone','#d5f4ff','#438dff'],
+        zuoyan1:['fire','#fff09a','#ff391b'], zuoyan_x:['command','#f0dcff','#8f54ff'],
+        zuoyan31:['drone','#d5f4ff','#438dff'],
         zuoyan32:['phantom','#f0c6ff','#a34cff'], zuoyan33:['toxin','#d7ff73','#3bdb70'],
-        xingchen27a:['shield','#e8ff9a','#43df7b'], xingchen27b:['fortress','#fff0a0','#ffbd35'],
+        xingchen27a:['toxin','#e8ff9a','#7b36c6'], xingchen27b:['fortress','#fff0a0','#ffbd35'],
         xingchen27s:['teleport','#d8f6ff','#3bbdff'], xingchen27c:['radar','#e7ff9a','#55e76b'],
-        xingchen27d:['link','#d8ffac','#42d777'], xingchen27e:['judgment','#fff0a8','#ff522e'],
+        xingchen27d:['link','#d8ffac','#42d777'], xingchen27e:['fire','#fff0a8','#ff3d20'],
         duoduo:['salvo','#fff2a4','#ff5624'], duoduo_ifv:['storm','#fff4a0','#ffc629'],
         duoduo_spat:['sniper','#ffd2cb','#ff211b'], duoduo_eng:['build','#fff0ad','#e8872d'],
-        duoduo_rocket:['rocket','#fff09a','#ff3f19'], duoduo_emp:['emp','#fff0a0','#ff7728'],
+        duoduo_rocket:['fire','#fff09a','#ff3f19'], duoduo_emp:['emp','#fff0a0','#ff7728'],
         niuniu_heli:['airstrike','#e0f9ff','#4bc5ff'], kimi_tank:['code','#e4ceff','#9d4cff']
     };
     const spec = themes[tank.tankType] || ['power','#ffffff','#65c8ff'];
@@ -553,14 +643,16 @@ function createEvolutionRocketImpact(projectile) {
         for(let index = 0; index < projectile.rocketSplitCount; index++) {
             const angle = index / projectile.rocketSplitCount * Math.PI * 2;
             const distance = projectile.rocketSplitRadius || 200;
-            bullets.push({
+            const childFireball = {
                 x: projectile.x, y: projectile.y, z: Math.max(28, (projectile.z || 0) + 70),
                 vx: Math.cos(angle) * 3.2, vy: Math.sin(angle) * 3.2, vz: 30,
                 damage: projectile.damage * .55, team: projectile.team, type: 'bomb', owner: projectile.owner,
                 life: .65, maxLife: .65, age: 0, hitTanks: new Set(),
                 explosionWidth: distance * .55, explosionHeight: distance * .55, explosionRadius: distance * .28,
-                evolutionTrail: '#ffb24a'
-            });
+                evolutionTrail: '#ffb24a', evolutionStyle:projectile.evolutionStyle,
+                evolutionScale:projectile.evolutionScale || 1, fireData:projectile.fireData ? {...projectile.fireData} : null
+            };
+            bullets.push(childFireball);
         }
     }
     if(typeof createParticles === 'function' && (projectile.rocketFireDuration || projectile.rocketSplitCount)) {
@@ -600,6 +692,7 @@ function applyTankEvolutionToProjectile(tank, projectile) {
     const effects = tank.evolutionEffects || {};
     projectile.evolutionStyle = effects.projectileStyle || null;
     projectile.evolutionTrail = effects.projectileTrail || null;
+    projectile.evolutionScale = effects.projectileScale || 1;
     if(projectile.type === 'shell') {
         projectile.damage *= effects.shellDamageMult || 1;
         projectile.explosionRadius = Math.max(projectile.explosionRadius || 0, (effects.shellSplash || 0) * (effects.splashMult || 1));
@@ -631,8 +724,19 @@ function applyTankEvolutionToProjectile(tank, projectile) {
             interval: 1,
             slow: effects.toxinSlow || 0,
             chance: effects.toxinChance,
+            splashRadius: effects.toxinSplashRadius || 0,
             spreadRadius: effects.toxinSpreadRadius || 0,
             source: tank
+        };
+    }
+    if(effects.igniteChance) {
+        projectile.fireData = {
+            duration:effects.igniteDuration || 3,
+            damage:effects.igniteDamage || 20,
+            interval:1,
+            chance:effects.igniteChance,
+            splashRadius:effects.fireSplashRadius || 0,
+            source:tank
         };
     }
     if(effects.empMinimapJam) {
@@ -673,11 +777,39 @@ function applyTankEvolutionToProjectile(tank, projectile) {
     return projectile;
 }
 
+function tryApplyProjectileElementalStatus(projectile, target) {
+    if(!projectile || !target || target.dead) return [];
+    const triggered = [];
+    const applySplash = (type, data, radius) => {
+        if(!radius || typeof getNearbyTanks !== 'function') return;
+        getNearbyTanks(target.x, target.y, radius).forEach(other => {
+            if(!other || other === target || other.dead || other.team === projectile.team) return;
+            applyTankElementalStatus(other, type, data.duration || 3, data);
+        });
+    };
+    if(projectile.toxinData && Math.random() < (projectile.toxinData.chance || 0)) {
+        applyTankElementalStatus(target, 'toxin', projectile.toxinData.duration || 3, projectile.toxinData);
+        applySplash('toxin', projectile.toxinData, projectile.toxinData.splashRadius || 0);
+        if(typeof createParticles === 'function') createParticles(target.x, target.y, 16, '#78e85d', 1.45);
+        triggered.push('toxin');
+    }
+    if(projectile.fireData && Math.random() < (projectile.fireData.chance || 0)) {
+        applyTankElementalStatus(target, 'fire', projectile.fireData.duration || 3, projectile.fireData);
+        applySplash('fire', projectile.fireData, projectile.fireData.splashRadius || 0);
+        if(typeof createParticles === 'function') createParticles(target.x, target.y, 18, '#ff6326', 1.65);
+        triggered.push('fire');
+    }
+    return triggered;
+}
+
 function modifyTankEvolutionOutgoingDamage(projectile, target, damage) {
     if(!projectile || !target || damage <= 0) return damage;
     const owner = projectile.owner;
     const effects = owner && owner.evolutionEffects || {};
     let next = damage;
+    if(owner && owner.commanderDamageBoost) next *= 1 + owner.commanderDamageBoost;
+    if(effects.toxinTargetDamageMult && target.toxinDebuffTimer > 0) next *= effects.toxinTargetDamageMult;
+    if(effects.burningTargetDamageMult && target.burnTimer > 0) next *= effects.burningTargetDamageMult;
     if(effects.toxinCritChance && target.toxinDebuffTimer > 0 && Math.random() < effects.toxinCritChance) {
         next *= 1.5;
         projectile.evolutionCritical = true;
@@ -692,6 +824,9 @@ function modifyTankEvolutionOutgoingDamage(projectile, target, damage) {
             next *= 1.5;
             projectile.evolutionCritical = true;
         }
+    }
+    if(owner && effects.toxinLeech && target.toxinDebuffTimer > 0) {
+        owner.hp = Math.min(owner.maxHp, owner.hp + next * effects.toxinLeech);
     }
     return next;
 }
@@ -720,10 +855,7 @@ function handleTankEvolutionProjectileHit(projectile, target, dealtDamage) {
         const controlImmune = (target.shieldActive && targetEffects.shieldControlImmune) ||
             (target.fortressActive && targetEffects.fortressControlImmune);
         if(!controlImmune && (guaranteed || Math.random() < effects.freezeChance)) {
-            const duration = effects.freezeDuration || .5;
-            target.evolutionFreezeTimer = Math.max(target.evolutionFreezeTimer || 0, duration);
-            target.mapSlow = Math.max(target.mapSlow || 0, .65);
-            target.mapSlowTimer = Math.max(target.mapSlowTimer || 0, duration);
+            applyTankElementalStatus(target, 'ice', ELEMENTAL_FREEZE_DURATION, { source: owner });
             if(typeof createParticles === 'function') createParticles(target.x, target.y, 14, '#86eaff', 1.35);
         }
         if(owner.ultimateActive && effects.ultimateFirstFreeze) owner.evolutionUltimateFirstHit = true;
@@ -868,6 +1000,9 @@ function handleTankEvolutionKill(tank, target = null) {
         }
         if(effects.judgmentKillHeal) tank.hp = Math.min(tank.maxHp, tank.hp + effects.judgmentKillHeal);
     }
+    if(target && effects.burningKillHeal && target.burnTimer > 0) {
+        tank.hp = Math.min(tank.maxHp, tank.hp + effects.burningKillHeal);
+    }
 }
 
 function updateTankEvolution(tank, dt) {
@@ -913,10 +1048,10 @@ function updateTankEvolution(tank, dt) {
     if(tank.toxinDebuffTimer > 0 && tank.toxinSpreadRadius && tank.toxinSource && !tank.evolutionToxinSpreadDone) {
         getEvolutionTeamList(tank).forEach(ally => {
             if(!ally || ally === tank || ally.dead || Math.hypot(ally.x - tank.x, ally.y - tank.y) > tank.toxinSpreadRadius) return;
-            ally.toxinDebuffTimer = Math.max(ally.toxinDebuffTimer || 0, Math.min(3, tank.toxinDebuffTimer));
-            ally.toxinTickTimer = 1; ally.toxinDamage = Math.max(ally.toxinDamage || 0, tank.toxinDamage || 0);
-            ally.toxinSlow = Math.max(ally.toxinSlow || 0, tank.toxinSlow || 0);
-            ally.toxinSource = tank.toxinSource; ally.toxinSpreadRadius = tank.toxinSpreadRadius;
+            applyTankElementalStatus(ally, 'toxin', Math.min(3, tank.toxinDebuffTimer), {
+                interval:1, damage:tank.toxinDamage || 0, slow:tank.toxinSlow || 0,
+                source:tank.toxinSource, spreadRadius:tank.toxinSpreadRadius
+            });
         });
         tank.evolutionToxinSpreadDone = true;
     }
@@ -990,12 +1125,34 @@ function updateTankEvolution(tank, dt) {
         });
     }
     tank.evolutionShieldWasActive = !!tank.shieldActive;
+    if(effects.shieldToxinDps && tank.shieldActive) {
+        tank.evolutionShieldToxinTick = (tank.evolutionShieldToxinTick || 0) - dt;
+        if(tank.evolutionShieldToxinTick <= 0) {
+            const radius = tank.ultimateData && tank.ultimateData.shieldRadius || 150;
+            getEvolutionEnemyList(tank).forEach(enemy => {
+                if(!enemy || enemy.dead || Math.hypot(enemy.x - tank.x, enemy.y - tank.y) > radius) return;
+                if(typeof applyDirectDamage === 'function') applyDirectDamage(enemy, effects.shieldToxinDps, tank, '毒雾护罩');
+                if(Math.random() < (effects.shieldToxinChance || 0)) {
+                    applyTankElementalStatus(enemy, 'toxin', effects.toxinDuration || 3, {
+                        interval:1, damage:effects.toxinDamage || 20, slow:effects.toxinSlow || 0,
+                        source:tank, spreadRadius:effects.toxinSpreadRadius || 0
+                    });
+                }
+            });
+            tank.evolutionShieldToxinTick = 1;
+        }
+    }
     if(effects.ultimateBurnDps && tank.ultimateActive) {
         tank.evolutionBurnTick = (tank.evolutionBurnTick || 0) - dt;
         if(tank.evolutionBurnTick <= 0) {
             getEvolutionEnemyList(tank).forEach(enemy => {
                 if(enemy && !enemy.dead && Math.hypot(enemy.x - tank.x, enemy.y - tank.y) <= 150) {
                     if(typeof applyDirectDamage === 'function') applyDirectDamage(enemy, effects.ultimateBurnDps, tank, '狂暴自燃');
+                    if(Math.random() < (effects.ultimateIgniteChance || 0)) {
+                        applyTankElementalStatus(enemy, 'fire', effects.igniteDuration || 3, {
+                            interval:1, damage:effects.igniteDamage || 20, source:tank
+                        });
+                    }
                 }
             });
             tank.evolutionBurnTick = 1;

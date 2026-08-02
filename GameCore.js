@@ -13,6 +13,7 @@ function startGame() {
         return;
     }
     resetMatchStats();
+    if(typeof resetRankedMatchSettlement === 'function') resetRankedMatchSettlement();
     smokeClouds = [];
     apsInterceptEffects = [];
     damageUpgradeState = { active: false, pending: false, delayTimer: 0, deaths: 0, offered: [], chosen: [] };
@@ -26,9 +27,11 @@ function startGame() {
     const aa = parseInt(document.getElementById('aaSlider').value);
     let dayNight = 'day';
     if(gameMode === 'sneak') dayNight = 'night';
-    else if(['escort', 'deathmatch', 'boss'].includes(gameMode)) dayNight = 'day';
+    else if(['escort', 'deathmatch', 'boss', 'ranked', 'training'].includes(gameMode)) dayNight = 'day';
     else dayNight = document.getElementById('dayNight').value;
-    const difficulty = document.getElementById('difficulty').value;
+    let difficulty = document.getElementById('difficulty').value;
+    if(gameMode === 'ranked') difficulty = 'normal';
+    else if(gameMode === 'training') difficulty = 'easy';
     const viewMode = '3d';
     const customConfig = gameMode === 'custom' && typeof customRoomConfig !== 'undefined'
         ? JSON.parse(JSON.stringify(customRoomConfig))
@@ -55,6 +58,8 @@ function startGame() {
             escort: '🚛 护送模式 - 黄金VIP与蓝军全力突击至B端',
             deathmatch: '💀 死斗模式 - 率先取得50次击杀',
             boss: '👑 首领模式 - 争夺巨型BOSS最后一击',
+            ranked: '🏅 赛季排位 - 胜负与个人表现影响段位分',
+            training: '🎯 训练场 - 无限资源 · 靶车自动复位 · 无战绩压力',
             custom: '🧰 自定义房间 - 规则、队伍与坦克池由房主定义'
         };
         specialModeInfo.textContent = labels[gameMode] || '';
@@ -65,7 +70,8 @@ function startGame() {
     if(gameMode === 'custom' && typeof applyCustomRoomMapRules === 'function') applyCustomRoomMapRules();
     initPathGrid();
     spawnTanks(tankData, ammo, mg, aa);
-    if(typeof isBeginnerModeEnabled === 'function' && isBeginnerModeEnabled() && player) {
+    if(typeof isBeginnerModeEnabled === 'function' && isBeginnerModeEnabled() && player &&
+       !['ranked','training'].includes(gameMode)) {
         player.maxHp = Math.round(player.maxHp * 1.35);
         player.hp = player.maxHp;
         player.maxShells = Math.ceil(player.maxShells * 1.25);
@@ -81,6 +87,7 @@ function startGame() {
     if(typeof distributeFactoryInitialTanks === 'function') distributeFactoryInitialTanks();
     if(typeof initializeSneakRescueMechanic === 'function') initializeSneakRescueMechanic();
     if(typeof updateWeaponHudMode === 'function') updateWeaponHudMode(player);
+    if(gameMode === 'training' && typeof initializeTrainingMode === 'function') initializeTrainingMode();
     initBaseSpawns();
     initSpatialGrid();
     camera.zoom = (MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic).cameraZoom || 1;
@@ -99,7 +106,8 @@ function startGame() {
     }
     if(gameMode === 'custom' && customConfig) gameTime = customConfig.durationMinutes * 60;
     else if(gameMode === 'defense') gameTime = 180;
-    else if(['escort', 'deathmatch', 'boss'].includes(gameMode)) gameTime = 300;
+    else if(['escort', 'deathmatch', 'boss', 'ranked'].includes(gameMode)) gameTime = 300;
+    else if(gameMode === 'training') gameTime = 3600;
     else gameTime = CONFIG.gameTime;
     lastTime = performance.now();
     exhaustTrails = [];
@@ -596,6 +604,7 @@ function spawnTanks(tankData, ammo, mg, aa) {
     const customConfig = gameMode === 'custom' && typeof customRoomConfig !== 'undefined' ? customRoomConfig : null;
     let blueCount = customConfig ? customConfig.blueCount : 10;
     let redCount = customConfig ? customConfig.redCount : (gameMode === 'sneak' ? 30 : 10);
+    if(gameMode === 'training') { blueCount = 1; redCount = 5; }
     const blueDeployment=findBaseDeploymentPoint('blue',0);
     let blueBaseX = blueDeployment.x, blueBaseY = blueDeployment.y;
     if(gameMode === 'sneak') {
@@ -705,6 +714,7 @@ function spawnTanks(tankData, ammo, mg, aa) {
         else if (gameMode === 'escort') redSkillMult = 1.10;
         else if (gameMode === 'deathmatch') redSkillMult = 1.08;
         else if (gameMode === 'boss') redSkillMult = 1.05;
+        else if (gameMode === 'ranked') redSkillMult = 1.14;
         tank.aiSkillLevel = baseSkill * redSkillMult;
         tank.aiDamageMult = gameMode === 'defense' ? 1.0 : (gameConfig.difficulty === 'easy' ? 1.02 : gameConfig.difficulty === 'hard' ? 1.14 : 1.05);
         tank.hp = Math.floor(tank.hp * (gameMode === 'defense' ? 1.05 : (gameConfig.difficulty === 'hard' ? 1.18 : 1.08)));
@@ -871,6 +881,9 @@ function createTank(data, x, y, team, isPlayer, masteryLevelOverride = null) {
         lastManualAimTime: 0,
         speedBuffFromCommander: 0,
         fireRateBuff: 0,
+        commanderArmorBoost: 0,
+        commanderDamageBoost: 0,
+        commanderBuffTimer: 0,
         commanderBuffOwner: null,
         minimapJammed: false,
         minimapJamTimer: 0,
@@ -894,8 +907,9 @@ function createTank(data, x, y, team, isPlayer, masteryLevelOverride = null) {
         judgeTarget: null,
         judged: false,
         judgeOwner: null,
+        elementalFreezeTimer: 0, elementalFreezeSlow: .5,
         toxinDebuffTimer: 0, toxinTickTimer: 0, toxinDamage: 0, toxinSlow: 0,
-        burnTimer: 0, burnTickTimer: 0, burnDamage: 0,
+        burnTimer: 0, burnTickTimer: 0, burnDamage: 0, burnSource: null,
         snowIdleTimer: 0, freezeLevel: 0, freezeDamageTimer: 1, waterDamageTimer: 1,
         environmentLastPos: {x, y}, lastSnowTrackPos: {x, y}
     };
@@ -1019,17 +1033,21 @@ function update(dt) {
         return;
     }
 
+    if(gameMode === 'training' && typeof updateTrainingMode === 'function') updateTrainingMode(dt);
+
     // 清理死亡坦克，防止内存泄漏和卡顿
     const beforeClean = allies.length + enemies.length;
-    allies = allies.filter(t => t && !t.dead);
-    enemies = enemies.filter(t => t && !t.dead);
+    if(gameMode !== 'training') {
+        allies = allies.filter(t => t && !t.dead);
+        enemies = enemies.filter(t => t && !t.dead);
+    }
     const afterClean = allies.length + enemies.length;
     if (beforeClean !== afterClean) {
         console.log('[CLEANUP] 清理死亡坦克:', beforeClean - afterClean, '辆');
     }
 
-    gameTime -= dt;
-    if(gameTime <= 0 && !damageUpgradeState.pending) {
+    if(gameMode !== 'training') gameTime -= dt;
+    if(gameMode !== 'training' && gameTime <= 0 && !damageUpgradeState.pending) {
         if(typeof handleBattleTimeExpired === 'function' && handleBattleTimeExpired()) {
             updateTimer();
             return;
@@ -1053,7 +1071,7 @@ function update(dt) {
     updateSpatialGrid();
     
     updateOutposts(dt);
-    if(['classic','defense','escort','deathmatch','boss'].includes(gameMode)||
+    if(['classic','ranked','defense','escort','deathmatch','boss'].includes(gameMode)||
        (gameMode==='custom'&&typeof customRoomConfig!=='undefined'&&customRoomConfig.reinforcements)) updateBaseSpawns(dt);
     if(!['escort','deathmatch','boss'].includes(gameMode)) updateBlueBaseShield(dt);
     updateNeutralNPCs(dt);
@@ -1360,12 +1378,14 @@ function updateTank(tank, dt) {
         console.error('[UPDATE_TANK] Player position is NaN at start of updateTank! x:', tank.x, 'y:', tank.y, 'angle:', tank.angle);
     }
     if(tank.invincible > 0) tank.invincible -= dt;
-    if(tank.fireCooldown > 0) tank.fireCooldown -= dt;
-    if(tank.mgCooldown > 0) tank.mgCooldown -= dt;
-    if(tank.aaCooldown > 0) tank.aaCooldown -= dt;
     updateStatusEffects(tank, dt);
+    const actionSpeed = typeof getTankActionSpeedMultiplier === 'function' ? getTankActionSpeedMultiplier(tank) : 1;
+    const actionDt = dt * actionSpeed;
+    if(tank.fireCooldown > 0) tank.fireCooldown -= actionDt;
+    if(tank.mgCooldown > 0) tank.mgCooldown -= actionDt;
+    if(tank.aaCooldown > 0) tank.aaCooldown -= actionDt;
     if(typeof updateTankEvolution === 'function') updateTankEvolution(tank, dt);
-    if(tank.isFlying && typeof updateHelicopterFlight === 'function') updateHelicopterFlight(tank, dt);
+    if(tank.isFlying && typeof updateHelicopterFlight === 'function') updateHelicopterFlight(tank, actionDt);
     if(tank.dead) return;
     if(tank.trailDebuff > 0) {
         tank.trailDebuff -= dt;
@@ -1383,7 +1403,14 @@ function updateTank(tank, dt) {
         const worldMouseX = worldMouse.x;
         const worldMouseY = worldMouse.y;
         if((tank.turretJamTimer || 0) <= 0) {
-            tank.turretAngle = Math.atan2(worldMouseY - tank.y, worldMouseX - tank.x);
+            const desiredTurretAngle = Math.atan2(worldMouseY - tank.y, worldMouseX - tank.x);
+            if(actionSpeed < 1) {
+                let turretDiff = desiredTurretAngle - tank.turretAngle;
+                while(turretDiff > Math.PI) turretDiff -= Math.PI * 2;
+                while(turretDiff < -Math.PI) turretDiff += Math.PI * 2;
+                const maxTurretStep = tank.turnSpeed * 1.35 * actionSpeed * 60 * dt;
+                tank.turretAngle += Math.sign(turretDiff) * Math.min(Math.abs(turretDiff), maxTurretStep);
+            } else tank.turretAngle = desiredTurretAngle;
         }
         if(mouse.down) {
             if(currentWeapon === 'shell') {
@@ -1424,7 +1451,7 @@ function updateTank(tank, dt) {
             }
         }
     }
-    updateAutoAim(tank, dt);
+    updateAutoAim(tank, actionDt);
 
     if(!tank.canMove) return;
     const canPassObstacles = !tank.isFlying && (tank.canPassObstacles ||
@@ -1437,7 +1464,7 @@ function updateTank(tank, dt) {
         let diff = targetAngle - tank.angle;
         while(diff > Math.PI) diff -= Math.PI*2;
         while(diff < -Math.PI) diff += Math.PI*2;
-        const turnSpeed = tank.turnSpeed * (tank.turnBoost || 1) * tank.turretSpeedMult;
+        const turnSpeed = tank.turnSpeed * (tank.turnBoost || 1) * tank.turretSpeedMult * actionSpeed;
         tank.angle += diff * turnSpeed * 60 * dt;
         const moveSpeed = actualSpeed * 60 * dt;
         const newX = tank.x + Math.cos(tank.angle) * moveSpeed;
@@ -1565,6 +1592,19 @@ function addSnowTrack(tank) {
 
 function updateStatusEffects(tank, dt) {
     if(!tank || tank.dead) return;
+    if(tank.elementalFreezeTimer > 0) {
+        tank.elementalFreezeTimer = Math.max(0, tank.elementalFreezeTimer - dt);
+    }
+    if(tank.commanderBuffTimer > 0) {
+        tank.commanderBuffTimer = Math.max(0, tank.commanderBuffTimer - dt);
+        if(tank.commanderBuffTimer <= 0) {
+            tank.fireRateBuff = 0;
+            tank.speedBuffFromCommander = 0;
+            tank.commanderArmorBoost = 0;
+            tank.commanderDamageBoost = 0;
+            tank.commanderBuffOwner = null;
+        }
+    }
     if(tank.muzzleFlashTimer > 0) tank.muzzleFlashTimer = Math.max(0, tank.muzzleFlashTimer - dt);
     if(tank.recoilTimer > 0) tank.recoilTimer = Math.max(0, tank.recoilTimer - dt);
     if(tank.hitFlashTimer > 0) tank.hitFlashTimer = Math.max(0, tank.hitFlashTimer - dt);
@@ -1639,7 +1679,9 @@ function updateStatusEffects(tank, dt) {
             applyDirectDamage(tank, tank.toxinDamage || 0, tank.toxinSource || null, '毒素伤害');
         }
         if(tank.toxinDebuffTimer <= 0) {
+            tank.toxinDebuffTimer = 0;
             tank.toxinSlow = 0;
+            tank.toxinDamage = 0;
             tank.toxinSpreadRadius = 0;
             tank.toxinSource = null;
             tank.evolutionToxinSpreadDone = false;
@@ -1650,7 +1692,12 @@ function updateStatusEffects(tank, dt) {
         tank.burnTickTimer -= dt;
         if(tank.burnTickTimer <= 0) {
             tank.burnTickTimer += 1;
-            applyDirectDamage(tank, tank.burnDamage || 0, null, '燃烧伤害');
+            applyDirectDamage(tank, tank.burnDamage || 0, tank.burnSource || null, '燃烧伤害');
+        }
+        if(tank.burnTimer <= 0) {
+            tank.burnTimer = 0;
+            tank.burnDamage = 0;
+            tank.burnSource = null;
         }
     }
 }
@@ -1830,6 +1877,7 @@ function respawnPlayerNearBase() {
 // ==================== 检查胜利条件 ====================
 function checkWinCondition() {
     if(damageUpgradeState.active || damageUpgradeState.pending || gameState === 'damageUpgrade') return;
+    if(gameMode === 'training') return;
     if(gameMode === 'custom' && typeof customRoomConfig !== 'undefined') {
         if(customRoomConfig.rule === 'base') {
             if(bases.blue && bases.blue.hp <= 0) { endGame('baseDestroyed'); return; }
@@ -1920,6 +1968,13 @@ function finishEndGame(reason) {
     } catch(error) {
         console.warn('[RESULT] match statistics could not be saved:', error);
     }
+    if(gameMode === 'ranked' && typeof settleRankedMatch === 'function') {
+        try {
+            settleRankedMatch(winner === 'draw' ? 'draw' : winner === 'blue' ? 'victory' : 'defeat');
+        } catch(error) {
+            console.warn('[RANKED] rank settlement failed:', error);
+        }
+    }
 }
 
 function returnToHome() { resetGame(); }
@@ -1963,6 +2018,7 @@ function resetGame() {
     escortData = { vip: null, start: null, end: null, escortRadius: 320, contestRadius: 260, reached: false, destroyed: false, pathRefresh: 0 };
     deathmatchData = { kills: { blue: 0, red: 0 }, targetKills: 50 };
     bossModeData = { boss: null, defeated: false, killerTeam: null, buffTeam: null, buffTimer: 0, buffDuration: 30 };
+    if(typeof trainingSession !== 'undefined') trainingSession = null;
 
     // 重置画布
     if(canvas) {
@@ -1981,6 +2037,8 @@ function resetGame() {
     if(resultOverlay) resultOverlay.classList.remove('active');
     const damageUpgradeOverlay = document.getElementById('damageUpgradeOverlay');
     if(damageUpgradeOverlay) damageUpgradeOverlay.classList.remove('active');
+    const trainingControls = document.getElementById('trainingControls');
+    if(trainingControls) trainingControls.style.display = 'none';
     document.getElementById('startBtn').disabled = true;
     const threeHudLayer = document.getElementById('threeHudLayer');
     const threeThreatBorder = document.getElementById('threeThreatBorder');

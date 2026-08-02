@@ -313,6 +313,7 @@ let playerStats = {
     perfectGames: 0, modesWon: [], tanksUsed: [], seriesUsed: [], oneShotKills: 0,
     unlockedAchievements: [], unlockedTanks: [], tankMastery: {}, dailyTasks: null, matchStartTime: 0,
     snowMapWins: 0, selectedTankSkins: {}, pixelSkinUnlocked: false,
+    rankedSeason: null, rankedHistory: [],
     currentLowHpTime: 0, currentMatchLowHpAwarded: false
 };
 let currentMatchMasterySettled = false;
@@ -375,6 +376,8 @@ function loadStats() {
     playerStats.snowMapWins = Math.max(0, Number(playerStats.snowMapWins) || 0);
     playerStats.pixelSkinUnlocked = !!playerStats.pixelSkinUnlocked;
     if(playerStats.dailyTasks && typeof playerStats.dailyTasks !== 'object') playerStats.dailyTasks = null;
+    if(!Array.isArray(playerStats.rankedHistory)) playerStats.rankedHistory = [];
+    if(playerStats.rankedSeason && typeof playerStats.rankedSeason !== 'object') playerStats.rankedSeason = null;
 }
 
 function saveStats() {
@@ -499,6 +502,7 @@ function resetMatchStats() {
 }
 
 function endMatchStats(result) {
+    if(typeof gameMode !== 'undefined' && gameMode === 'training') return;
     const matchTime = (Date.now() - playerStats.matchStartTime) / 1000;
     playerStats.currentMatchSurvivalTime = matchTime;
     playerStats.maxSurvivalTime = Math.max(playerStats.maxSurvivalTime, matchTime);
@@ -568,6 +572,7 @@ function recordKill(tank, target, hitInfo = null) {
     }
     if(typeof awardKillScore === 'function') awardKillScore(tank, target);
     if(typeof handleTankEvolutionKill === 'function') handleTankEvolutionKill(tank, target);
+    if(tank && tank.isPlayer && typeof gameMode !== 'undefined' && gameMode === 'training') return;
     if(tank.isPlayer) {
         registerPlayerMultiKill(target);
         playerStats.currentMatchKills++;
@@ -595,6 +600,7 @@ function recordKill(tank, target, hitInfo = null) {
 }
 
 function recordSurvivalState(tank, dt) {
+    if(typeof gameMode !== 'undefined' && gameMode === 'training') return;
     if(!tank || tank.dead || tank.hp >= tank.maxHp * 0.2) {
         playerStats.currentLowHpTime = 0;
         return;
@@ -609,6 +615,7 @@ function recordSurvivalState(tank, dt) {
 }
 
 function recordShot(type) {
+    if(typeof gameMode !== 'undefined' && gameMode === 'training') return;
     if(type === 'shell' || type === 'bomb') playerStats.shellsFired++;
     else if(type === 'mg' || type === 'airmg') playerStats.mgFired++;
     else if(type === 'aa') playerStats.aaFired++;
@@ -616,11 +623,13 @@ function recordShot(type) {
 }
 
 function recordUltimate() {
+    if(typeof gameMode !== 'undefined' && gameMode === 'training') return;
     playerStats.ultimatesUsed++;
     checkAchievements();
 }
 
 function recordSmokeDeployment(quick = false) {
+    if(typeof gameMode !== 'undefined' && gameMode === 'training') return;
     playerStats.smokeGrenadesDeployed = (playerStats.smokeGrenadesDeployed || 0) + 1;
     if(quick) playerStats.quickSmokeDeploys = (playerStats.quickSmokeDeploys || 0) + 1;
     checkAchievements();
@@ -628,23 +637,27 @@ function recordSmokeDeployment(quick = false) {
 }
 
 function recordDamageUpgrade() {
+    if(typeof gameMode !== 'undefined' && gameMode === 'training') return;
     playerStats.damageUpgradesChosen = (playerStats.damageUpgradesChosen || 0) + 1;
     checkAchievements();
     saveStats();
 }
 
 function recordOutpostCapture(team) {
+    if(typeof gameMode !== 'undefined' && gameMode === 'training') return;
     if(team === 'blue') playerStats.outpostsCaptured++;
     checkAchievements();
 }
 
 function recordBaseDestroy(team, contributor = null) {
     if(typeof awardBaseScore === 'function') awardBaseScore(team, contributor);
+    if(typeof gameMode !== 'undefined' && gameMode === 'training') return;
     if(team === 'blue') playerStats.basesDestroyed++;
     checkAchievements();
 }
 
 function recordTankUsed(tankType) {
+    if(typeof gameMode !== 'undefined' && gameMode === 'training') return;
     if(!playerStats.tanksUsed.includes(tankType)) {
         playerStats.tanksUsed.push(tankType);
     }
@@ -664,6 +677,7 @@ function recordTankUsed(tankType) {
 }
 
 function recordSpeed(speed) {
+    if(typeof gameMode !== 'undefined' && gameMode === 'training') return;
     if(speed > playerStats.maxSpeedReached) {
         playerStats.maxSpeedReached = speed;
         checkAchievements();

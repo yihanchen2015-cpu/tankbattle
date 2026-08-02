@@ -164,7 +164,7 @@ const TANKS = {
         hp: 1000, maxHp: 1000, speed: 5.0, turnSpeed: 0.08, armor: 0.9, fireRate: 1.15,
         color: "#66cc66", accent: "#aaeeaa", shape: "medium",
         maxShells: 90, maxMG: 160, turretSize: 22, exhaustColor: "#66cc66",
-        ultimate: { name: "紧急跃迁", cooldown: 20, teleportDist: 200, shieldDuration: 3, shieldRadius: 80, shieldHp: 800, revealGhost: true }
+        ultimate: { name: "紧急跃迁", cooldown: 20, teleportDist: 500, shieldDuration: 3, shieldRadius: 80, shieldHp: 800, revealGhost: true }
     },
     duoduo: {
         name: "多多号主战坦克", desc: "正面攻坚型 - 阵地突破",

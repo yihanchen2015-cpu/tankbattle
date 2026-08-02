@@ -205,20 +205,14 @@ function activateUltimate() {
                 life: 3.0, hitTanks: new Set(), targetX, targetY, isRocket: true,
                 burnDuration: ult.burnDuration, burnDamage: ult.burnDamage
             };
+            if(typeof applyTankEvolutionToProjectile === 'function') applyTankEvolutionToProjectile(player, rocket);
             bullets.push(rocket);
             if(typeof spawnTankShotAnimation === 'function') spawnTankShotAnimation(player, rocket, targetAngle);
         }
         createParticles(player.x, player.y, 25, '#cc5522', 2.5);
         player.ultimateActive = false;
     } else if(player.tankType === 'zuoyan_x') {
-        const friendlyTanks = [player, ...allies].filter(t => t && !t.dead);
-        friendlyTanks.forEach(ally => {
-            if(Math.hypot(ally.x - player.x, ally.y - player.y) <= ult.radius) {
-                ally.fireRateBuff = ult.fireRateBoost;
-                ally.speedBuffFromCommander = ult.speedBoost;
-                ally.commanderBuffOwner = player;
-            }
-        });
+        if(typeof applyEvolutionCommandBuff === 'function') applyEvolutionCommandBuff(player);
         createParticles(player.x, player.y, 25, '#8866ff', 2);
     } else if(player.tankType === 'niuniu_heli') {
         const targetPoint = screenToWorld(mouse.x, mouse.y);

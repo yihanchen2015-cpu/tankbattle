@@ -425,7 +425,8 @@ function followPath(tank, dt) {
     let diff = targetAngle - tank.angle;
     while(diff > Math.PI) diff -= Math.PI * 2;
     while(diff < -Math.PI) diff += Math.PI * 2;
-    tank.angle += diff * tank.turnSpeed * 60 * dt;
+    const actionSpeed = typeof getTankActionSpeedMultiplier === 'function' ? getTankActionSpeedMultiplier(tank) : 1;
+    tank.angle += diff * tank.turnSpeed * actionSpeed * 60 * dt;
     const actualSpeed = getActualSpeed(tank);
     const newX = tank.x + Math.cos(tank.angle) * actualSpeed * 60 * dt;
     const newY = tank.y + Math.sin(tank.angle) * actualSpeed * 60 * dt;
@@ -476,16 +477,19 @@ function getActualSpeed(tank) {
 
     // 直升机不受障碍物影响，但重量影响仍然适用
     const statusSlow = Math.max(0.2, 1 - Math.max(tank.toxinSlow || 0, tank.mapSlow || 0));
+    const elementalFreezeSlow = typeof getTankActionSpeedMultiplier === 'function'
+        ? getTankActionSpeedMultiplier(tank)
+        : ((tank.elementalFreezeTimer || 0) > 0 ? .5 : 1);
     const freezeSlow = Math.max(0.45, 1 - (tank.freezeLevel || 0) * 0.55);
     const inWater = isTankInWater(tank);
     const waterSlow = inWater ? (tank.tankType === 'duoduo_ifv' ? 0.3 : 0.18) : 1;
     if(tank.isFlying) {
         const sandstormSlow = currentMap === 'desert' && environmentState.sandstormActive ? 0.62 : 1;
         const mapFlightPenalty = currentMap === 'city' ? 0.78 : currentMap === 'snow' ? 0.70 : currentMap === 'island' ? 0.80 : currentMap === 'volcano' ? 0.88 : currentMap === 'factory' ? 0.84 : 1;
-        return speed * weightFactor * 1.3 * statusSlow * sandstormSlow * mapFlightPenalty;
+        return speed * weightFactor * 1.3 * statusSlow * elementalFreezeSlow * sandstormSlow * mapFlightPenalty;
     }
 
     const trackMultiplier = (tank.trackDamageTimer || 0) > 0 ? CONFIG.trackDamageSpeedMultiplier : 1;
     const upgradeMultiplier = 1 + (tank.damageUpgradeSpeedBoost || 0);
-    return Math.max(tank.speed * 0.12, speed * upgradeMultiplier * weightFactor * statusSlow * freezeSlow * waterSlow * trackMultiplier);
+    return Math.max(tank.speed * 0.12, speed * upgradeMultiplier * weightFactor * statusSlow * elementalFreezeSlow * freezeSlow * waterSlow * trackMultiplier);
 }

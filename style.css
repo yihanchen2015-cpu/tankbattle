@@ -2771,3 +2771,99 @@
     border: 1px solid color-mix(in srgb, var(--attachment-color) 55%, transparent);
 }
 .weapon-attachment-hud span.empty { color: #69767b; border-color: #384248; }
+
+/* ==================== 赛季段位 / 训练场 ==================== */
+.mode-ranked {
+    color: #ffe276;
+    border-color: rgba(255,210,73,.72);
+    background: linear-gradient(135deg, rgba(94,64,10,.94), rgba(31,24,49,.96));
+    box-shadow: inset 0 0 26px rgba(255,204,63,.08);
+}
+.mode-ranked:hover { box-shadow: 0 0 28px rgba(255,207,67,.25), inset 0 0 28px rgba(255,212,73,.1); }
+.mode-training {
+    color: #83edff;
+    border-color: rgba(91,222,255,.64);
+    background: linear-gradient(135deg, rgba(12,72,88,.94), rgba(15,31,45,.97));
+}
+.mode-training:hover { box-shadow: 0 0 28px rgba(74,220,255,.24); }
+.mode-badge.ranked { background:rgba(255,202,55,.15);color:#ffe279;border:1px solid #dcae36; }
+.mode-badge.training { background:rgba(57,207,238,.14);color:#8ff2ff;border:1px solid #47d2ed; }
+.start-btn-ranked { border-color:rgba(255,210,75,.42) !important;color:#ffe27d !important; }
+
+.mode-brief {
+    width:min(800px,100%); box-sizing:border-box; margin:0 0 12px; padding:12px 16px;
+    display:flex; align-items:center; justify-content:center; gap:12px; border-radius:10px;
+    font-size:13px; line-height:1.45;
+}
+.mode-brief strong { white-space:nowrap; font-size:14px; }
+.ranked-brief { color:#f9df8a;background:rgba(84,59,8,.45);border:1px solid rgba(234,187,66,.4); }
+.training-brief { color:#a6f2ff;background:rgba(8,72,85,.42);border:1px solid rgba(79,215,239,.38); }
+
+.ranked-season-panel {
+    position:fixed; inset:0; z-index:760; display:none; overflow:auto; padding:24px;
+    box-sizing:border-box; background:rgba(2,5,10,.94); backdrop-filter:blur(12px);
+}
+.ranked-season-panel.active { display:block; animation:resultFadeIn .3s ease both; }
+.ranked-season-shell {
+    width:min(1080px,100%); margin:0 auto; padding:22px; box-sizing:border-box;
+    color:#eaf1f5; background:linear-gradient(145deg,#111820,#090d12);
+    border:1px solid #394750; border-radius:18px; box-shadow:0 24px 80px rgba(0,0,0,.55);
+}
+.ranked-season-head { display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid #29343c; }
+.ranked-season-head small { color:#8d9aa2;letter-spacing:.18em; }
+.ranked-season-head h2 { margin:4px 0 0;color:#ffe277;font-size:30px;letter-spacing:.08em; }
+.ranked-season-head button { width:42px;height:42px;border:1px solid #4a5861;border-radius:50%;background:#151d23;color:#fff;font-size:26px;cursor:pointer; }
+.season-hero {
+    display:flex;align-items:center;justify-content:space-between;gap:20px;margin:20px 0 14px;padding:24px;
+    background:radial-gradient(circle at 85% 50%,color-mix(in srgb,var(--rank-color) 18%,transparent),transparent 38%),#0b1116;
+    border:1px solid color-mix(in srgb,var(--rank-color) 55%,#26333b);border-radius:14px;
+}
+.season-hero small { color:#8d9ba3; }
+.season-hero h2 { margin:7px 0;color:var(--rank-color);font-size:clamp(28px,5vw,48px); }
+.season-hero p { margin:0;color:#bec8cd; }
+.season-emblem { min-width:120px;text-align:center;color:var(--rank-color);font-size:clamp(46px,8vw,82px);filter:drop-shadow(0 0 18px var(--rank-color)); }
+.season-progress { height:12px;overflow:hidden;background:#202a31;border:1px solid #334149;border-radius:999px; }
+.season-progress div { height:100%;box-shadow:0 0 16px currentColor;transition:width .4s ease; }
+.season-next { margin:8px 2px 22px;text-align:right;color:#96a4ac;font-size:12px; }
+.ranked-season-shell section { margin-top:22px; }
+.ranked-season-shell section h3 { color:#d7e0e5;font-size:15px;letter-spacing:.12em; }
+.rank-ladder { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px; }
+.rank-ladder-step { display:flex;flex-direction:column;gap:3px;padding:12px;color:#77858d;background:#0c1115;border:1px solid #273139;border-radius:9px; }
+.rank-ladder-step span { color:var(--rank-color);font-size:17px; }
+.rank-ladder-step small { font-size:10px; }
+.rank-ladder-step.current { color:#fff;border-color:var(--rank-color);box-shadow:inset 0 0 20px color-mix(in srgb,var(--rank-color) 15%,transparent); }
+.season-goals { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }
+.season-goal { display:flex;align-items:center;gap:12px;padding:14px;background:#0d1318;border:1px solid #2d3941;border-radius:10px; }
+.season-goal>span { color:#687780;font-size:23px; }
+.season-goal div { display:flex;flex-direction:column;gap:3px; }
+.season-goal small { color:#819099; }
+.season-goal.complete { border-color:#58c997;background:rgba(33,115,79,.12); }
+.season-goal.complete>span { color:#6ce3aa; }
+.season-history { list-style:none;margin:0;padding:0;display:grid;gap:7px; }
+.season-history li { display:flex;justify-content:space-between;gap:20px;padding:11px 13px;background:#0c1216;border-left:3px solid #56646c;color:#87949c; }
+.season-history strong { color:#d6dfe4; }
+.ranked-season-close { display:block;margin:25px auto 0;padding:11px 42px;border:1px solid #e5b943;border-radius:20px;background:#6f5310;color:#fff0a3;font-weight:800;cursor:pointer; }
+
+#trainingControls {
+    display:none; align-items:center; justify-content:center; flex-wrap:wrap; gap:7px;
+    max-width:min(900px,95vw); padding:8px 10px; color:#b9f5ff;
+    background:rgba(5,54,65,.9); border:1px solid rgba(82,220,244,.55); border-radius:10px;
+    pointer-events:auto;
+}
+#trainingHint { max-width:520px;font-size:12px;font-weight:700; }
+#trainingControls button { padding:5px 9px;border:1px solid #4ccde6;border-radius:7px;color:#ccf8ff;background:#103943;cursor:pointer;font-size:11px;font-weight:800; }
+#trainingControls .training-exit { border-color:#df7777;color:#ffd1d1;background:#4b2024; }
+#resultRankedRating {
+    display:none;margin-top:-25px;padding:9px 20px;border:1px solid currentColor;border-radius:18px;
+    background:rgba(8,11,16,.82);font-size:clamp(15px,2vw,21px);font-weight:900;box-shadow:0 0 20px rgba(255,220,90,.12);
+}
+
+@media (max-width:760px) {
+    .ranked-season-panel { padding:10px; }
+    .ranked-season-shell { padding:14px; }
+    .season-hero { padding:16px; }
+    .season-emblem { min-width:70px; }
+    .rank-ladder { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .season-goals { grid-template-columns:1fr; }
+    .mode-brief { align-items:flex-start;flex-direction:column;gap:4px; }
+}

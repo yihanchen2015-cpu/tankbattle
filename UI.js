@@ -44,18 +44,21 @@ function closeInfoPanels(exceptId = '') {
     const mastery = document.getElementById('masteryPanel');
     const dailyTasks = document.getElementById('dailyTasksPanel');
     const settings = document.getElementById('settingsModal');
+    const rankedSeason = document.getElementById('rankedSeasonPanel');
     if(intro && exceptId !== 'introModal') intro.classList.remove('active');
     if(tutorial && exceptId !== 'tutorialOverlay') tutorial.classList.remove('active');
     if(achievements && exceptId !== 'achievementPanel') achievements.style.display = 'none';
     if(mastery && exceptId !== 'masteryPanel') mastery.style.display = 'none';
     if(dailyTasks && exceptId !== 'dailyTasksPanel') dailyTasks.style.display = 'none';
     if(settings && exceptId !== 'settingsModal') settings.classList.remove('active');
+    if(rankedSeason && exceptId !== 'rankedSeasonPanel') rankedSeason.classList.remove('active');
 }
 
 function init() {
     console.log('[INIT] 游戏初始化开始');
     if(typeof initializeGameSettings === 'function') initializeGameSettings();
     loadStats();
+    if(typeof initializeSeasonSystems === 'function') initializeSeasonSystems();
     if(typeof initializeDailyTasks === 'function') initializeDailyTasks();
     checkHiddenTankUnlocks();
     setupAchievementPanel();
@@ -120,6 +123,7 @@ function resizeCanvas() {
 // ==================== 开始页面 ====================
 function setupStartScreen() {
     setupTutorial();
+    if(typeof refreshSeasonHomeSummary === 'function') refreshSeasonHomeSummary();
 }
 
 
@@ -315,7 +319,15 @@ function selectMode(mode) {
     const subtitle = document.getElementById('menuSubtitle');
     const dayNightRow = document.getElementById('dayNightRow');
     const customPanel = document.getElementById('customRoomPanel');
+    const rankedSummary = document.getElementById('rankedQueueSummary');
+    const trainingSummary = document.getElementById('trainingMenuSummary');
+    const difficultySelect = document.getElementById('difficulty');
+    const startButton = document.getElementById('startBtn');
     if(customPanel) customPanel.style.display = mode === 'custom' ? 'block' : 'none';
+    if(rankedSummary) rankedSummary.style.display = mode === 'ranked' ? 'flex' : 'none';
+    if(trainingSummary) trainingSummary.style.display = mode === 'training' ? 'flex' : 'none';
+    if(difficultySelect) difficultySelect.disabled = false;
+    if(startButton) startButton.textContent = '开始战斗';
     if(mode === 'classic') {
         badge.className = 'mode-badge classic';
         badge.textContent = '🏛 经典模式';
@@ -326,6 +338,14 @@ function selectMode(mode) {
         badge.textContent = '🛡 守点模式';
         subtitle.textContent = '孤军死守 | 弹药×3 | 撑过3分钟';
         dayNightRow.style.display = 'none';
+    } else if(mode === 'ranked') {
+        badge.className = 'mode-badge ranked';
+        const profile = typeof getRankedProfile === 'function' ? getRankedProfile() : null;
+        badge.textContent = profile ? `🏅 赛季排位 · ${profile.displayName}` : '🏅 赛季排位';
+        subtitle.textContent = '10v10标准竞技 | 胜负与表现影响段位分 | 新手辅助不生效';
+        dayNightRow.style.display = 'none';
+        if(difficultySelect) { difficultySelect.value = 'normal'; difficultySelect.disabled = true; }
+        if(startButton) startButton.textContent = '开始排位';
     } else if(mode === 'sneak') {
         badge.className = 'mode-badge sneak';
         badge.textContent = '🌙 绝地偷袭';
@@ -346,6 +366,13 @@ function selectMode(mode) {
         badge.textContent = '👑 首领模式';
         subtitle.textContent = '争夺巨型BOSS最后一击 | 大量分数与全队增益';
         dayNightRow.style.display = 'none';
+    } else if(mode === 'training') {
+        badge.className = 'mode-badge training';
+        badge.textContent = '🎯 训练场';
+        subtitle.textContent = '无限弹药与终极技能 | 靶车不会还击 | 战绩不计入存档';
+        dayNightRow.style.display = 'none';
+        if(difficultySelect) { difficultySelect.value = 'easy'; difficultySelect.disabled = true; }
+        if(startButton) startButton.textContent = '进入训练场';
     } else if(mode === 'custom') {
         badge.className = 'mode-badge custom';
         badge.textContent = '🧰 自定义房间';
@@ -416,7 +443,8 @@ function renderTankList() {
     }
     tankList.innerHTML = '';
 
-    const beginnerRoster = typeof isBeginnerModeEnabled === 'function' && isBeginnerModeEnabled();
+    const beginnerRoster = typeof isBeginnerModeEnabled === 'function' && isBeginnerModeEnabled() &&
+        !['ranked','training'].includes(gameMode);
     const beginnerNotice = document.getElementById('beginnerRosterNotice');
     if(beginnerNotice) beginnerNotice.style.display = beginnerRoster ? 'block' : 'none';
     if(beginnerRoster && currentTankFilter !== 'all' &&
