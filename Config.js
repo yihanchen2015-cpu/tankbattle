@@ -280,6 +280,14 @@ const TANKS = {
         maxShells: 90, maxMG: 180, maxAA: 20, turretSize: 24, exhaustColor: "#9c27b0",
         weight: 1.5, isHidden: true, unlockRequirement: 'tankAce',
         ultimate: { name: "瞒天过海", cooldown: 40, duration: 5, cloneCount: 3, cloneHp: 300, disguiseAs: 'zuoyan29', hpCost: 300 }
+    },
+    mecha_pea: {
+        name: "机甲神豌", desc: "三相核心型 - 故事模式最终奖励",
+        hp: 2400, maxHp: 2400, speed: 4.6, turnSpeed: 0.075, armor: 1.7, fireRate: 0.95,
+        color: "#5dc9c0", accent: "#f4ef86", shape: "heavy",
+        maxShells: 96, maxMG: 180, maxAA: 24, turretSize: 32, exhaustColor: "#7cf0b0",
+        weight: 58, isHidden: true, noMastery: true, unlockRequirement: 'storyComplete',
+        ultimate: { name: "三相共鸣", cooldown: 36, duration: 7, armorBoost: 1.5, speedBoost: 0.25 }
     }
 };
 

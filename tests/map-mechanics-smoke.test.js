@@ -15,7 +15,7 @@ const context = {
         helicopterAltitude: 240, helicopterMaxAltitude: 1000, helicopterClimbSpeed: 180
     },
     currentMap: 'volcano',
-    terrainZones: [], obstacles: [], mapElements: [],
+    terrainZones: [], obstacles: [], mapElements: [], bullets: [],
     player: null, allies: [], enemies: [],
     createParticles() {}, showDamageNumber() {}, showNotification() {}, showMessage() {},
     showJuiceCue(...args) { juiceCues.push(args); return true; },
@@ -32,6 +32,25 @@ vm.runInContext('initializeMapMechanics()', context);
 assert.strictEqual(vm.runInContext("terrainZones.filter(z => z.type === 'lava').length", context), 1, 'volcano should create one lava river');
 assert.strictEqual(vm.runInContext("terrainZones.filter(z => z.type === 'crystal').length", context), 4, 'volcano should create four edge crystal zones');
 assert(vm.runInContext('mapMechanicsState.lava.points.every((p, i) => { const q = getLavaPoint(p, i); return q.width >= 200 && q.width <= 400; })', context), 'dynamic lava width should stay within 200-400');
+assert.strictEqual(vm.runInContext("mapMechanicsState.tacticalTerrain.filter(z => z.type === 'hill').length", context), 2, 'outdoor maps should add two drivable high-ground areas');
+assert.strictEqual(vm.runInContext("mapMechanicsState.tacticalTerrain.some(z => z.type === 'jumpRamp')", context), true, 'outdoor maps should add a skill jump ramp');
+assert.strictEqual(vm.runInContext("mapMechanicsState.ancientCannon.type", context), 'ancientCannon', 'every match should hide one ancient cannon');
+
+vm.runInContext(`(() => {
+    initializeRandomWeather(0);
+    if(mapMechanicsState.weather.id !== 'dusk' || getWeatherVisionMultiplier() !== .68) throw new Error('dusk weather mismatch');
+    initializeRandomWeather(.26);
+    player={x:1000,y:1000,z:0,hp:1000,maxHp:1000,dead:false,isFlying:false,weatherMomentumX:180,weatherMomentumY:0};
+    applyWeatherCoast(player,.1,false);
+})()`, context);
+assert(vm.runInContext('player.x', context) > 1010, 'drizzle should preserve momentum after the player releases movement input');
+
+vm.runInContext(`(() => {
+    const hill=mapMechanicsState.tacticalTerrain.find(z=>z.type==='hill');
+    player={x:hill.x,y:hill.y,z:0,hp:1000,maxHp:1000,dead:false,isFlying:false,prevPos:{x:hill.x-5,y:hill.y}};
+    updateTacticalTerrain(.1,[player]);
+})()`, context);
+assert(vm.runInContext('player.z', context) >= 130, 'hill centers should physically raise ground vehicles');
 
 vm.runInContext(`(() => {
     const lavaPoint = getLavaPoint(mapMechanicsState.lava.points[2], 2);
@@ -74,6 +93,17 @@ assert.strictEqual(vm.runInContext("mapMechanicsState.factory.fans.length", cont
 assert.strictEqual(vm.runInContext("mapMechanicsState.factory.forklift.type", context), 'factoryForklift', 'factory should contain an autonomous forklift');
 assert.strictEqual(vm.runInContext("mapMechanicsState.factory.press.type", context), 'factoryPress', 'factory should contain a cycling hydraulic press');
 assert.strictEqual(vm.runInContext("obstacles.filter(o => o.type === 'factoryFacility' && o.factoryFloor === 1).length", context), 12, '1F should be the main facility area');
+vm.runInContext(`(() => {
+    const cannon=mapMechanicsState.ancientCannon;
+    player={id:'relic-hunter',team:'blue',x:cannon.x,y:cannon.y,z:cannon.z,angle:0,turretAngle:0,hp:1000,maxHp:1000,dead:false,isFlying:false,canMove:true};
+    updateAncientCannon([player]);
+    if(!cannon.controlled || player.canMove) throw new Error('ancient cannon was not picked up');
+    if(!fireAncientCannon(player,500,500)) throw new Error('ancient cannon did not fire');
+})()`, context);
+assert.strictEqual(vm.runInContext('bullets.filter(b => b.ancientCannon).length', context), 1, 'ancient cannon should create exactly one map-shell projectile');
+assert.strictEqual(vm.runInContext('mapMechanicsState.ancientCannon.fired', context), true, 'ancient cannon should become permanently spent after firing');
+assert.strictEqual(vm.runInContext('fireAncientCannon(player,600,600)', context), false, 'ancient cannon must not fire a second shot');
+assert.strictEqual(vm.runInContext('player.canMove', context), true, 'player movement should be restored after the relic fires');
 assert.strictEqual(vm.runInContext('getFactoryFloorZ(0)', context), 0, 'B1 floor height should be zero');
 assert.strictEqual(vm.runInContext('getFactoryFloorZ(1)', context), 500, '1F should be 500 units above B1');
 assert.strictEqual(vm.runInContext('getFactoryFloorZ(2)', context), 1000, '2F should be 1000 units above B1');

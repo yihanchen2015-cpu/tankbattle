@@ -197,7 +197,9 @@ const result = vm.runInContext(`(() => {
             speed:maxTank.speed,
             turnSpeed:maxTank.turnSpeed,
             armor:maxTank.armor,
-            weaponDamageMult:maxTank.masteryWeaponDamageMult
+            weaponDamageMult:maxTank.masteryWeaponDamageMult,
+            rangeMult:maxTank.masteryRangeMult,
+            projectileSpeedMult:maxTank.masteryProjectileSpeedMult
         },
         maxAiTankStats,
         aiLevelSamples,
@@ -272,6 +274,8 @@ assert(Math.abs(result.maxTankStats.turnSpeed - .1062) < 1e-9);
 assert(Math.abs(result.maxTankStats.armor - 1.0) < 1e-9);
 assert.strictEqual(result.maxTankStats.weaponDamageMult, 1.2,
     'levels six through eight should apply cumulative mobility, durability, and weapon bonuses');
+assert.strictEqual(result.maxTankStats.rangeMult, 1.7, 'level eight should accumulate seventy percent extra range');
+assert.strictEqual(result.maxTankStats.projectileSpeedMult, 1.42, 'level eight should accumulate forty-two percent extra projectile speed');
 const normalizedMaxAiTankStats = JSON.parse(JSON.stringify(result.maxAiTankStats));
 normalizedMaxAiTankStats.speed = Number(normalizedMaxAiTankStats.speed.toFixed(3));
 assert.deepStrictEqual(normalizedMaxAiTankStats, {

@@ -1,23 +1,23 @@
 // ==================== 段位赛季 + 训练场 ====================
 const RANKED_SEASON_EPOCH = Date.UTC(2026, 0, 5);
 const RANKED_SEASON_DAYS = 56;
-const RANKED_PLACEMENT_MATCHES = 5;
+const RANKED_PLACEMENT_MATCHES = 3;
 const RANKED_TIERS = Object.freeze([
     { key:'bronze', name:'青铜', icon:'◆', color:'#bd845d', min:0 },
-    { key:'silver', name:'白银', icon:'◆◆', color:'#c9d4dc', min:400 },
-    { key:'gold', name:'黄金', icon:'◆◆◆', color:'#ffd45c', min:800 },
-    { key:'platinum', name:'铂金', icon:'✦', color:'#62e2d0', min:1200 },
-    { key:'diamond', name:'钻石', icon:'✦✦', color:'#64b8ff', min:1600 },
-    { key:'master', name:'大师', icon:'♜', color:'#bd7bff', min:2000 },
-    { key:'grandmaster', name:'宗师', icon:'♛', color:'#ff6b8a', min:2400 },
-    { key:'legend', name:'传奇战神', icon:'★', color:'#ffe76a', min:2800 }
+    { key:'silver', name:'白银', icon:'◆◆', color:'#c9d4dc', min:300 },
+    { key:'gold', name:'黄金', icon:'◆◆◆', color:'#ffd45c', min:600 },
+    { key:'platinum', name:'铂金', icon:'✦', color:'#62e2d0', min:900 },
+    { key:'diamond', name:'钻石', icon:'✦✦', color:'#64b8ff', min:1200 },
+    { key:'master', name:'大师', icon:'♜', color:'#bd7bff', min:1500 },
+    { key:'grandmaster', name:'宗师', icon:'♛', color:'#ff6b8a', min:1800 },
+    { key:'legend', name:'传奇战神', icon:'★', color:'#ffe76a', min:2100 }
 ]);
 
 const SEASON_GOALS = Object.freeze([
-    { key:'placements', name:'完成定级', description:'完成 5 场排位赛', test:state => state.matches >= 5 },
-    { key:'wins', name:'钢铁连胜', description:'本赛季取得 10 场胜利', test:state => state.wins >= 10 },
-    { key:'gold', name:'黄金车长', description:'达到黄金段位', test:state => state.bestRating >= 800 },
-    { key:'veteran', name:'百战先锋', description:'排位累计击毁 50 辆敌军', test:state => state.kills >= 50 }
+    { key:'placements', name:'完成定级', description:'完成 3 场排位赛', test:state => state.matches >= 3 },
+    { key:'wins', name:'钢铁连胜', description:'本赛季取得 8 场胜利', test:state => state.wins >= 8 },
+    { key:'gold', name:'黄金车长', description:'达到黄金段位', test:state => state.bestRating >= 600 },
+    { key:'veteran', name:'百战先锋', description:'排位累计击毁 40 辆敌军', test:state => state.kills >= 40 }
 ]);
 
 const TRAINING_HINTS = Object.freeze([
@@ -89,7 +89,7 @@ function ensureRankedSeasonState(now = Date.now()) {
                 wins:Math.max(0, Number(previous.wins) || 0)
             });
             playerStats.rankedHistory = playerStats.rankedHistory.slice(0, 8);
-            seedRating = Math.min(700, Math.floor((Number(previous.rating) || 0) * .25));
+            seedRating = Math.min(500, Math.floor((Number(previous.rating) || 0) * .25));
         }
         playerStats.rankedSeason = createRankedSeasonState(season, seedRating);
     }
@@ -124,10 +124,10 @@ function calculateRankedDelta(result, performance = {}, state = ensureRankedSeas
     const scoreTotal = Math.max(1, blueScore + redScore);
     const scoreBonus = Math.max(-4, Math.min(4, Math.round((blueScore - redScore) / scoreTotal * 10)));
     const killBonus = Math.min(12, kills * 2);
-    const placementBonus = state.matches < RANKED_PLACEMENT_MATCHES && result === 'victory' ? 8 : 0;
-    if(result === 'victory') return 28 + killBonus + Math.max(0, scoreBonus) + Math.min(6, state.winStreak * 2) + placementBonus;
-    if(result === 'draw') return Math.max(0, 3 + Math.floor(killBonus / 2) + scoreBonus);
-    return Math.min(-2, -18 + Math.floor(killBonus / 2) + Math.max(0, scoreBonus));
+    const placementBonus = state.matches < RANKED_PLACEMENT_MATCHES && result === 'victory' ? 10 : 0;
+    if(result === 'victory') return 36 + killBonus + Math.max(0, scoreBonus) + Math.min(6, state.winStreak * 2) + placementBonus;
+    if(result === 'draw') return Math.max(0, 5 + Math.floor(killBonus / 2) + scoreBonus);
+    return Math.min(-2, -10 + Math.floor(killBonus / 2) + Math.max(0, scoreBonus));
 }
 
 function settleRankedMatch(result) {

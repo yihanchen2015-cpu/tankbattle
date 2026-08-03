@@ -20,17 +20,17 @@ function startGame() {
     if(typeof resetTeamScores === 'function') resetTeamScores();
     if(typeof resetCombatReplay === 'function') resetCombatReplay();
     if(typeof resetBattleSystems === 'function') resetBattleSystems();
-    recordTankUsed(selectedTank);
+    if(gameMode !== 'story') recordTankUsed(selectedTank);
     const tankData = TANKS[selectedTank];
     const ammo = parseInt(document.getElementById('ammoSlider').value);
     const mg = parseInt(document.getElementById('mgSlider').value);
     const aa = parseInt(document.getElementById('aaSlider').value);
     let dayNight = 'day';
     if(gameMode === 'sneak') dayNight = 'night';
-    else if(['escort', 'deathmatch', 'boss', 'ranked', 'training'].includes(gameMode)) dayNight = 'day';
+    else if(['escort', 'deathmatch', 'boss', 'ranked', 'training', 'story'].includes(gameMode)) dayNight = 'day';
     else dayNight = document.getElementById('dayNight').value;
     let difficulty = document.getElementById('difficulty').value;
-    if(gameMode === 'ranked') difficulty = 'normal';
+    if(gameMode === 'ranked') difficulty = 'easy';
     else if(gameMode === 'training') difficulty = 'easy';
     const viewMode = '3d';
     const customConfig = gameMode === 'custom' && typeof customRoomConfig !== 'undefined'
@@ -60,7 +60,8 @@ function startGame() {
             boss: '👑 首领模式 - 争夺巨型BOSS最后一击',
             ranked: '🏅 赛季排位 - 胜负与个人表现影响段位分',
             training: '🎯 训练场 - 无限资源 · 靶车自动复位 · 无战绩压力',
-            custom: '🧰 自定义房间 - 规则、队伍与坦克池由房主定义'
+            custom: '🧰 自定义房间 - 规则、队伍与坦克池由房主定义',
+            story: '📖 故事模式 - 击破发光部位 · 打飞追踪弹 · 利用地图机关'
         };
         specialModeInfo.textContent = labels[gameMode] || '';
         specialModeInfo.style.display = labels[gameMode] ? 'block' : 'none';
@@ -85,6 +86,7 @@ function startGame() {
     if(typeof initializeTankAttachmentState === 'function') initializeTankAttachmentState(player);
     if(typeof resetWeaponAttachmentPickups === 'function') resetWeaponAttachmentPickups();
     if(typeof distributeFactoryInitialTanks === 'function') distributeFactoryInitialTanks();
+    if(gameMode === 'story' && typeof initializeStoryBattle === 'function') initializeStoryBattle();
     if(typeof initializeSneakRescueMechanic === 'function') initializeSneakRescueMechanic();
     if(typeof updateWeaponHudMode === 'function') updateWeaponHudMode(player);
     if(gameMode === 'training' && typeof initializeTrainingMode === 'function') initializeTrainingMode();
@@ -106,8 +108,10 @@ function startGame() {
     }
     if(gameMode === 'custom' && customConfig) gameTime = customConfig.durationMinutes * 60;
     else if(gameMode === 'defense') gameTime = 180;
-    else if(['escort', 'deathmatch', 'boss', 'ranked'].includes(gameMode)) gameTime = 300;
+    else if(['escort', 'deathmatch', 'boss'].includes(gameMode)) gameTime = 300;
+    else if(gameMode === 'ranked') gameTime = 240;
     else if(gameMode === 'training') gameTime = 3600;
+    else if(gameMode === 'story' && typeof getCurrentStoryLevel === 'function' && getCurrentStoryLevel()) gameTime = getCurrentStoryLevel().time;
     else gameTime = CONFIG.gameTime;
     lastTime = performance.now();
     exhaustTrails = [];
@@ -604,7 +608,12 @@ function spawnTanks(tankData, ammo, mg, aa) {
     const customConfig = gameMode === 'custom' && typeof customRoomConfig !== 'undefined' ? customRoomConfig : null;
     let blueCount = customConfig ? customConfig.blueCount : 10;
     let redCount = customConfig ? customConfig.redCount : (gameMode === 'sneak' ? 30 : 10);
+    if(gameMode === 'ranked') { blueCount = 6; redCount = 6; }
     if(gameMode === 'training') { blueCount = 1; redCount = 5; }
+    if(gameMode === 'story') {
+        blueCount = 1;
+        redCount = typeof getStorySpawnCount === 'function' ? getStorySpawnCount() : 1;
+    }
     const blueDeployment=findBaseDeploymentPoint('blue',0);
     let blueBaseX = blueDeployment.x, blueBaseY = blueDeployment.y;
     if(gameMode === 'sneak') {
@@ -612,7 +621,7 @@ function spawnTanks(tankData, ammo, mg, aa) {
         blueBaseX = CONFIG.mapWidth - 500 - CONFIG.baseSize - 1000 + Math.cos(angle) * 300;
         blueBaseY = CONFIG.mapHeight / 2 + Math.sin(angle) * 300;
     }
-    player = createTank(tankData, blueBaseX, blueBaseY, 'blue', true);
+    player = createTank(tankData, blueBaseX, blueBaseY, 'blue', true, gameMode === 'story' ? 8 : null);
     console.log('[SPAWN] Player created:', player ? 'success' : 'failed', 'x:', player ? player.x : 'N/A', 'y:', player ? player.y : 'N/A');
     player.shells = ammo; player.mg = mg; player.aa = aa;
     console.log('[SPAWN] Player ammo set - shells:', player.shells, 'mg:', player.mg, 'aa:', player.aa);
@@ -658,7 +667,9 @@ function spawnTanks(tankData, ammo, mg, aa) {
     }
     enemies = [];
     const defaultEnemyTypes = ['xingchen27a', 'xingchen27b', 'xingchen27c', 'xingchen27d', 'xingchen27e', 'xingchen27s', 'duoduo', 'duoduo_ifv', 'duoduo_spat', 'duoduo_eng', 'duoduo_rocket', 'duoduo_emp', 'zuoyan29', 'zuoyan30', 'zuoyan31', 'zuoyan32', 'zuoyan33', 'zuoyan1', 'zuoyan_x'];
-    const enemyTypes = customConfig && customConfig.tankPool.length ? customConfig.tankPool : defaultEnemyTypes;
+    const enemyTypes = gameMode === 'story' && typeof getStoryEnemyTypes === 'function'
+        ? getStoryEnemyTypes()
+        : (customConfig && customConfig.tankPool.length ? customConfig.tankPool : defaultEnemyTypes);
     const diffMult = gameConfig.difficulty === 'easy' ? 0.7 : gameConfig.difficulty === 'hard' ? 1.4 : 1.0;
     const redDeployment=findBaseDeploymentPoint('red',0);
     let redBaseX = redDeployment.x;
@@ -714,10 +725,10 @@ function spawnTanks(tankData, ammo, mg, aa) {
         else if (gameMode === 'escort') redSkillMult = 1.10;
         else if (gameMode === 'deathmatch') redSkillMult = 1.08;
         else if (gameMode === 'boss') redSkillMult = 1.05;
-        else if (gameMode === 'ranked') redSkillMult = 1.14;
+        else if (gameMode === 'ranked') redSkillMult = .90;
         tank.aiSkillLevel = baseSkill * redSkillMult;
-        tank.aiDamageMult = gameMode === 'defense' ? 1.0 : (gameConfig.difficulty === 'easy' ? 1.02 : gameConfig.difficulty === 'hard' ? 1.14 : 1.05);
-        tank.hp = Math.floor(tank.hp * (gameMode === 'defense' ? 1.05 : (gameConfig.difficulty === 'hard' ? 1.18 : 1.08)));
+        tank.aiDamageMult = gameMode === 'ranked' ? .90 : (gameMode === 'defense' ? 1.0 : (gameConfig.difficulty === 'easy' ? 1.02 : gameConfig.difficulty === 'hard' ? 1.14 : 1.05));
+        tank.hp = Math.floor(tank.hp * (gameMode === 'ranked' ? 1 : (gameMode === 'defense' ? 1.05 : (gameConfig.difficulty === 'hard' ? 1.18 : 1.08))));
         tank.maxHp = tank.hp;
         tank.aiBehavior = AI_BEHAVIOR.NONE;
         tank.aiBehaviorTimer = 0;
@@ -734,12 +745,10 @@ function createTank(data, x, y, team, isPlayer, masteryLevelOverride = null) {
     }
     const id = Math.random().toString(36).substr(2, 9);
     const tankType = Object.keys(TANKS).find(key => TANKS[key].name === data.name) || 'xingchen27a';
-    const aiMasteryLevel = !isPlayer
-        ? (masteryLevelOverride === null
-            ? (typeof rollAIMasteryLevel === 'function' ? rollAIMasteryLevel() : null)
-            : Math.max(1, Math.min(8, Math.floor(Number(masteryLevelOverride) || 1))))
-        : null;
-    const masteryVisual = typeof getTankMasteryVisual === 'function'
+    const aiMasteryLevel = masteryLevelOverride !== null
+        ? Math.max(1, Math.min(8, Math.floor(Number(masteryLevelOverride) || 1)))
+        : (!isPlayer && typeof rollAIMasteryLevel === 'function' ? rollAIMasteryLevel() : null);
+    const masteryVisual = !data.noMastery && typeof getTankMasteryVisual === 'function'
         ? getTankMasteryVisual(tankType, aiMasteryLevel)
         : null;
     const skinVisual = isPlayer && typeof getTankSkinVisual === 'function'
@@ -792,6 +801,8 @@ function createTank(data, x, y, team, isPlayer, masteryLevelOverride = null) {
         masteryDeathFlame: masteryVisual ? masteryVisual.deathFlame : null,
         masteryDeathFlameSpawned: false,
         masteryWeaponDamageMult: masteryVisual ? masteryVisual.weaponDamageMult : 1,
+        masteryRangeMult: masteryVisual ? masteryVisual.rangeMult : 1,
+        masteryProjectileSpeedMult: masteryVisual ? masteryVisual.projectileSpeedMult : 1,
         masteryTrailZoneTimer: 0,
         battleScore: 0,
         lastBattleScoreAt: 0,
@@ -1048,6 +1059,10 @@ function update(dt) {
 
     if(gameMode !== 'training') gameTime -= dt;
     if(gameMode !== 'training' && gameTime <= 0 && !damageUpgradeState.pending) {
+        if(gameMode === 'story' && typeof handleStoryTimeExpired === 'function' && handleStoryTimeExpired()) {
+            updateTimer();
+            return;
+        }
         if(typeof handleBattleTimeExpired === 'function' && handleBattleTimeExpired()) {
             updateTimer();
             return;
@@ -1092,7 +1107,8 @@ function update(dt) {
     if(typeof updateFactoryPhysics === 'function') {
         updateFactoryPhysics(dt, [player, ...allies, ...enemies].filter(tank => tank && !tank.dead));
     }
-    if(typeof updateBattleSystems === 'function') updateBattleSystems(dt);
+    if(gameMode === 'story' && typeof updateStoryMode === 'function') updateStoryMode(dt);
+    if(gameMode !== 'story' && typeof updateBattleSystems === 'function') updateBattleSystems(dt);
     if(typeof updateWeaponAttachmentPickups === 'function') updateWeaponAttachmentPickups();
     if(typeof updateTerrainDestruction === 'function') updateTerrainDestruction(dt);
     updateBullets(dt);
@@ -1200,7 +1216,7 @@ function performAutoAimRotation(tank, dt) {
     if (!tank.autoAimTarget || tank.autoAimTarget.dead) return;
     if((tank.turretJamTimer || 0) > 0) return;
     const target = tank.autoAimTarget;
-    const predicted = getPredictedAimPoint(tank,target,CONFIG.bulletSpeed,CONFIG.autoAimPredictFactor);
+    const predicted = getPredictedAimPoint(tank,target,CONFIG.bulletSpeed * (tank.masteryProjectileSpeedMult || 1),CONFIG.autoAimPredictFactor);
     const targetAngle = Math.atan2(predicted.y - tank.y, predicted.x - tank.x);
     let angleDiff = targetAngle - tank.turretAngle;
     while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
@@ -1229,8 +1245,9 @@ function getNearestEnemy(tank) {
 }
 
 function getMapVisionRange(tank = null) {
-    if(currentMap === 'desert') return environmentState.sandstormActive ? 520 : 1800;
-    return CONFIG.autoAimRange;
+    const baseRange = currentMap === 'desert' ? (environmentState.sandstormActive ? 520 : 1800) : CONFIG.autoAimRange;
+    const weatherMult = typeof getWeatherVisionMultiplier === 'function' ? getWeatherVisionMultiplier() : 1;
+    return baseRange * weatherMult;
 }
 
 function getPredictedAimPoint(shooter, target, projectileSpeed = CONFIG.bulletSpeed, predictFactor = CONFIG.autoAimPredictFactor) {
@@ -1413,7 +1430,11 @@ function updateTank(tank, dt) {
             } else tank.turretAngle = desiredTurretAngle;
         }
         if(mouse.down) {
-            if(currentWeapon === 'shell') {
+            if(tank.ancientCannonControl && typeof fireAncientCannon === 'function') {
+                fireAncientCannon(tank, worldMouseX, worldMouseY);
+                mouse.down = false;
+                if(navigator.vibrate) navigator.vibrate([80, 30, 120]);
+            } else if(currentWeapon === 'shell') {
                 if(tank.fireCooldown <= 0 && (tank.shells > 0 || tank.suddenDeathInfiniteAmmo)) {
                     fireBullet(tank, 'shell');
                     tank.fireCooldown = CONFIG.fireCooldown / (tank.fireRate * (1 + (tank.evolutionDynamicFireRateBoost || 0)) * (1 + (tank.fireRateBuff || 0)) *
@@ -1464,9 +1485,13 @@ function updateTank(tank, dt) {
         let diff = targetAngle - tank.angle;
         while(diff > Math.PI) diff -= Math.PI*2;
         while(diff < -Math.PI) diff += Math.PI*2;
-        const turnSpeed = tank.turnSpeed * (tank.turnBoost || 1) * tank.turretSpeedMult * actionSpeed;
+        const weatherTurn = typeof getWeatherTurnMultiplier === 'function' ? getWeatherTurnMultiplier(tank) : 1;
+        const turnSpeed = tank.turnSpeed * (tank.turnBoost || 1) * tank.turretSpeedMult * actionSpeed * weatherTurn;
         tank.angle += diff * turnSpeed * 60 * dt;
         const moveSpeed = actualSpeed * 60 * dt;
+        if(typeof rememberWeatherMomentum === 'function') {
+            rememberWeatherMomentum(tank, Math.cos(tank.angle) * actualSpeed * 60, Math.sin(tank.angle) * actualSpeed * 60);
+        }
         const newX = tank.x + Math.cos(tank.angle) * moveSpeed;
         const newY = tank.y + Math.sin(tank.angle) * moveSpeed;
         if(tank.isPlayer && (isNaN(newX) || isNaN(newY))) {
@@ -1481,6 +1506,7 @@ function updateTank(tank, dt) {
         } else if(tank.isFlying && typeof registerHelicopterCollision === 'function') registerHelicopterCollision(tank);
         if(Math.random() < 0.3) addExhaustTrail(tank);
     }
+    if(typeof applyWeatherCoast === 'function') applyWeatherCoast(tank, dt, moveX !== 0 || moveY !== 0);
 }
 
 function updateEnvironment(dt) {
@@ -1878,6 +1904,10 @@ function respawnPlayerNearBase() {
 function checkWinCondition() {
     if(damageUpgradeState.active || damageUpgradeState.pending || gameState === 'damageUpgrade') return;
     if(gameMode === 'training') return;
+    if(gameMode === 'story') {
+        if(typeof checkStoryWinCondition === 'function') checkStoryWinCondition();
+        return;
+    }
     if(gameMode === 'custom' && typeof customRoomConfig !== 'undefined') {
         if(customRoomConfig.rule === 'base') {
             if(bases.blue && bases.blue.hp <= 0) { endGame('baseDestroyed'); return; }
@@ -1925,6 +1955,10 @@ function checkWinCondition() {
 
 function endGame(reason) {
     if(gameState === 'ended' || gameState === 'replay') return;
+    if(gameMode === 'story' && typeof failStoryLevel === 'function') {
+        failStoryLevel(reason === 'time' ? '封印时限耗尽' : '元素坦克被击毁');
+        return;
+    }
     if(reason === 'playerDead' && typeof startCombatReplay === 'function' && startCombatReplay(reason)) return;
     finishEndGame(reason);
 }
@@ -2039,6 +2073,12 @@ function resetGame() {
     if(damageUpgradeOverlay) damageUpgradeOverlay.classList.remove('active');
     const trainingControls = document.getElementById('trainingControls');
     if(trainingControls) trainingControls.style.display = 'none';
+    const storyScreen = document.getElementById('storyModeScreen');
+    if(storyScreen) storyScreen.classList.remove('active');
+    const storyDialogue = document.getElementById('storyDialogueOverlay');
+    if(storyDialogue) storyDialogue.classList.remove('active');
+    const storyFailure = document.getElementById('storyFailurePanel');
+    if(storyFailure) storyFailure.classList.remove('active');
     document.getElementById('startBtn').disabled = true;
     const threeHudLayer = document.getElementById('threeHudLayer');
     const threeThreatBorder = document.getElementById('threeThreatBorder');
@@ -2271,16 +2311,19 @@ function fireUltimateSalvo(tank) {
     const ult = tank.ultimateData; if(!ult) return;
     const angle = typeof getTankFiringAngle === 'function' ? getTankFiringAngle(tank) : tank.turretAngle;
     const halfSpread = ult.spreadAngle / 2;
+    const projectileSpeedMult = tank.masteryProjectileSpeedMult || 1;
+    const masteryRangeMult = (tank.masteryRangeMult || 1) * (tank.evolutionEffects && tank.evolutionEffects.rangeMult || 1);
     for(let i = 0; i < ult.shellCount; i++) {
         const shellAngle = angle - halfSpread + (ult.spreadAngle / (ult.shellCount - 1)) * i;
         const damage = ult.damagePerShell;
         const projectile = {
             x: tank.x + Math.cos(shellAngle) * (tank.turretSize + 20),
             y: tank.y + Math.sin(shellAngle) * (tank.turretSize + 20),
-            vx: Math.cos(shellAngle) * CONFIG.bulletSpeed,
-            vy: Math.sin(shellAngle) * CONFIG.bulletSpeed,
+            vx: Math.cos(shellAngle) * CONFIG.bulletSpeed * projectileSpeedMult,
+            vy: Math.sin(shellAngle) * CONFIG.bulletSpeed * projectileSpeedMult,
             damage: damage, team: tank.team, type: 'shell', owner: tank, life: 2.0, hitTanks: new Set(),
             maxTargetHits: 1, explosionRadius: 0,
+            ballisticGravityMult: projectileSpeedMult * projectileSpeedMult / masteryRangeMult,
             armorIgnorePercent: tank.evolutionEffects && tank.evolutionEffects.salvoArmorIgnore || 0
         };
         if(typeof applyTankEvolutionToProjectile === 'function') applyTankEvolutionToProjectile(tank, projectile);

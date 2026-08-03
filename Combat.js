@@ -31,7 +31,9 @@ function fireBullet(tank, type) {
         speedMult = tank.ultimateData.mgRateMult || 3; spreadMult = tank.ultimateData.mgSpreadMult || 0.5;
         infiniteAmmo = tank.ultimateData.infiniteAmmo; damageMult = tank.ultimateData.damageBoost || 1.5;
     }
-    const baseSpeed = type === 'bomb' ? 0 : (type === 'shell' ? CONFIG.bulletSpeed : (type === 'aa' ? CONFIG.aaSpeed : CONFIG.mgSpeed * speedMult));
+    const projectileSpeedMult = tank.masteryProjectileSpeedMult || 1;
+    const masteryRangeMult = (tank.masteryRangeMult || 1) * (tank.evolutionEffects && tank.evolutionEffects.rangeMult || 1);
+    const baseSpeed = (type === 'bomb' ? 0 : (type === 'shell' ? CONFIG.bulletSpeed : (type === 'aa' ? CONFIG.aaSpeed : CONFIG.mgSpeed * speedMult))) * projectileSpeedMult;
     const elevationDeg = type === 'shell' ? (tank.shellElevation ?? CONFIG.shellDefaultElevation)
         : type === 'aa' ? (tank.aaElevation ?? CONFIG.aaDefaultElevation) : 0;
     const elevation = elevationDeg * Math.PI / 180;
@@ -47,7 +49,8 @@ function fireBullet(tank, type) {
         ? (typeof MASTERY_GOLDEN_SHELL_DAMAGE_MULT !== 'undefined' ? MASTERY_GOLDEN_SHELL_DAMAGE_MULT : 1.2)
         : 1;
     // 主炮弹不使用计时销毁：它会按弹道飞行，直到坠地或真实碰撞。
-    const maxLife = type === 'bomb' ? 5.0 : (type === 'shell' ? Infinity : (type === 'aa' ? 5.0 : 1.2));
+    const rangeLifeMult = masteryRangeMult / projectileSpeedMult;
+    const maxLife = type === 'bomb' ? 5.0 : (type === 'shell' ? Infinity : (type === 'aa' ? 5.0 * rangeLifeMult : 1.2 * rangeLifeMult));
     const muzzleDistance = type === 'bomb' ? 0 : tank.turretSize + 12;
     const projectile = {
         x: tank.x + Math.cos(angle) * muzzleDistance,
@@ -62,9 +65,12 @@ function fireBullet(tank, type) {
             (tank.aiDamageMult || 1) * (tank.masteryAuraDamageMult || 1) * (tank.bossBuffAttackMult || 1),
         team: tank.team, type, owner: tank,
         masteryGolden,
+        masteryRangeMult,
+        masteryProjectileSpeedMult: projectileSpeedMult,
+        ballisticGravityMult: projectileSpeedMult * projectileSpeedMult / masteryRangeMult,
         life: maxLife, maxLife, age: 0,
         altitude: (tank.z || 0) + (type === 'aa' ? 18 : 24),
-        trackingRange: type === 'aa' ? CONFIG.aaTrackingRange : 0,
+        trackingRange: type === 'aa' ? CONFIG.aaTrackingRange * masteryRangeMult : 0,
         trackingTarget: null,
         trackingLocked: false,
         maxFlightAngle: type === 'aa' ? elevation : null,
@@ -89,6 +95,7 @@ function fireBullet(tank, type) {
         } : null
     };
     if(typeof applyTankEvolutionToProjectile === 'function') applyTankEvolutionToProjectile(tank, projectile);
+    if(typeof applyMechaPeaTriPhase === 'function') applyMechaPeaTriPhase(tank, projectile);
     bullets.push(projectile);
     if(typeof spawnTankShotAnimation === 'function') spawnTankShotAnimation(tank, projectile, angle);
     if(type === 'shell' && tank.tankType === 'duoduo_rocket' && !tank.evolutionBurstFiring) {
@@ -198,6 +205,7 @@ function updateBullets(dt) {
             b.vz += (desiredVz - b.vz) * Math.min(1, dt * 1.4);
             b.vz = Math.min(b.vz, maxTrackingVz);
         }
+        if(typeof applyWeatherToProjectile === 'function') applyWeatherToProjectile(b, dt);
         if(b.type === 'bomb') {
             b.z += b.vz * dt;
             b.vz -= 155 * dt;
@@ -215,7 +223,7 @@ function updateBullets(dt) {
         b.x += b.vx * 60 * dt; b.y += b.vy * 60 * dt; b.life -= dt;
         if(b.type === 'aa' || b.type === 'shell') {
             b.z += b.vz * dt;
-            b.vz -= (b.type === 'aa' ? CONFIG.aaGravity : CONFIG.shellGravity) * dt;
+            b.vz -= (b.type === 'aa' ? CONFIG.aaGravity : CONFIG.shellGravity) * (b.ballisticGravityMult || 1) * dt;
             b.altitude = b.z;
         }
         if(b.type === 'shell' && !b.isRocket && b.vz <= 0) {
@@ -237,6 +245,11 @@ function updateBullets(dt) {
             createParticles(b.x, b.y, b.neutralSniper ? 2 : 1, trailColor, b.neutralSniper ? .75 : .4);
         }
         if(b.isRocket && (Math.hypot(b.x - b.targetX, b.y - b.targetY) < 35 || b.life <= 0)) {
+            if(b.ancientCannon) {
+                b.x = b.targetX;
+                b.y = b.targetY;
+                b.z = getBombImpactHeight(b.x, b.y);
+            }
             explodeRocket(b);
             if(typeof spawnTankImpactAnimation === 'function') spawnTankImpactAnimation(b);
             bullets.splice(i, 1);
@@ -563,7 +576,8 @@ function applyDirectDamage(tank, damage, source, cause = null, projectile = null
         if(typeof playWorldSound === 'function') playWorldSound(tank === player ? 'death' : 'kill', tank.x, tank.y, tank === player ? 1.25 : 1);
         if(typeof shouldAmmoRackExplode === 'function' && shouldAmmoRackExplode(tank)) triggerAmmoRackExplosion(tank);
         if(tank === player) {
-            if(typeof scheduleDamageUpgrade === 'function') scheduleDamageUpgrade();
+            if(gameMode === 'story' && typeof endGame === 'function') endGame('storyDefeat');
+            else if(typeof scheduleDamageUpgrade === 'function') scheduleDamageUpgrade();
             else if(typeof beginDamageUpgrade === 'function') beginDamageUpgrade();
         }
     }
@@ -575,7 +589,7 @@ function getWeaponCause(type) {
 }
 
 function getBombImpactHeight(x, y) {
-    let height = 0;
+    let height = typeof getTacticalTerrainHeightAt === 'function' ? getTacticalTerrainHeightAt(x,y) : 0;
     for(const obs of obstacles) {
         if(x >= obs.x && x <= obs.x + obs.w && y >= obs.y && y <= obs.y + obs.h) {
             height = Math.max(height, getObstacleWorldHeight(obs));
@@ -620,7 +634,7 @@ function explodeBomb(bomb) {
 }
 
 function explodeRocket(b) {
-    const radius = 130;
+    const radius = b.explosionRadius || 130;
     if(typeof damageTerrainInRadius === 'function') damageTerrainInRadius(b.x, b.y, radius, b.damage, 'rocket', b.owner);
     const targets = getNearbyTanks(b.x, b.y, radius);
     targets.forEach(tank => {
@@ -637,7 +651,10 @@ function explodeRocket(b) {
             tryApplyProjectileElementalStatus(b, tank);
         }
     });
-    createParticles(b.x, b.y, 25, '#ff6600', 2);
+    createParticles(b.x, b.y, b.ancientCannon ? 95 : 25, b.ancientCannon ? '#ffd34f' : '#ff6600', b.ancientCannon ? 4.5 : 2);
+    if(b.ancientCannon && typeof showNotification === 'function') {
+        showNotification('💥 远古地图炮命中：毁灭冲击波席卷目标区域', '#ffcf4d');
+    }
 }
 
 
@@ -656,7 +673,7 @@ function projectileMatchesTargetHeight(projectile, tank) {
 }
 
 function tryAPSInterceptProjectile(projectile) {
-    if(!projectile || projectile.apsIntercepted || !['shell', 'aa', 'rocket'].includes(projectile.type)) return null;
+    if(!projectile || projectile.apsImmune || projectile.apsIntercepted || !['shell', 'aa', 'rocket'].includes(projectile.type)) return null;
     const radius = CONFIG.apsInterceptionRadius || 95;
     const heightTolerance = CONFIG.apsInterceptionHeightTolerance || 72;
     const candidates = getNearbyTanks(projectile.x, projectile.y, radius)
@@ -752,6 +769,9 @@ function checkCollisions() {
                 if(typeof modifyTankEvolutionOutgoingDamage === 'function') {
                     damage = modifyTankEvolutionOutgoingDamage(b, tank, damage);
                 }
+                if(typeof modifyStoryBossDamage === 'function') {
+                    damage = modifyStoryBossDamage(tank, b, damage);
+                }
                 if(tank.isFlying && b.type === 'shell') damage *= 0.4;
                 if(tank.isFlying && b.type === 'aa') {
                     const aaMapMultiplier = currentMap === 'classic' ? 1.35 : currentMap === 'island' ? 1.20 : 1;
@@ -780,10 +800,14 @@ function checkCollisions() {
                     applyDirectDamage(tank.shieldOwner, redirectDamage, b.owner, getWeaponCause(b.type), b);
                 } else dealtToTank = applyDirectDamage(tank, damage, b.owner, getWeaponCause(b.type), b);
                 if(dealtToTank > 0 && !tank.dead) applyTankHitReaction(tank, b);
+                if(typeof handleStoryCloneProjectileHit === 'function') handleStoryCloneProjectileHit(tank, b);
                 if(typeof handleTankEvolutionProjectileHit === 'function') handleTankEvolutionProjectileHit(b, tank, dealtToTank);
                 if(typeof spawnTankImpactAnimation === 'function') spawnTankImpactAnimation(b, tank);
                 if(dealtToTank > 0 && typeof tryApplyProjectileElementalStatus === 'function') {
                     tryApplyProjectileElementalStatus(b, tank);
+                }
+                if(dealtToTank > 0 && b.storyForcedIce && typeof applyTankElementalStatus === 'function') {
+                    applyTankElementalStatus(tank, 'ice', 2.5, {source:b.owner});
                 }
                 if(b.explosionRadius > 0) {
                     getNearbyTanks(b.x, b.y, b.explosionRadius).forEach(other => {
@@ -839,11 +863,17 @@ function checkCollisions() {
 }
 
 function lineOfSight(x1, y1, x2, y2, factoryFloor = null) {
-    const steps = Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 80);
+    const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 80));
+    const terrainStart = typeof getTacticalTerrainHeightAt === 'function' ? getTacticalTerrainHeightAt(x1,y1) + 32 : 0;
+    const terrainEnd = typeof getTacticalTerrainHeightAt === 'function' ? getTacticalTerrainHeightAt(x2,y2) + 32 : 0;
     for(let i = 0; i <= steps; i++) {
         const t = i / steps;
         const cx = x1 + (x2 - x1) * t;
         const cy = y1 + (y2 - y1) * t;
+        if(i>0&&i<steps&&typeof getTacticalTerrainHeightAt==='function'){
+            const sightHeight=terrainStart+(terrainEnd-terrainStart)*t;
+            if(getTacticalTerrainHeightAt(cx,cy)>sightHeight+10)return false;
+        }
         for(const cloud of smokeClouds) {
             if(cloud.life <= 0) continue;
             if(factoryFloor !== null && Math.abs((cloud.z || 0) - (typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(factoryFloor) : 0)) > 90) continue;

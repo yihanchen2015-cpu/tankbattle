@@ -11,6 +11,8 @@ const TANK_MASTERY_LEVELS = Object.freeze([
 ]);
 
 const TANK_MASTERY_MAX_LEVEL = 8;
+const MASTERY_RANGE_PER_LEVEL = 0.10;
+const MASTERY_PROJECTILE_SPEED_PER_LEVEL = 0.06;
 const MASTERY_CAMOUFLAGE_EVASION = 0.18;
 const MASTERY_GOLDEN_SHELL_DAMAGE_MULT = 1.35;
 const MASTERY_TRAIL_DAMAGE_PER_SECOND = 75;
@@ -90,6 +92,19 @@ function getMasteryDeathFlameConfig(level) {
     return MASTERY_DEATH_FLAME_LEVELS[normalizedLevel] || null;
 }
 
+function getMasteryBallisticBonuses(level) {
+    const normalizedLevel = Math.max(1, Math.min(TANK_MASTERY_MAX_LEVEL, Math.floor(Number(level) || 1)));
+    const upgradeSteps = normalizedLevel - 1;
+    const rangeBonusPercent = Math.round(upgradeSteps * MASTERY_RANGE_PER_LEVEL * 100);
+    const projectileSpeedBonusPercent = Math.round(upgradeSteps * MASTERY_PROJECTILE_SPEED_PER_LEVEL * 100);
+    return {
+        rangeMult: 1 + rangeBonusPercent / 100,
+        projectileSpeedMult: 1 + projectileSpeedBonusPercent / 100,
+        rangeBonusPercent,
+        projectileSpeedBonusPercent
+    };
+}
+
 function rollAIMasteryLevel(randomValue = Math.random()) {
     const total = AI_MASTERY_LEVEL_WEIGHTS.reduce((sum, weight) => sum + weight, 0);
     let roll = Math.max(0, Math.min(.999999, Number(randomValue) || 0)) * total;
@@ -139,6 +154,7 @@ function getTankMasteryProfile(tankType) {
     const nextEvolution = next && typeof getTankEvolutionProfile === 'function'
         ? getTankEvolutionProfile(tankType, next.level)
         : null;
+    const ballistics = getMasteryBallisticBonuses(levelInfo.level);
     return {
         tankType,
         matches,
@@ -148,6 +164,7 @@ function getTankMasteryProfile(tankType) {
         level: levelInfo.level,
         levelName: evolution ? evolution.name : levelInfo.name,
         reward: evolution ? evolution.reward : levelInfo.reward,
+        ...ballistics,
         levelXp: levelInfo.xp,
         nextXp: next ? next.xp : xp,
         nextReward: next ? (nextEvolution ? nextEvolution.reward : next.reward) : '已解锁全部奖励',
@@ -394,7 +411,7 @@ function renderMasteryPanel() {
         .sort((a, b) => b.xp - a.xp || b.matches - a.matches || b.kills - a.kills);
     const totalMatches = profiles.reduce((sum, profile) => sum + profile.matches, 0);
     const mastered = profiles.filter(profile => profile.level >= TANK_MASTERY_MAX_LEVEL).length;
-    if(summary) summary.textContent = `累计驾驶 ${totalMatches} 场 · 8级满熟练坦克 ${mastered} 辆`;
+    if(summary) summary.textContent = `累计驾驶 ${totalMatches} 场 · 8级满熟练坦克 ${mastered} 辆 · 每升1阶：射程 +10%，弹速 +6%`;
     list.replaceChildren();
     profiles.forEach(profile => {
         const tank = TANKS[profile.tankType];
@@ -422,6 +439,7 @@ function renderMasteryPanel() {
                 <span>★${profile.level} ${profile.levelName}</span>
             </div>
             <div class="mastery-card-stats">${profile.xp} XP · ${profile.matches} 场 · ${profile.wins} 胜 · ${profile.kills} 击杀</div>
+            <div class="mastery-card-stats">弹道强化：射程 +${profile.rangeBonusPercent}% · 弹速 +${profile.projectileSpeedBonusPercent}%</div>
             <div class="mastery-progress"><i style="width:${Math.round(profile.progress * 100)}%"></i></div>
             <div class="mastery-reward">${profile.level >= TANK_MASTERY_MAX_LEVEL ? profile.reward : `下一奖励：${profile.nextReward}`} <b>${progressText}</b></div>
             ${evolutionTrack}

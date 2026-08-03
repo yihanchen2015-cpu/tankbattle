@@ -490,6 +490,8 @@ function getActualSpeed(tank) {
     }
 
     const trackMultiplier = (tank.trackDamageTimer || 0) > 0 ? CONFIG.trackDamageSpeedMultiplier : 1;
+    const weatherMultiplier = typeof getWeatherSpeedMultiplier === 'function' ? getWeatherSpeedMultiplier(tank) : 1;
+    const terrainMultiplier = typeof getTerrainSpeedMultiplier === 'function' ? getTerrainSpeedMultiplier(tank) : 1;
     const upgradeMultiplier = 1 + (tank.damageUpgradeSpeedBoost || 0);
-    return Math.max(tank.speed * 0.12, speed * upgradeMultiplier * weightFactor * statusSlow * elementalFreezeSlow * freezeSlow * waterSlow * trackMultiplier);
+    return Math.max(tank.speed * 0.12, speed * upgradeMultiplier * weightFactor * statusSlow * elementalFreezeSlow * freezeSlow * waterSlow * trackMultiplier * weatherMultiplier * terrainMultiplier);
 }

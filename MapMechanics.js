@@ -5,6 +5,9 @@ let mapMechanicsState = createEmptyMapMechanicsState();
 function createEmptyMapMechanicsState() {
     return {
         time: 0,
+        weather: null,
+        ancientCannon: null,
+        tacticalTerrain: [],
         lava: null,
         crystals: [],
         lavaBalls: [],
@@ -18,9 +21,208 @@ function createEmptyMapMechanicsState() {
 function initializeMapMechanics() {
     if(typeof disposeFactoryPhysics === 'function') disposeFactoryPhysics();
     mapMechanicsState = createEmptyMapMechanicsState();
+    initializeRandomWeather();
+    generateTacticalTerrain();
     if(currentMap === 'volcano') generateVolcanoMechanics();
     else if(currentMap === 'factory') generateFactoryMechanics();
+    initializeAncientCannon();
     if(typeof initializeFactoryPhysics === 'function') initializeFactoryPhysics();
+}
+
+const MATCH_WEATHER_EVENTS = [
+    {id:'dusk', icon:'🌆', name:'黄昏', description:'暮色压低视野，近距离伏击更致命', vision:0.68, turn:1, traction:1, fog:0.72},
+    {id:'drizzle', icon:'🌧', name:'小雨', description:'路面湿滑，转向迟滞且松开方向后会继续漂移', vision:0.90, turn:0.66, traction:0.38, fog:0.9},
+    {id:'crosswind', icon:'🌬', name:'横风', description:'炮弹会持续向风向偏移，远射需要提前修正', vision:1, turn:1, traction:1, projectileWind:2.8, fog:1},
+    {id:'groundFog', icon:'🌫', name:'晨雾', description:'浓雾大幅缩短锁敌距离，山脊可用于突然袭击', vision:0.54, turn:0.92, traction:0.9, fog:0.48}
+];
+
+function initializeRandomWeather(randomValue = Math.random()) {
+    const index = Math.max(0, Math.min(MATCH_WEATHER_EVENTS.length - 1,
+        Math.floor(randomValue * MATCH_WEATHER_EVENTS.length)));
+    const preset = MATCH_WEATHER_EVENTS[index];
+    mapMechanicsState.weather = {
+        ...preset,
+        windAngle: preset.id === 'crosswind' ? Math.random() * Math.PI * 2 : 0
+    };
+    if(typeof gameConfig !== 'undefined' && gameConfig) gameConfig.weatherId = preset.id;
+    updateWeatherHud();
+    if(typeof showNotification === 'function') {
+        showNotification(`${preset.icon} 本局天气：${preset.name} · ${preset.description}`, '#bdeaff');
+    }
+    return mapMechanicsState.weather;
+}
+
+function updateWeatherHud() {
+    if(typeof document === 'undefined') return;
+    const element = document.getElementById('weatherInfo');
+    const weather = mapMechanicsState.weather;
+    if(!element || !weather) return;
+    element.innerHTML = `<strong>${weather.icon} ${weather.name}</strong><span>${weather.description}</span>`;
+    element.style.display = 'flex';
+}
+
+function getWeatherVisionMultiplier() {
+    return mapMechanicsState.weather && mapMechanicsState.weather.vision || 1;
+}
+
+function getWeatherTurnMultiplier(tank) {
+    return tank && tank.isFlying ? 1 : (mapMechanicsState.weather && mapMechanicsState.weather.turn || 1);
+}
+
+function getWeatherSpeedMultiplier(tank) {
+    if(!tank || tank.isFlying) return 1;
+    const weather = mapMechanicsState.weather;
+    return weather && weather.id === 'drizzle' ? 0.94 : 1;
+}
+
+function rememberWeatherMomentum(tank, vx, vy) {
+    if(!tank) return;
+    const weather = mapMechanicsState.weather;
+    if(!weather || weather.id !== 'drizzle' || tank.isFlying) {
+        tank.weatherMomentumX = 0; tank.weatherMomentumY = 0;
+        return;
+    }
+    tank.weatherMomentumX = vx;
+    tank.weatherMomentumY = vy;
+}
+
+function applyWeatherCoast(tank, dt, hasMovementInput) {
+    const weather = mapMechanicsState.weather;
+    if(!tank || tank.dead || tank.isFlying || !weather || weather.id !== 'drizzle') return;
+    if(hasMovementInput) return;
+    const decay = Math.exp(-Math.max(0, dt) * 2.15);
+    tank.weatherMomentumX = (tank.weatherMomentumX || 0) * decay;
+    tank.weatherMomentumY = (tank.weatherMomentumY || 0) * decay;
+    if(Math.hypot(tank.weatherMomentumX, tank.weatherMomentumY) < 8) return;
+    const nx = tank.x + tank.weatherMomentumX * dt;
+    const ny = tank.y + tank.weatherMomentumY * dt;
+    if(typeof checkObstacleCollision !== 'function' || !checkObstacleCollision(nx, ny, CONFIG.tankSize, tank)) {
+        tank.x = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapWidth - CONFIG.tankSize, nx));
+        tank.y = Math.max(CONFIG.tankSize, Math.min(CONFIG.mapHeight - CONFIG.tankSize, ny));
+    } else {
+        tank.weatherMomentumX *= -.18; tank.weatherMomentumY *= -.18;
+    }
+}
+
+function applyWeatherToProjectile(projectile, dt) {
+    const weather = mapMechanicsState.weather;
+    if(!projectile || !weather || weather.id !== 'crosswind' || projectile.type === 'bomb') return;
+    const resistance = projectile.ancientCannon ? .32 : (projectile.type === 'mg' ? 1.35 : 1);
+    projectile.vx += Math.cos(weather.windAngle) * weather.projectileWind * resistance * dt;
+    projectile.vy += Math.sin(weather.windAngle) * weather.projectileWind * resistance * dt;
+}
+
+function generateTacticalTerrain() {
+    if(currentMap === 'factory' || currentMap === 'island') return;
+    const sx = CONFIG.mapWidth / 5400, sy = CONFIG.mapHeight / 5400;
+    const zones = [
+        {type:'hill', x:CONFIG.mapWidth*.30, y:CONFIG.mapHeight*.28, rx:520*sx, ry:390*sy, height:135, name:'北侧高地'},
+        {type:'hill', x:CONFIG.mapWidth*.68, y:CONFIG.mapHeight*.70, rx:600*sx, ry:430*sy, height:170, name:'南侧高地'},
+        {type:'ridge', centered:true, x:CONFIG.mapWidth*.50, y:CONFIG.mapHeight*.47, w:920*sx, h:260*sy, angle:-0.38, height:105, name:'断脊'},
+        {type:'mud', centered:true, x:CONFIG.mapWidth*.50, y:CONFIG.mapHeight*.72, w:460*sx, h:270*sy, angle:.18, speedMult:.56, name:'泥泞洼地'},
+        {type:'jumpRamp', centered:true, x:CONFIG.mapWidth*.50, y:CONFIG.mapHeight*.22, w:210*sx, h:105*sy, angle:Math.PI/2, launchSpeed:250, name:'废土跳台'}
+    ];
+    if(currentMap === 'volcano') zones.splice(3, 1, {type:'ashSlide', centered:true, x:CONFIG.mapWidth*.72, y:CONFIG.mapHeight*.25, w:520*sx, h:280*sy, angle:-.55, speedMult:1.22, name:'火山灰滑坡'});
+    mapMechanicsState.tacticalTerrain = zones;
+    terrainZones.push(...zones);
+}
+
+function getTacticalTerrainHeightAt(x, y) {
+    let height = 0;
+    mapMechanicsState.tacticalTerrain.forEach(zone => {
+        if(zone.type === 'hill') {
+            const nx=(x-zone.x)/zone.rx, ny=(y-zone.y)/zone.ry;
+            const d=nx*nx+ny*ny;
+            if(d < 1) height = Math.max(height, zone.height * (1-d) * (1-d));
+        } else if(zone.type === 'ridge' && typeof pointInTerrainZone === 'function' && pointInTerrainZone(x,y,zone)) {
+            const cos=Math.cos(-(zone.angle||0)), sin=Math.sin(-(zone.angle||0));
+            const localY=(x-zone.x)*sin+(y-zone.y)*cos;
+            height=Math.max(height,zone.height*(1-Math.abs(localY)/(zone.h/2)));
+        }
+    });
+    return Math.max(0,height);
+}
+
+function getTerrainSpeedMultiplier(tank) {
+    return tank && Number.isFinite(tank.terrainSpeedMultiplier) ? tank.terrainSpeedMultiplier : 1;
+}
+
+function updateTacticalTerrain(dt, tanks) {
+    tanks.forEach(tank => {
+        tank.terrainSpeedMultiplier = 1;
+        if(tank.isFlying || currentMap === 'factory' || currentMap === 'island') return;
+        const oldZ = tank.z || 0;
+        const groundZ = getTacticalTerrainHeightAt(tank.x,tank.y);
+        const surfaceZone = mapMechanicsState.tacticalTerrain.find(zone =>
+            ['mud','ashSlide'].includes(zone.type) && typeof pointInTerrainZone === 'function' && pointInTerrainZone(tank.x,tank.y,zone));
+        if(surfaceZone) tank.terrainSpeedMultiplier *= surfaceZone.speedMult;
+        const movedX=tank.x-(tank.prevPos?tank.prevPos.x:tank.x), movedY=tank.y-(tank.prevPos?tank.prevPos.y:tank.y);
+        if(Math.hypot(movedX,movedY)>1 && oldZ-groundZ>2) tank.terrainSpeedMultiplier *= 1.12;
+        if((tank.terrainAirborneTimer||0)>0) {
+            tank.terrainAirborneTimer=Math.max(0,tank.terrainAirborneTimer-dt);
+            tank.terrainVerticalVelocity=(tank.terrainVerticalVelocity||0)-420*dt;
+            tank.z=Math.max(groundZ,(tank.z||groundZ)+tank.terrainVerticalVelocity*dt);
+            if(tank.z<=groundZ){tank.z=groundZ;tank.terrainAirborneTimer=0;tank.terrainVerticalVelocity=0;}
+            return;
+        }
+        tank.z=groundZ;
+        const ramp=mapMechanicsState.tacticalTerrain.find(zone=>zone.type==='jumpRamp'&&
+            typeof pointInTerrainZone==='function'&&pointInTerrainZone(tank.x,tank.y,zone));
+        tank.terrainJumpCooldown=Math.max(0,(tank.terrainJumpCooldown||0)-dt);
+        if(ramp&&tank.terrainJumpCooldown<=0&&Math.hypot(movedX,movedY)>1.5){
+            tank.terrainAirborneTimer=1.25;tank.terrainVerticalVelocity=ramp.launchSpeed;tank.terrainJumpCooldown=2;
+            if(tank===player&&typeof showMessage==='function')showMessage('↗ 跳台起飞：空中仍可转炮塔射击','#ffd35c');
+        }
+    });
+}
+
+function getAncientCannonSpawn() {
+    if(currentMap === 'factory') return {x:2550,y:2450,z:0,factoryFloor:0,hint:'工厂 B1 东南维修夹层'};
+    if(currentMap === 'volcano') return {x:CONFIG.mapWidth-260,y:250,z:0,factoryFloor:null,hint:'火山东北边缘'};
+    return {x:CONFIG.mapWidth-280,y:260,z:getTacticalTerrainHeightAt(CONFIG.mapWidth-280,260),factoryFloor:null,hint:'地图东北隐蔽角落'};
+}
+
+function initializeAncientCannon() {
+    const point=getAncientCannonSpawn();
+    mapMechanicsState.ancientCannon={
+        id:'ancient-cannon',type:'ancientCannon',name:'远古巨炮',...point,
+        angle:Math.PI, pickupRadius:105, discovered:false, controlled:false, fired:false, disappearing:false
+    };
+}
+
+function updateAncientCannon(tanks) {
+    const cannon=mapMechanicsState.ancientCannon;
+    if(!cannon||cannon.fired||!player||player.dead)return;
+    if(cannon.controlled){
+        cannon.angle=player.turretAngle;
+        player.canMove=false;
+        return;
+    }
+    if(Math.abs((player.z||0)-(cannon.z||0))>90)return;
+    if(Math.hypot(player.x-cannon.x,player.y-cannon.y)<=cannon.pickupRadius){
+        cannon.discovered=true;cannon.controlled=true;player.canMove=false;player.ancientCannonControl=true;
+        if(typeof showNotification==='function')showNotification('🏺 彩蛋发现：远古巨炮已接管 · 鼠标瞄准，点击发射唯一一炮！','#ffd35a');
+        if(typeof showJuiceCue==='function')showJuiceCue('远 古 巨 炮','超远射程 · 仅此一发 · 点击开火','#ffd35a',1.25);
+    }
+}
+
+function fireAncientCannon(controller, targetX, targetY) {
+    const cannon=mapMechanicsState.ancientCannon;
+    if(!cannon||!cannon.controlled||cannon.fired||!controller)return false;
+    const dx=targetX-cannon.x,dy=targetY-cannon.y,distance=Math.max(1,Math.hypot(dx,dy));
+    const angle=Math.atan2(dy,dx),speed=48;
+    cannon.angle=angle;cannon.fired=true;cannon.controlled=false;cannon.disappearing=true;
+    controller.canMove=true;controller.ancientCannonControl=false;
+    bullets.push({
+        x:cannon.x+Math.cos(angle)*78,y:cannon.y+Math.sin(angle)*78,z:(cannon.z||0)+38,
+        vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,vz:0,damage:2600,team:controller.team,type:'rocket',owner:controller,
+        life:distance/(speed*60),maxLife:distance/(speed*60),age:0,targetX,targetY,isRocket:true,ancientCannon:true,
+        explosionRadius:460,armorIgnore:true,ignoresObstacles:true,hitTanks:new Set(),maxTargetHits:1,apsImmune:true
+    });
+    if(typeof createParticles==='function')createParticles(cannon.x,cannon.y,80,'#ffd04a',4);
+    if(typeof showNotification==='function')showNotification('☄ 远古地图炮已发射！巨炮正在崩解……','#ffb12e');
+    if(typeof playWorldSound==='function')playWorldSound('ammoRack',cannon.x,cannon.y,1.5);
+    return true;
 }
 
 function generateVolcanoMechanics() {
@@ -396,6 +598,8 @@ function updateMapMechanics(dt) {
             if(tank.mapSlowTimer <= 0) tank.mapSlow = 0;
         }
     });
+    updateTacticalTerrain(dt, tanks);
+    updateAncientCannon(tanks);
     if(currentMap === 'volcano') updateVolcanoMechanics(dt, tanks);
     else if(currentMap === 'factory') updateFactoryMechanics(dt, tanks);
 }

@@ -307,6 +307,10 @@ function selectMode(mode) {
         alert('🎉 好友聚会功能暂未开放\n\nWebRTC私密房间功能正在开发中，敬请期待！');
         return;
     }
+    if(mode === 'story' && typeof openStoryMode === 'function') {
+        openStoryMode();
+        return;
+    }
 
     closeTutorial();
     closeInfoPanels();
@@ -342,9 +346,9 @@ function selectMode(mode) {
         badge.className = 'mode-badge ranked';
         const profile = typeof getRankedProfile === 'function' ? getRankedProfile() : null;
         badge.textContent = profile ? `🏅 赛季排位 · ${profile.displayName}` : '🏅 赛季排位';
-        subtitle.textContent = '10v10标准竞技 | 胜负与表现影响段位分 | 新手辅助不生效';
+        subtitle.textContent = '6v6轻量竞技 | 4分钟一局 | 简单AI · 胜多扣少';
         dayNightRow.style.display = 'none';
-        if(difficultySelect) { difficultySelect.value = 'normal'; difficultySelect.disabled = true; }
+        if(difficultySelect) { difficultySelect.value = 'easy'; difficultySelect.disabled = true; }
         if(startButton) startButton.textContent = '开始排位';
     } else if(mode === 'sneak') {
         badge.className = 'mode-badge sneak';
@@ -477,20 +481,22 @@ function renderTankList() {
         else if(key.startsWith('duoduo')) seriesTag = '🟠 多多系';
         else if(key.startsWith('niuniu')) seriesTag = '🩵 牛牛系';
         else if(key.startsWith('kimi')) seriesTag = '🟣 AI系';
+        else if(key === 'mecha_pea') seriesTag = '✦ 三相隐藏系';
         const mastery = typeof getTankMasteryProfile === 'function'
             ? getTankMasteryProfile(key)
             : {level:1,levelName:'新兵',matches:0,xp:0};
-        card.classList.add(`mastery-level-${mastery.level}`);
-        if(mastery.level > 1) card.classList.add('mastery-unlocked');
+        if(!tank.noMastery) card.classList.add(`mastery-level-${mastery.level}`);
+        if(!tank.noMastery && mastery.level > 1) card.classList.add('mastery-unlocked');
         card.innerHTML = `
             <div class="tank-preview" id="preview-${key}"></div>
             <h4>${tank.name}</h4>
             <div style="font-size:11px;color:#888;margin-bottom:4px;">${seriesTag} | ${tank.desc.split(' - ')[0]}</div>
-            <div class="tank-mastery-badge">★${mastery.level} ${mastery.levelName} · ${mastery.xp} XP</div>
-            ${mastery.level > 1 ? `<div class="tank-mastery-effect">${mastery.reward}</div>` : ''}
+            <div class="tank-mastery-badge">${tank.noMastery ? '✦ 故事通关奖励 · 无等级' : `★${mastery.level} ${mastery.levelName} · ${mastery.xp} XP`}</div>
+            ${!tank.noMastery && mastery.level > 1 ? `<div class="tank-mastery-effect">${mastery.reward}</div>` : ''}
             <div class="tank-stats">
                 生命: <span>${tank.hp}</span> | 速度: <span>${tank.speed}</span><br>
                 装甲: <span>${tank.armor}x</span> | 射速: <span>${(tank.fireRate*100).toFixed(0)}%</span><br>
+                ${tank.noMastery ? '<span style="color:#79ecdc">三相炮：冰 → 火 → 毒循环</span><br>' : `射程: <span>+${mastery.rangeBonusPercent || 0}%</span> | 弹速: <span>+${mastery.projectileSpeedBonusPercent || 0}%</span><br>`}
                 <span style="color:#ffd700">⚡ ${tank.ultimate.name}</span>
             </div>
         `;

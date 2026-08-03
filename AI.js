@@ -151,8 +151,11 @@ function solveAIGunElevation(tank, target, weaponType) {
     const horizontalDistance = Math.max(1, Math.hypot(target.x - tank.x, target.y - tank.y));
     const launchZ = (tank.z || 0) + (weaponType === 'aa' ? 18 : 24);
     const targetZ = typeof getProjectileTargetHeight === 'function' ? getProjectileTargetHeight(target) : (target.z || 0) + (target.isFlying ? 8 : 22);
-    const speed = (weaponType === 'aa' ? CONFIG.aaSpeed : CONFIG.bulletSpeed) * 60;
-    const gravity = weaponType === 'aa' ? CONFIG.aaGravity : CONFIG.shellGravity;
+    const projectileSpeedMult = tank.masteryProjectileSpeedMult || 1;
+    const masteryRangeMult = (tank.masteryRangeMult || 1) * (tank.evolutionEffects && tank.evolutionEffects.rangeMult || 1);
+    const speed = (weaponType === 'aa' ? CONFIG.aaSpeed : CONFIG.bulletSpeed) * projectileSpeedMult * 60;
+    const gravity = (weaponType === 'aa' ? CONFIG.aaGravity : CONFIG.shellGravity) *
+        projectileSpeedMult * projectileSpeedMult / masteryRangeMult;
     const discriminant = speed ** 4 - gravity * (gravity * horizontalDistance ** 2 + 2 * (targetZ - launchZ) * speed ** 2);
     if(discriminant < 0) return;
     const angle = Math.atan((speed ** 2 - Math.sqrt(discriminant)) / (gravity * horizontalDistance)) * 180 / Math.PI;
@@ -607,7 +610,7 @@ function updateAITank(tank, dt) {
     let targetAngle = null;
     if(nearestEnemy) {
         const predicted = typeof getPredictedAimPoint === 'function'
-            ? getPredictedAimPoint(tank,nearestEnemy,CONFIG.bulletSpeed,CONFIG.autoAimPredictFactor)
+            ? getPredictedAimPoint(tank,nearestEnemy,CONFIG.bulletSpeed * (tank.masteryProjectileSpeedMult || 1),CONFIG.autoAimPredictFactor)
             : {x:nearestEnemy.x,y:nearestEnemy.y};
         targetAngle = Math.atan2(predicted.y - tank.y, predicted.x - tank.x);
     } else if(shouldFire) {

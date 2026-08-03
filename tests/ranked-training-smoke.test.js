@@ -59,15 +59,15 @@ const result=vm.runInContext(`(() => {
 })()`,context);
 
 assert.strictEqual(result.durationDays,56);
-assert.strictEqual(result.win.delta,46);
-assert.strictEqual(result.win.rating,46);
+assert.strictEqual(result.win.delta,56);
+assert.strictEqual(result.win.rating,56);
 assert.strictEqual(result.duplicate,null,'one ranked match must settle only once');
-assert.strictEqual(result.loss.delta,-18);
-assert.strictEqual(result.rankedState.rating,28);
+assert.strictEqual(result.loss.delta,-10);
+assert.strictEqual(result.rankedState.rating,46);
 assert.strictEqual(result.rankedState.matches,2);
 assert.strictEqual(result.rankedState.wins,1);
 assert.strictEqual(result.rankedState.losses,1);
-assert.strictEqual(result.rankedState.lastDelta,-18);
+assert.strictEqual(result.rankedState.lastDelta,-10);
 assert(result.panel.includes('段位阶梯')&&result.panel.includes('赛季目标')&&result.panel.includes('历届战绩'));
 assert.deepStrictEqual(JSON.parse(JSON.stringify(result.initialized)),{infinite:true,invincible:null,dummyCount:5,moving:1,controls:'flex'});
 assert.strictEqual(result.respawned,true);
@@ -76,8 +76,12 @@ assert(saves.length>=2);
 
 const html=fs.readFileSync('index.html','utf8');
 const css=fs.readFileSync('style.css','utf8');
+const core=fs.readFileSync('GameCore.js','utf8');
 assert(html.includes("selectMode('ranked')")&&html.includes("selectMode('training')"));
-assert(html.includes('RankedTraining.js?v=ranked-training-36'));
+assert(html.includes('6v6轻量竞技')&&html.includes('完成3场定级'));
+assert(core.includes("if(gameMode === 'ranked') { blueCount = 6; redCount = 6; }"));
+assert(core.includes("else if(gameMode === 'ranked') gameTime = 240;"));
+assert(html.includes('RankedTraining.js?v=ranked-simple-37'));
 assert(css.includes('.ranked-season-panel')&&css.includes('#trainingControls'));
 
 console.log('Ranked season and training smoke test passed:',result);

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>坦克大战 - 据点争夺</title>
-    <link rel="stylesheet" href="style.css?v=armory-skins-29&ranked-training-36">
+    <link rel="stylesheet" href="style.css?v=armory-skins-29&ranked-training-36&weather-terrain-1&story-mode-1">
     <base target="_blank">
 </head>
 <body>
@@ -19,23 +19,27 @@
                 <div class="start-highlights" aria-label="游戏特色">
                     <span>◈ 真 3D 战场</span>
                     <span>⚡ 强化升级</span>
-                    <span id="seasonHomeSummary">◆ 定级赛 0/5 · 0 RP</span>
+                    <span id="seasonHomeSummary">◆ 定级赛 0/3 · 0 RP</span>
                 </div>
             </header>
 
             <main class="start-mode-panel">
                 <div class="mode-select-title">
                     <span>选择战役</span>
-                    <small>9 种可用模式</small>
+                    <small>10 种可用模式</small>
                 </div>
                 <div class="mode-buttons">
+                <button class="mode-btn mode-story" id="btnModeStory" onclick="selectMode('story')">
+                    <span class="mode-name">📖 故事模式·四元素封印</span>
+                    <span class="mode-desc">11 个节点关卡 | 击破 Boss 部位、打飞追踪弹、操纵物理机关 | 通关解锁机甲神豌</span>
+                </button>
                 <button class="mode-btn mode-classic" id="btnModeClassic" onclick="selectMode('classic')">
                     <span class="mode-name">🏛 经典模式</span>
                     <span class="mode-desc">10v10据点争夺战 | 占领据点、摧毁敌方基地 | 标准对战体验</span>
                 </button>
                 <button class="mode-btn mode-ranked" id="btnModeRanked" onclick="selectMode('ranked')">
                     <span class="mode-name">🏅 赛季排位</span>
-                    <span class="mode-desc">10v10竞技据点战 | 胜负与个人表现影响RP | 冲击传奇战神段位</span>
+                    <span class="mode-desc">6v6轻量竞技 | 4分钟快节奏 | 3场定级、胜多扣少</span>
                 </button>
                 <button class="mode-btn mode-defense" id="btnModeDefense" onclick="selectMode('defense')">
                     <span class="mode-name">🛡 守点模式</span>
@@ -78,6 +82,36 @@
                 <button class="start-btn-secondary start-btn-settings" id="btnSettings" onclick="showSettingsPanel()">⚙ 战场设置</button>
             </nav>
         </div>
+
+        <section id="storyModeScreen" aria-label="故事模式节点地图">
+            <div class="story-map-shell">
+                <header class="story-map-header">
+                    <div><small>ZUOYAN ACADEMY · ELEMENTAL SEAL</small><h1>📖 四元素封印</h1></div>
+                    <div class="story-header-actions"><strong id="storyProgressText">封印进度 0 / 11</strong><button type="button" onclick="closeStoryMode()" aria-label="返回主页">×</button></div>
+                </header>
+                <blockquote class="story-background">左研学院位于地底深处。近几天，地底能量异常，四大元素的封印被打破。地底机械兽冲出地表。你（8级左研29）作为学院最后的“战术车长”，带上一个见多识广但不会战斗的帮手，必须驾驶特制的“元素坦克”，深入地下，重新封印它们。</blockquote>
+                <div class="story-map-stage">
+                    <canvas id="storyMapCanvas" onclick="handleStoryMapClick(event)"></canvas>
+                    <div id="storyLevelCard"></div>
+                </div>
+                <footer class="story-map-legend"><span>◉ 点击已解锁节点</span><span>✦ Boss 受到部位保护</span><span>◇ 主炮可提前引爆追踪弹</span></footer>
+            </div>
+        </section>
+
+        <div id="storyDialogueOverlay" role="dialog" aria-modal="true" aria-label="故事对话">
+            <div class="story-dialogue-stage">
+                <div class="story-dialogue-character story-dialogue-left">
+                    <canvas id="storyDialogueLeftCanvas" width="280" height="190"></canvas>
+                    <strong class="story-speaker-name"></strong><div class="story-speech"></div>
+                </div>
+                <div class="story-dialogue-character story-dialogue-right">
+                    <canvas id="storyDialogueRightCanvas" width="280" height="190"></canvas>
+                    <strong class="story-speaker-name"></strong><div class="story-speech"></div>
+                </div>
+                <button type="button" id="storyDialogueNext" onclick="nextStoryDialogue()">继续</button>
+            </div>
+        </div>
+        <div id="storyFailurePanel"></div>
 
         <div id="rankedSeasonPanel" class="ranked-season-panel" role="dialog" aria-modal="true" aria-labelledby="rankedSeasonTitle">
             <div class="ranked-season-shell">
@@ -758,7 +792,7 @@
             <div class="subtitle" id="menuSubtitle">紧凑战场 | 3 据点争夺 | 基地持续增援</div>
             <div class="mode-badge" id="modeBadge">经典模式</div>
             <div id="rankedQueueSummary" class="mode-brief ranked-brief" style="display:none;">
-                <strong>🏅 标准竞技规则</strong><span>固定白天、标准AI强度；完成5场定级后显示正式段位。</span>
+                <strong>🏅 轻量竞技规则</strong><span>固定白天、简单AI；6v6对战，完成3场定级后显示正式段位。</span>
             </div>
             <div id="trainingMenuSummary" class="mode-brief training-brief" style="display:none;">
                 <strong>🎯 无压力练习</strong><span>不记录成就、熟练度和排位；靶车自动复位，可测试所有1–8阶元素效果。</span>
@@ -919,6 +953,7 @@
                 <p id="masterySummary"></p>
                 <div class="mastery-unlock-guide">
                     <span>21 辆核心载具拥有彼此独立的 1–8 阶名称、造型与机制</span>
+                    <span>每升1阶：射程 +10% · 弹速 +6%（★8累计 +70% / +42%）</span>
                     <span>★2 · 300 XP</span>
                     <span>★3 · 800 XP</span>
                     <span>★4 · 1500 XP</span>
@@ -972,6 +1007,7 @@
                 <div id="defenseWaveInfo">🛡 守点模式 - 撑过 03:00</div>
                 <div id="sneakModeInfo">🌙 黑夜奇袭 - 摧毁敌方基地</div>
                 <div id="specialModeInfo" style="display:none;"></div>
+                <div id="weatherInfo" aria-live="polite" style="display:none;"></div>
                 <div id="trainingControls">
                     <span id="trainingHint">提示：WASD移动，鼠标瞄准</span>
                     <button type="button" id="trainingNextHint" onclick="nextTrainingHint()">下一提示</button>
@@ -1066,20 +1102,21 @@
     <script src="BattleSystems.js?v=mastery-quota-17&tank-evolution-31"></script>
     <script src="TerrainDestruction.js"></script>
     <script src="Achievement.js?v=armory-skins-29"></script>
-    <script src="Progression.js?v=physics-settings-28&tank-evolution-30"></script>
+    <script src="Progression.js?v=physics-settings-28&tank-evolution-30&mastery-ballistics-37"></script>
     <script src="TankEvolution.js?v=tank-evolution-34-elemental-trees"></script>
     <script src="Armory.js?v=armory-skins-29"></script>
     <script src="DailyTasks.js?v=daily-tasks-22"></script>
-    <script src="RankedTraining.js?v=ranked-training-36"></script>
-    <script src="Pathfinding.js?v=escort-rush-21&tank-evolution-34-elemental-trees"></script>
-    <script src="UI.js?v=armory-skins-29&ranked-training-36"></script>
+    <script src="RankedTraining.js?v=ranked-simple-37"></script>
+    <script src="Pathfinding.js?v=escort-rush-21&tank-evolution-34-elemental-trees&weather-terrain-1"></script>
+    <script src="UI.js?v=armory-skins-29&ranked-simple-37&mastery-ballistics-37"></script>
     <script src="Ultimate.js?v=physics-settings-28&tank-evolution-34-elemental-trees"></script>
-    <script src="GameCore.js?v=armory-skins-29&ranked-training-36"></script>
-    <script src="MapMechanics.js?v=mastery-custom-2"></script>
+    <script src="GameCore.js?v=armory-skins-29&ranked-simple-37&mastery-ballistics-37&weather-terrain-1"></script>
+    <script src="MapMechanics.js?v=mastery-custom-2&weather-terrain-1"></script>
     <script src="FactoryPhysics.js?v=mastery-custom-2"></script>
-    <script src="AI.js?v=escort-rush-21&ranked-training-36"></script>
-    <script src="Combat.js?v=armory-skins-29&ranked-training-36"></script>
+    <script src="AI.js?v=escort-rush-21&ranked-simple-37&mastery-ballistics-37"></script>
+    <script src="Combat.js?v=armory-skins-29&ranked-simple-37&mastery-ballistics-37&weather-terrain-1"></script>
     <script src="Render.js?v=armory-skins-29&tank-evolution-34-elemental-trees"></script>
-    <script src="ThreeRender.js?v=armory-skins-29&tank-evolution-34-elemental-trees"></script>
+    <script src="ThreeRender.js?v=armory-skins-29&tank-evolution-34-elemental-trees&weather-terrain-1"></script>
+    <script src="StoryMode.js?v=story-mode-1"></script>
 </body>
 </html>
