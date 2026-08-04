@@ -49,6 +49,22 @@ const TANK_SKINS = Object.freeze({
     pixel: {
         id: 'pixel', name: '像素涂装', icon: '▦', description: '隐藏彩蛋',
         color: '#2f8d58', accent: '#e14eb6', exhaustColor: '#8bff6e', metalness: .25, emissive: '#173e28'
+    },
+    frostmark: {
+        id: 'frostmark', name: '霜痕之印', icon: '❄', description: '故事模式·霜痕的馈赠',
+        color: '#bdeaff', accent: '#4fc7ee', exhaustColor: '#d9f8ff', metalness: .36, emissive: '#174c68'
+    },
+    moltenWalker: {
+        id: 'moltenWalker', name: '熔火行者', icon: '♨', description: '故事模式·熔火之心',
+        color: '#7d2418', accent: '#ff9b38', exhaustColor: '#ff582d', metalness: .48, emissive: '#621906'
+    },
+    industrial: {
+        id: 'industrial', name: '多多号工业', icon: '⚙', description: '故事模式·废弃档案室',
+        color: '#6d7072', accent: '#f2b338', exhaustColor: '#ffcd65', metalness: .72, emissive: '#45320b'
+    },
+    voidEcho: {
+        id: 'voidEcho', name: '霆光回响', icon: '⚡', description: '故事模式·霆光的认可',
+        color: '#332660', accent: '#e9ed6b', exhaustColor: '#a68cff', metalness: .58, emissive: '#27174d'
     }
 });
 
@@ -206,6 +222,10 @@ function getTankSkinUnlock(tankType, skinId) {
     if(skinId === 'flame') return { unlocked: (stats.kills || 0) >= 1000, progress: `${Math.min(1000, stats.kills || 0)}/1000 击杀` };
     if(skinId === 'snow') return { unlocked: (stats.snowMapWins || 0) >= 50, progress: `${Math.min(50, stats.snowMapWins || 0)}/50 雪地胜场` };
     if(skinId === 'pixel') return { unlocked: !!stats.pixelSkinUnlocked, progress: stats.pixelSkinUnlocked ? '彩蛋已发现' : '？？？' };
+    if(['frostmark','moltenWalker','industrial','voidEcho'].includes(skinId)) {
+        const unlocked = typeof isStoryCosmeticUnlocked === 'function' && isStoryCosmeticUnlocked(skinId);
+        return { unlocked, progress: unlocked ? '故事奖励已领取' : '完成对应章节奖励关' };
+    }
     return { unlocked: false, progress: '未解锁' };
 }
 

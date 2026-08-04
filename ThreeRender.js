@@ -191,7 +191,7 @@ function clearThreeMap(map) {
 
 function getThreeMapSignature() {
     const generation = typeof terrainGeneration !== 'undefined' ? terrainGeneration : obstacles.length;
-    return [currentMap, CONFIG.mapWidth, CONFIG.mapHeight, generation, terrainZones.length, outposts.length, gameConfig.dayNight, gameConfig.weatherId || 'clear'].join(':');
+    return [currentMap, gameConfig.storyLayoutId || '', CONFIG.mapWidth, CONFIG.mapHeight, generation, terrainZones.length, outposts.length, gameConfig.dayNight, gameConfig.weatherId || 'clear'].join(':');
 }
 
 function rebuildThreeWorld(force = false) {
@@ -240,6 +240,7 @@ function rebuildThreeWorld(force = false) {
     buildThreeObstacles();
     buildThreeBasesAndOutposts();
     buildThreeMapElements();
+    buildThreeStoryArchitecture();
     if(typeof buildThreeMapMechanics === 'function') buildThreeMapMechanics();
     buildThreeBoundary();
     threeView.mapSignature = signature;
@@ -330,6 +331,7 @@ function buildThreeGround() {
     if(currentMap === 'island') groundColor = '#0b6f98';
     if(currentMap === 'volcano') groundColor = '#292625';
     if(currentMap === 'factory') groundColor = '#44474a';
+    if(gameConfig.storyGroundColor) groundColor = gameConfig.storyGroundColor;
     if(night) groundColor = '#111827';
     const ground = addStaticMesh(
         new THREE.PlaneGeometry(CONFIG.mapWidth * THREE_WORLD_SCALE, CONFIG.mapHeight * THREE_WORLD_SCALE),
@@ -362,6 +364,47 @@ function buildThreeGround() {
         grid.position.y = 0.01;
         threeView.worldRoot.add(grid);
     }
+}
+
+function buildThreeStoryArchitecture() {
+    if(gameMode !== 'story' || typeof getCurrentStoryMapLayout !== 'function') return;
+    const layout = getCurrentStoryMapLayout();
+    if(!layout) return;
+    (layout.architecture || []).forEach((item, index) => {
+        if(item.type !== 'gateBeam') return;
+        const height = (item.worldHeight || 100) * THREE_WORLD_SCALE;
+        const beam = new THREE.Mesh(
+            new THREE.BoxGeometry(item.w * THREE_WORLD_SCALE, height, item.h * THREE_WORLD_SCALE),
+            makeStandardMaterial(0x9fdcef, {roughness:.38, metalness:.08, transparent:true, opacity:.92, emissive:0x174f66, emissiveIntensity:.25})
+        );
+        beam.position.copy(threeWorldPosition(item.x + item.w/2, item.y + item.h/2, item.z * THREE_WORLD_SCALE + height/2));
+        beam.userData.storyArchitecture = item.label || `story-architecture-${index}`;
+        beam.castShadow = true;beam.receiveShadow = true;threeView.worldRoot.add(beam);
+    });
+    if(layout.ceiling && layout.ceiling.sealed) {
+        const ceiling = layout.ceiling;
+        const color = new THREE.Color(ceiling.color || '#63717b');
+        const material = makeStandardMaterial(color, {roughness:.72, metalness:ceiling.kind==='factoryRoof'?.35:.08, transparent:true, opacity:ceiling.opacity || .18, emissive:color.clone().multiplyScalar(.12), emissiveIntensity:.22});
+        material.depthWrite = false;material.side = THREE.DoubleSide;
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(CONFIG.mapWidth*THREE_WORLD_SCALE,.5,CONFIG.mapHeight*THREE_WORLD_SCALE),material);
+        roof.position.y = ceiling.height*THREE_WORLD_SCALE;roof.userData.storyCeiling = ceiling.kind;threeView.worldRoot.add(roof);
+        const beamMaterial = makeStandardMaterial(color.clone().multiplyScalar(.62), {roughness:.82, metalness:ceiling.kind==='factoryRoof'?.45:.05, transparent:true, opacity:.72});
+        for(let i=1;i<5;i++){
+            const crossBeam = new THREE.Mesh(new THREE.BoxGeometry(CONFIG.mapWidth*THREE_WORLD_SCALE,.7,.55),beamMaterial);
+            crossBeam.position.copy(threeWorldPosition(CONFIG.mapWidth/2,CONFIG.mapHeight*i/5,ceiling.height*THREE_WORLD_SCALE-.5));
+            crossBeam.userData.storyCeilingBeam=true;threeView.worldRoot.add(crossBeam);
+        }
+    }
+    (layout.icicles || []).forEach(item => {
+        const length = item.length*THREE_WORLD_SCALE;
+        const icicle = new THREE.Mesh(
+            new THREE.ConeGeometry(Math.max(.45,item.radius*THREE_WORLD_SCALE),length,8),
+            makeStandardMaterial(0x9cecff,{roughness:.2,metalness:.05,transparent:true,opacity:.88,emissive:0x217e9d,emissiveIntensity:.42})
+        );
+        icicle.rotation.z = Math.PI;
+        icicle.position.copy(threeWorldPosition(item.x,item.y,item.z*THREE_WORLD_SCALE-length/2));
+        icicle.userData.storyCeilingIcicle=item.id;icicle.castShadow=true;threeView.worldRoot.add(icicle);
+    });
 }
 
 function buildThreeTerrain() {
@@ -517,7 +560,7 @@ function createThreeObstacleObject(obs, index) {
     if(!obs.terrainId) obs.terrainId = `legacy-obstacle-${index}`;
     const factoryBaseZ = currentMap === 'factory'
         ? (Number.isFinite(obs.z) ? obs.z : (Number.isInteger(obs.factoryFloor) && typeof getFactoryFloorZ === 'function' ? getFactoryFloorZ(obs.factoryFloor) : 0)) : 0;
-    const worldTop = typeof getObstacleWorldHeight === 'function' ? getObstacleWorldHeight(obs)
+    const worldTop = Number.isFinite(obs.storyVisualHeight) ? factoryBaseZ + obs.storyVisualHeight : typeof getObstacleWorldHeight === 'function' ? getObstacleWorldHeight(obs)
         : (obs.type === 'building' ? 52 + (obs.floors || 4) * 18 : Math.max(35, Math.min(obs.w, obs.h) * 0.58));
     const height = Math.max(12, worldTop - factoryBaseZ) * THREE_WORLD_SCALE;
     const center = threeWorldPosition(obs.x + obs.w / 2, obs.y + obs.h / 2, factoryBaseZ * THREE_WORLD_SCALE);
@@ -582,8 +625,8 @@ function createThreeObstacleObject(obs, index) {
             object.add(mesh);
         });
     } else {
-        const transparentFactoryWall=obs.type==='factoryBoundary';
-        const wallOpacity=obs.type==='factoryBoundary'?.10:1;
+        const transparentFactoryWall=obs.type==='factoryBoundary'||obs.storyCameraCutaway;
+        const wallOpacity=obs.storyCameraCutaway?.12:obs.type==='factoryBoundary'?.10:1;
         const obstacleMaterial=makeStandardMaterial(color, { roughness: 0.9, metalness: obs.type === 'building' || obs.type === 'factoryWall' ? 0.16 : 0, transparent:transparentFactoryWall, opacity:wallOpacity });
         if(transparentFactoryWall)obstacleMaterial.depthWrite=false;
         object = new THREE.Mesh(
@@ -3266,6 +3309,19 @@ function syncThreeHud() {
 
 function createThreeStoryMarker(color, radius, type) {
     const group=new THREE.Group();
+    if(type==='gateCrossbow'){
+        const iceMat=makeStandardMaterial(0x8edff2,{roughness:.3,metalness:.18,emissive:0x155f78,emissiveIntensity:.45});
+        const darkMat=makeStandardMaterial(0x263942,{roughness:.56,metalness:.48});
+        const stock=new THREE.Mesh(new THREE.BoxGeometry(1.15,1.0,7.6),darkMat);stock.position.z=1.4;group.add(stock);
+        [-1,1].forEach(side=>{const arm=new THREE.Mesh(new THREE.BoxGeometry(7.2,.72,.82),iceMat);arm.position.x=side*2.6;arm.rotation.y=side*.17;group.add(arm);});
+        const axle=new THREE.Mesh(new THREE.CylinderGeometry(.75,.75,2.1,12),darkMat);axle.rotation.z=Math.PI/2;group.add(axle);
+        const loadedBolt=new THREE.Mesh(new THREE.BoxGeometry(.28,.28,8.8),iceMat);loadedBolt.position.z=2.7;group.add(loadedBolt);
+        group.userData.crossbowParts={stock,loadedBolt};return group;
+    }
+    if(type==='crossbowBolt'){
+        const bolt=new THREE.Mesh(new THREE.CylinderGeometry(.13,.2,5.8,7),makeStandardMaterial(0xbef6ff,{emissive:0x38b8dc,emissiveIntensity:1.4}));
+        bolt.rotation.x=Math.PI/2;group.add(bolt);group.userData.bolt=bolt;return group;
+    }
     const ring=new THREE.Mesh(
         new THREE.RingGeometry(Math.max(.35,radius*.78),Math.max(.55,radius),40),
         new THREE.MeshBasicMaterial({color,transparent:true,opacity:.62,side:THREE.DoubleSide,depthWrite:false})
@@ -3285,7 +3341,7 @@ function syncThreeStoryMode(now) {
     const runtime=typeof storyModeState!=='undefined'&&storyModeState?storyModeState.runtime:null;
     if(gameMode!=='story'||!runtime||!storyModeState.active){clearThreeMap(threeView.storyMeshes);return;}
     const descriptors=[];
-    (runtime.hazards||[]).forEach((hazard,index)=>descriptors.push({key:`hazard-${index}-${hazard.type}`,type:hazard.type,x:hazard.x,y:hazard.y,radius:hazard.radius||70,phase:hazard.phase}));
+    (runtime.hazards||[]).forEach((hazard,index)=>descriptors.push({...hazard,key:`hazard-${index}-${hazard.type}`,radius:hazard.radius||70}));
     if(runtime.craneZone)descriptors.push({key:'crane-zone',type:'zone',x:runtime.craneZone.x,y:runtime.craneZone.y,radius:runtime.craneZone.radius,color:0xffb43f});
     if(runtime.controlZone)descriptors.push({key:'control-zone',type:'zone',x:runtime.controlZone.x,y:runtime.controlZone.y,radius:runtime.controlZone.radius,color:0x42cfff});
     if(runtime.iceRoom)descriptors.push({key:'ice-room',type:'zone',x:runtime.iceRoom.x,y:runtime.iceRoom.y,radius:runtime.iceRoom.radius,color:0x59dfff});
@@ -3295,13 +3351,15 @@ function syncThreeStoryMode(now) {
     const alive=new Set();
     descriptors.forEach((item,index)=>{
         alive.add(item.key);let mesh=threeView.storyMeshes.get(item.key);
-        const color=item.color||(item.type==='storyFire'||item.type==='ember'?0xff4b24:item.type==='afterimage'?0x63cfff:item.type==='lightning'?0xf2ff72:item.type==='iceSpike'?0x74e8ff:0xc878ff);
+        const color=item.color||(item.gold?0xffe169:item.element==='fire'?0xff633c:item.element==='thunder'?0xf2ed68:item.type==='gateCrossbow'||item.type==='crossbowBolt'?0x8deaff:item.type==='floatstone'?(item.active?0x65e6ad:0x4a4e55):item.type==='lavaVent'||item.type==='storyFire'?0xff4b24:item.type==='mechanicalArm'?0xffbd45:item.type==='icePatch'||item.type==='iceTarget'?0x67e8ff:item.type==='route'?0x79c9ff:item.type==='codeGate'?0xe7ee6c:item.type==='assemblyPart'?0xffc84d:0xc878ff);
         const radius=Math.max(16,item.radius||60)*THREE_WORLD_SCALE;
         if(!mesh){mesh=createThreeStoryMarker(color,radius,item.type);threeView.dynamicRoot.add(mesh);threeView.storyMeshes.set(item.key,mesh);}
-        setThreeWorldPosition(mesh,item.x,item.y,0);
+        setThreeWorldPosition(mesh,item.x,item.y,(item.z||0)*THREE_WORLD_SCALE);
         if(mesh.userData.ring){mesh.userData.ring.material.color.setHex(color);mesh.userData.ring.material.opacity=.36+(Math.sin(now*.009+index)+1)*.18;const scale=1+Math.sin(now*.007+index)*.06;mesh.scale.set(scale,1,scale);}
         if(mesh.userData.spike){mesh.userData.spike.visible=item.phase!=='warning';mesh.userData.spike.rotation.y=now*.002;}
         if(mesh.userData.beam)mesh.userData.beam.material.opacity=.35+(Math.sin(now*.025)+1)*.22;
+        if(mesh.userData.bolt)mesh.rotation.y=Math.atan2(item.vx||0,item.vy||1);
+        if(mesh.userData.crossbowParts){mesh.rotation.y=item.dead?.42:0;mesh.scale.setScalar(item.dead?.72:1);}
     });
     for(const [key,mesh] of threeView.storyMeshes){if(!alive.has(key)){disposeThreeObject(mesh);threeView.storyMeshes.delete(key);}}
 }

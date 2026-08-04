@@ -31,7 +31,7 @@
                 <div class="mode-buttons">
                 <button class="mode-btn mode-story" id="btnModeStory" onclick="selectMode('story')">
                     <span class="mode-name">📖 故事模式·四元素封印</span>
-                    <span class="mode-desc">11 个节点关卡 | 击破 Boss 部位、打飞追踪弹、操纵物理机关 | 通关解锁机甲神豌</span>
+                    <span class="mode-desc">5章·14主线+5奖励关 | Boss部位、属性克制、物理机关 | 通关解锁机甲神豌</span>
                 </button>
                 <button class="mode-btn mode-classic" id="btnModeClassic" onclick="selectMode('classic')">
                     <span class="mode-name">🏛 经典模式</span>
@@ -87,14 +87,14 @@
             <div class="story-map-shell">
                 <header class="story-map-header">
                     <div><small>ZUOYAN ACADEMY · ELEMENTAL SEAL</small><h1>📖 四元素封印</h1></div>
-                    <div class="story-header-actions"><strong id="storyProgressText">封印进度 0 / 11</strong><button type="button" onclick="closeStoryMode()" aria-label="返回主页">×</button></div>
+                    <div class="story-header-actions"><strong id="storyProgressText">主线 0/14 · 奖励 0/5</strong><button type="button" onclick="closeStoryMode()" aria-label="返回主页">×</button></div>
                 </header>
                 <blockquote class="story-background">左研学院位于地底深处。近几天，地底能量异常，四大元素的封印被打破。地底机械兽冲出地表。你（8级左研29）作为学院最后的“战术车长”，带上一个见多识广但不会战斗的帮手，必须驾驶特制的“元素坦克”，深入地下，重新封印它们。</blockquote>
                 <div class="story-map-stage">
                     <canvas id="storyMapCanvas" onclick="handleStoryMapClick(event)"></canvas>
                     <div id="storyLevelCard"></div>
                 </div>
-                <footer class="story-map-legend"><span>◉ 点击已解锁节点</span><span>✦ Boss 受到部位保护</span><span>◇ 主炮可提前引爆追踪弹</span></footer>
+                <footer class="story-map-legend"><span>◉ 14个主线节点</span><span>★ 5个章节奖励关</span><span>✦ Boss部位与属性克制</span><span>◇ 主炮可引爆追踪弹</span></footer>
             </div>
         </section>
 

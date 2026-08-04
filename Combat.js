@@ -96,6 +96,7 @@ function fireBullet(tank, type) {
     };
     if(typeof applyTankEvolutionToProjectile === 'function') applyTankEvolutionToProjectile(tank, projectile);
     if(typeof applyMechaPeaTriPhase === 'function') applyMechaPeaTriPhase(tank, projectile);
+    if(typeof applyStoryProjectileProperties === 'function') applyStoryProjectileProperties(tank, projectile);
     bullets.push(projectile);
     if(typeof spawnTankShotAnimation === 'function') spawnTankShotAnimation(tank, projectile, angle);
     if(type === 'shell' && tank.tankType === 'duoduo_rocket' && !tank.evolutionBurstFiring) {
@@ -488,6 +489,7 @@ function consumeGoldenShield(tank, source, projectile) {
 
 function applyDirectDamage(tank, damage, source, cause = null, projectile = null, evolutionShared = false) {
     if(!tank || tank.dead || damage <= 0) return 0;
+    if(typeof modifyStoryPermanentDamage === 'function') damage = modifyStoryPermanentDamage(tank, damage, cause);
     if(typeof gameMode !== 'undefined' && gameMode === 'training' && tank === player) return 0;
     if((tank.evolutionUndyingTimer || 0) > 0) return 0;
     if(!evolutionShared && source && source.team !== tank.team) {

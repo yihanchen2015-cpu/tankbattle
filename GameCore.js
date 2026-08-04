@@ -68,6 +68,7 @@ function startGame() {
     }
     resizeCanvas();
     generateMap();
+    if(gameMode === 'story' && typeof applyStoryMapLayout === 'function') applyStoryMapLayout();
     if(gameMode === 'custom' && typeof applyCustomRoomMapRules === 'function') applyCustomRoomMapRules();
     initPathGrid();
     spawnTanks(tankData, ammo, mg, aa);
@@ -92,7 +93,9 @@ function startGame() {
     if(gameMode === 'training' && typeof initializeTrainingMode === 'function') initializeTrainingMode();
     initBaseSpawns();
     initSpatialGrid();
-    camera.zoom = (MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic).cameraZoom || 1;
+    const storyLayout = gameMode === 'story' && typeof getCurrentStoryMapLayout === 'function'
+        ? getCurrentStoryMapLayout() : null;
+    camera.zoom = (storyLayout && storyLayout.cameraZoom) || (MAP_TEMPLATES[currentMap] || MAP_TEMPLATES.classic).cameraZoom || 1;
     activateThreeView();
     const initialView = getCameraViewSize();
     camera.x = player.x - initialView.width / 2;
@@ -305,7 +308,7 @@ function generateMap() {
             Math.hypot(obstacle.x + obstacle.w / 2 - endpoints.end.x, obstacle.y + obstacle.h / 2 - endpoints.end.y) > safeRadius
         );
     }
-    if(!['boss', 'escort'].includes(gameMode)) initializeNeutralSniperTower();
+    if(!['boss', 'escort', 'story'].includes(gameMode)) initializeNeutralSniperTower();
 }
 
 function getEscortRouteEndpoints() {
@@ -622,6 +625,7 @@ function spawnTanks(tankData, ammo, mg, aa) {
         blueBaseY = CONFIG.mapHeight / 2 + Math.sin(angle) * 300;
     }
     player = createTank(tankData, blueBaseX, blueBaseY, 'blue', true, gameMode === 'story' ? 8 : null);
+    if(typeof applyStoryPermanentRewards === 'function') applyStoryPermanentRewards(player);
     console.log('[SPAWN] Player created:', player ? 'success' : 'failed', 'x:', player ? player.x : 'N/A', 'y:', player ? player.y : 'N/A');
     player.shells = ammo; player.mg = mg; player.aa = aa;
     console.log('[SPAWN] Player ammo set - shells:', player.shells, 'mg:', player.mg, 'aa:', player.aa);

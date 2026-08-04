@@ -2912,6 +2912,7 @@
 #storyLevelCard small { color:#81dcff;letter-spacing:.12em; }
 #storyLevelCard h2 { margin:8px 0 5px;font-size:27px; }
 #storyLevelCard p { color:#b7c8d5;line-height:1.6; }
+.story-card-reward { margin:10px 0;padding:8px 10px;border-left:3px solid #ffe16b;background:rgba(116,86,20,.28);color:#ffe89a;font-size:12px; }
 .story-card-close { position:absolute;right:10px;top:10px;width:32px;height:32px;font-size:19px; }
 .story-level-kind { display:inline-block;padding:4px 10px;border:1px solid #9677ff;border-radius:99px;color:#c9baff;background:rgba(115,65,205,.18);font-size:12px; }
 .story-primary { border-color:#6ad7ff !important;background:linear-gradient(120deg,#176a91,#623cb2) !important;color:#fff !important;font-weight:900; }
